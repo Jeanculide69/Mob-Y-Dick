@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import './App.css'
 import { supabase } from './supabaseClient'
 
-const SITE_VERSION = 'v1.6.0'
+const SITE_VERSION = 'v1.7.0'
 
 const TEAM = [
   { name: 'Alex', img: '/team/alex.png' },
@@ -310,6 +310,15 @@ function App() {
     } catch (err) {
       alert('Erreur lors de l\'enregistrement de votre commande. Veuillez réessayer: ' + err.message)
     }
+  }
+
+  // Generate secure dynamic PayPal links pre-filled with the exact numeric price
+  const getPayPalLink = (product) => {
+    if (product.url && product.url !== 'https://paypal.me/CorentinCARTIER') {
+      return product.url
+    }
+    const numericPrice = product.price.replace(/[^0-9]/g, '')
+    return `https://paypal.me/CorentinCARTIER/${numericPrice}`
   }
 
   return (
@@ -789,7 +798,7 @@ function App() {
                     Pour finaliser l'achat et lancer la production, merci d'effectuer le paiement de <strong>{checkoutProduct.price}</strong> via PayPal.
                   </p>
                   
-                  <a href={`${checkoutProduct.url || 'https://paypal.me/CorentinCARTIER'}`} target="_blank" rel="noopener noreferrer" className="btn btn-primary checkout-paypal-btn" onClick={() => setCheckoutProduct(null)}>
+                  <a href={getPayPalLink(checkoutProduct)} target="_blank" rel="noopener noreferrer" className="btn btn-primary checkout-paypal-btn" onClick={() => setCheckoutProduct(null)}>
                     💰 Payer {checkoutProduct.price} via PayPal
                   </a>
                   
