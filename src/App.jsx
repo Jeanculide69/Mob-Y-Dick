@@ -969,7 +969,7 @@ function App() {
                   </a>
                   
                   <p className="checkout-hint" style={{marginTop:'16px', fontSize:'0.8rem', color:'var(--text-muted)'}}>
-                    Dès confirmation de ton paiement par notre équipe, ta commande passera en fabrication sur Printful ! Merci du soutien !
+                    Dès confirmation de ton paiement par notre équipe, ta commande passera en fabrication ! Merci du soutien !
                   </p>
                 </div>
               )}
