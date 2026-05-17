@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import './App.css'
 import { supabase } from './supabaseClient'
 
-const SITE_VERSION = 'v1.4.0'
+const SITE_VERSION = 'v1.5.0'
 
 const TEAM = [
   { name: 'Alex', img: '/team/alex.png' },
@@ -353,13 +353,13 @@ function App() {
           </button>
 
           <nav className={`nav-links ${mobileMenuOpen ? 'open' : ''}`}>
-            {['home', 'gallery', 'events', 'shop', 'donate'].map((tab) => (
+            {['home', 'gallery', 'shop', 'events'].map((tab) => (
               <button
                 key={tab}
-                className={`nav-link ${activeTab === tab ? 'active' : ''} ${tab === 'donate' ? 'btn btn-primary nav-donate' : ''}`}
+                className={`nav-link ${activeTab === tab ? 'active' : ''}`}
                 onClick={() => navigate(tab)}
               >
-                {tab === 'home' ? '🏠 Accueil' : tab === 'gallery' ? '📸 Galerie' : tab === 'events' ? '📅 Événements' : tab === 'shop' ? '🛒 Boutique' : '🧡 Faire un Don'}
+                {tab === 'home' ? '🏠 Accueil' : tab === 'gallery' ? '📸 Galerie' : tab === 'shop' ? '🛒 Boutique' : '📅 Événements'}
               </button>
             ))}
           </nav>
@@ -377,7 +377,7 @@ function App() {
                   MOBCROSS<br /><span className="text-accent">TEAM</span>
                 </h1>
                 <p className="hero-sub fade-in fade-in-delay-2">
-                  GRAFFITI · FREESTYLE · CUSTOM WEAR · UNDERGROUND
+                  Vêtements & Objets Personnalisés
                 </p>
                 <div className="hero-btns fade-in fade-in-delay-3">
                   <button className="btn btn-primary" onClick={() => navigate('shop')}>Voir la Boutique</button>
@@ -463,7 +463,7 @@ function App() {
                 ) : (
                   <div className="gallery-empty">
                     <p>📸 Les photos et vidéos arrivent bientôt !</p>
-                    <p>L'équipe prépare du contenu exclusif.</p>
+                    <p>L'équipe préape du contenu exclusif.</p>
                   </div>
                 )}
               </div>
@@ -584,34 +584,6 @@ function App() {
             </div>
           </section>
         )}
-
-        {/* ─── DONATE ─── */}
-        {activeTab === 'donate' && (
-          <section className="section page-top donate-page">
-            <div className="container">
-              <div className="donate-wrapper fade-in">
-                <div className="donate-card glass">
-                  <div className="donate-icon">🧡</div>
-                  <h2>Soutenez Mob Y Dick</h2>
-                  <p>
-                    Votre soutien nous permet d'acheter du matériel, des bombes de peinture,
-                    d'entretenir nos bécanes et d'organiser des événements indépendants.
-                  </p>
-                  <p className="donate-secure">🔒 Paiement sécurisé via PayPal</p>
-                  <div className="donate-amounts">
-                    <button className="btn btn-ghost">5€</button>
-                    <button className="btn btn-ghost">10€</button>
-                    <button className="btn btn-ghost">25€</button>
-                    <button className="btn btn-ghost">50€</button>
-                  </div>
-                  <a href="https://paypal.me/CorentinCARTIER" target="_blank" rel="noopener noreferrer" className="btn btn-primary donate-main-btn">
-                    Faire un don via PayPal
-                  </a>
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
       </main>
 
       {/* ─── Footer ─── */}
@@ -619,14 +591,14 @@ function App() {
         <div className="container footer-inner">
           <div className="footer-brand">
             <img src="/logo.png" alt="Mob Y Dick" className="footer-logo" />
-            <p>Mobcross Team — L'art du ride urbain et de la customisation sur-mesure.</p>
+            <p>Mobcross Team</p>
           </div>
           <div className="footer-links">
             <h4>Navigation</h4>
             <button onClick={() => navigate('home')}>Accueil</button>
-            <button onClick={() => navigate('events')}>Événements</button>
+            <button onClick={() => navigate('gallery')}>Galerie</button>
             <button onClick={() => navigate('shop')}>Boutique</button>
-            <button onClick={() => navigate('donate')}>Faire un Don</button>
+            <button onClick={() => navigate('events')}>Événements</button>
           </div>
           <div className="footer-links">
             <h4>Réseaux</h4>
