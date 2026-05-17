@@ -205,7 +205,7 @@ function App() {
                       <p className="product-desc">{p.desc}</p>
                       <div className="product-footer">
                         <span className="product-price">{p.price}</span>
-                        <button className="btn btn-ghost">Commander</button>
+                        <a href="https://corentin-cartier.bigcartel.com" target="_blank" rel="noopener noreferrer" className="btn btn-ghost">Commander</a>
                       </div>
                     </div>
                   </div>
