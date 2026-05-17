@@ -1716,9 +1716,9 @@ select option {
 /* ─── Skyscraper Sidebar Ads ─── */
 .wing-panel {
   position: fixed;
-  top: 140px;
-  width: 250px;
-  height: 720px;
+  top: 180px;
+  width: 280px;
+  height: 760px;
   z-index: 100;
   border-radius: 12px;
   border: 1px dashed rgba(255, 85, 0, 0.15);
@@ -1731,11 +1731,11 @@ select option {
 }
 
 .wing-panel-left {
-  left: 40px;
+  left: 30px;
 }
 
 .wing-panel-right {
-  right: 40px;
+  right: 30px;
 }
 
 .wing-panel:hover {

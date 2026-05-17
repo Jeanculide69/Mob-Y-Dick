@@ -930,7 +930,6 @@ function App() {
                           src={NICKNAMES[m.name.toLowerCase()]} 
                           alt={m.name} 
                           className="team-nickname-img" 
-                          style={m.name.toLowerCase() === 'jeanculide' ? { height: '62px', transform: 'scale(1.32)' } : {}}
                         />
                       </div>
                     ) : (
