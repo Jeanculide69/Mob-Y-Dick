@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import './App.css'
 import { supabase } from './supabaseClient'
 
-const SITE_VERSION = 'v1.1.0'
+const SITE_VERSION = 'v1.2.0'
 
 const TEAM = [
   { name: 'Alex', img: '/team/alex.png' },
@@ -21,10 +21,10 @@ const EVENTS = [
 ]
 
 const PRODUCTS = [
-  { name: 'T-Shirt Custom', price: '35€', desc: 'Ton pseudo en style graffiti sur coton premium.', url: 'https://corentin-cartier.bigcartel.com/product/t-shirt-mob-y-dick-logo-officiel' },
-  { name: 'Sweat à Capuche', price: '55€', desc: 'Hoodie noir avec le logo Mob Y Dick brodé.', url: 'https://corentin-cartier.bigcartel.com' },
-  { name: 'Toile Originale', price: '120€', desc: 'Pièce unique peinte à la main par l\'équipe.', url: 'https://corentin-cartier.bigcartel.com' },
-  { name: 'Stickers Pack', price: '8€', desc: 'Lot de 5 stickers vinyle haute qualité.', url: 'https://corentin-cartier.bigcartel.com' },
+  { name: 'T-Shirt Custom', price: '35€', desc: 'Ton pseudo en style graffiti sur coton premium.', url: 'https://paypal.me/CorentinCARTIER' },
+  { name: 'Sweat à Capuche', price: '55€', desc: 'Hoodie noir avec le logo Mob Y Dick brodé.', url: 'https://paypal.me/CorentinCARTIER' },
+  { name: 'Toile Originale', price: '120€', desc: 'Pièce unique peinte à la main par l\'équipe.', url: 'https://paypal.me/CorentinCARTIER' },
+  { name: 'Stickers Pack', price: '8€', desc: 'Lot de 5 stickers vinyle haute qualité.', url: 'https://paypal.me/CorentinCARTIER' },
 ]
 
 function App() {
@@ -42,12 +42,27 @@ function App() {
   const [dbProducts, setDbProducts] = useState(null)
   const [dbTeam, setDbTeam] = useState(null)
   const [dbSettings, setDbSettings] = useState({})
+  const [dbOrders, setDbOrders] = useState([])
 
-  // Form Modal States
-  const [activeForm, setActiveForm] = useState(null) // 'event' | 'gallery' | 'product' | 'team' | 'socials'
+  // Form Modal States (Admin)
+  const [activeForm, setActiveForm] = useState(null) // 'event' | 'gallery' | 'product' | 'team' | 'socials' | 'orders'
   const [editingItem, setEditingItem] = useState(null)
   const [formData, setFormData] = useState({})
   const [uploading, setUploading] = useState(false)
+
+  // Checkout Modal States (Client)
+  const [checkoutProduct, setCheckoutProduct] = useState(null)
+  const [checkoutStep, setCheckoutStep] = useState(1) // 1: Personalization, 2: Shipping, 3: Validation, 4: Redirection
+  const [checkoutData, setCheckoutData] = useState({
+    customText: '',
+    size: 'M',
+    customerName: '',
+    customerEmail: '',
+    shippingAddress: '',
+    shippingCity: '',
+    shippingZip: '',
+    shippingCountry: 'France'
+  })
 
   // Load and refresh data
   const refreshData = () => {
@@ -68,6 +83,13 @@ function App() {
             setDbSettings(s)
           }
         })
+      // Only fetch orders if logged in
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          supabase.from('orders').select('*').order('created_at', { ascending: false })
+            .then(({ data }) => { if (data) setDbOrders(data) })
+        }
+      })
     }
   }
 
@@ -79,7 +101,7 @@ function App() {
         if (session) setIsAdmin(true)
       })
     }
-  }, [])
+  }, [isAdmin])
 
   const displayEvents = dbEvents || EVENTS.map((e, i) => ({ ...e, id: i }))
   const displayGallery = dbGallery
@@ -112,6 +134,7 @@ function App() {
   const handleLogout = async () => {
     if (supabase) await supabase.auth.signOut()
     setIsAdmin(false)
+    setDbOrders([])
   }
 
   // ─── Inline CRUD Handlers ───
@@ -125,6 +148,15 @@ function App() {
       refreshData()
     } catch (err) {
       alert('Erreur de suppression: ' + err.message)
+    }
+  }
+
+  const handleUpdateOrderStatus = async (orderId, newStatus) => {
+    try {
+      await supabase.from('orders').update({ status: newStatus }).eq('id', orderId)
+      refreshData()
+    } catch (err) {
+      alert('Erreur: ' + err.message)
     }
   }
 
@@ -209,6 +241,53 @@ function App() {
     }
   }
 
+  // ─── Client Ordering Handlers ───
+  const handleOpenCheckout = (product) => {
+    setCheckoutProduct(product)
+    setCheckoutStep(1)
+    setCheckoutData({
+      customText: '',
+      size: product.name.toLowerCase().includes('shirt') || product.name.toLowerCase().includes('sweat') || product.name.toLowerCase().includes('hoodie') ? 'M' : '',
+      customerName: '',
+      customerEmail: '',
+      shippingAddress: '',
+      shippingCity: '',
+      shippingZip: '',
+      shippingCountry: 'France'
+    })
+  }
+
+  const handleCheckoutSubmit = async (e) => {
+    e.preventDefault()
+    if (checkoutStep < 3) {
+      setCheckoutStep(checkoutStep + 1)
+      return
+    }
+    
+    // Save to Database (Step 3 to 4)
+    try {
+      const orderPayload = {
+        product_name: checkoutProduct.name,
+        price: checkoutProduct.price,
+        custom_text: checkoutData.customText,
+        size: checkoutData.size,
+        customer_name: checkoutData.customerName,
+        customer_email: checkoutData.customerEmail,
+        shipping_address: checkoutData.shippingAddress,
+        shipping_city: checkoutData.shippingCity,
+        shipping_zip: checkoutData.shippingZip,
+        shipping_country: checkoutData.shippingCountry,
+        status: 'En attente de paiement'
+      }
+      
+      const { error } = await supabase.from('orders').insert([orderPayload])
+      if (error) throw error
+      setCheckoutStep(4)
+    } catch (err) {
+      alert('Erreur lors de l\'enregistrement de votre commande. Veuillez réessayer: ' + err.message)
+    }
+  }
+
   return (
     <>
       {/* ─── Video Background ─── */}
@@ -225,6 +304,11 @@ function App() {
           <div className="admin-banner-inner container">
             <span>🛠️ <strong>Mode Édition Actif</strong> — Modifiez le contenu directement sur vos pages !</span>
             <div className="admin-banner-actions">
+              <button className="btn btn-ghost btn-sm" onClick={() => handleOpenForm('orders')}>
+                📦 Commandes {dbOrders.filter(o => o.status === 'En attente de paiement').length > 0 && (
+                  <span className="admin-banner-badge">{dbOrders.filter(o => o.status === 'En attente de paiement').length}</span>
+                )}
+              </button>
               <button className="btn btn-ghost btn-sm" onClick={() => handleOpenForm('socials')}>🔗 Configurer Réseaux</button>
               <button className="btn btn-ghost btn-sm" onClick={handleLogout}>Déconnexion</button>
             </div>
@@ -418,7 +502,7 @@ function App() {
               <div className="section-header">
                 <span className="section-tag">Shop</span>
                 <h2>Boutique Officielle</h2>
-                <p className="section-sub">Pièces uniques et objets personnalisables.</p>
+                <p className="section-sub">Toutes nos créations sont personnalisables à 100% avec ton propre pseudo graffiti.</p>
                 {isAdmin && (
                   <button className="btn btn-primary btn-sm inline-add-btn" onClick={() => handleOpenForm('product')}>
                     ➕ Ajouter un Produit
@@ -429,14 +513,14 @@ function App() {
                 {displayProducts.map((p, i) => (
                   <div key={p.id || i} className={`product-card glass fade-in fade-in-delay-${i % 4 + 1} admin-card-parent`}>
                     <div className="product-img" style={p.image_url ? { backgroundImage: `url(${p.image_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
-                      {!p.image_url && <div className="product-badge">Nouveau</div>}
+                      {!p.image_url && <div className="product-badge">Graffiti</div>}
                     </div>
                     <div className="product-body">
                       <h3>{p.name}</h3>
                       <p className="product-desc">{p.description || p.desc}</p>
                       <div className="product-footer">
                         <span className="product-price">{p.price}</span>
-                        <a href={p.url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost">Commander</a>
+                        <button className="btn btn-primary" onClick={() => handleOpenCheckout(p)}>Commander</button>
                       </div>
                     </div>
 
@@ -509,11 +593,11 @@ function App() {
           <p>&copy; 2026 Mob Y Dick. Tous droits réservés. <span className="site-version">{SITE_VERSION}</span></p>
           <button className="admin-trigger" onClick={() => {
             if (isAdmin) {
-              handleOpenForm('socials')
+              handleOpenForm('orders')
             } else {
               setShowLoginModal(true)
             }
-          }}>{isAdmin ? '⚙️ Configuration' : '⚙️ Admin'}</button>
+          }}>{isAdmin ? '📦 Gérer Commandes' : '⚙️ Admin'}</button>
         </div>
       </footer>
 
@@ -534,7 +618,124 @@ function App() {
         </div>
       )}
 
-      {/* ─── Sleek Dynamic CRUD Modal ─── */}
+      {/* ─── Client Checkout Modal (Step by Step) ─── */}
+      {checkoutProduct && (
+        <div className="admin-overlay">
+          <div className="admin-panel glass checkout-modal admin-visual-modal">
+            <div className="admin-header">
+              <h2>🛒 Personnaliser ton objet</h2>
+              <button className="admin-close" onClick={() => setCheckoutProduct(null)}>✕</button>
+            </div>
+            
+            {/* Step Indicators */}
+            {checkoutStep < 4 && (
+              <div className="checkout-steps-indicator">
+                <span className={checkoutStep === 1 ? 'active' : ''}>1. Design</span>
+                <span className={checkoutStep === 2 ? 'active' : ''}>2. Livraison</span>
+                <span className={checkoutStep === 3 ? 'active' : ''}>3. Récap</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCheckoutSubmit} className="admin-form">
+              {/* STEP 1: Personalization */}
+              {checkoutStep === 1 && (
+                <div className="checkout-step-container">
+                  <h3>T-Shirt / Objet : <span className="text-accent">{checkoutProduct.name}</span></h3>
+                  
+                  <label className="admin-label">✏️ Écris ton Pseudo Graffiti à imprimer :</label>
+                  <input type="text" placeholder="Ex: FLO, FUMAX, ALEX..." value={checkoutData.customText} onChange={e => setCheckoutData({...checkoutData, customText: e.target.value})} required maxLength={20} className="checkout-large-input" />
+                  
+                  {checkoutData.size !== '' && (
+                    <>
+                      <label className="admin-label" style={{marginTop:'16px'}}>👚 Choisis ta taille :</label>
+                      <select value={checkoutData.size} onChange={e => setCheckoutData({...checkoutData, size: e.target.value})} className="checkout-select">
+                        <option value="XS">XS</option>
+                        <option value="S">S</option>
+                        <option value="M">M</option>
+                        <option value="L">L</option>
+                        <option value="XL">XL</option>
+                        <option value="XXL">XXL</option>
+                      </select>
+                    </>
+                  )}
+                  
+                  <button type="submit" className="btn btn-primary" style={{width:'100%', marginTop:'24px'}}>Étape Suivante ➔</button>
+                </div>
+              )}
+
+              {/* STEP 2: Shipping Address */}
+              {checkoutStep === 2 && (
+                <div className="checkout-step-container">
+                  <h3>📍 Adresse de Livraison</h3>
+                  
+                  <input type="text" placeholder="Nom et Prénom complet" value={checkoutData.customerName} onChange={e => setCheckoutData({...checkoutData, customerName: e.target.value})} required />
+                  <input type="email" placeholder="Adresse email de contact" value={checkoutData.customerEmail} onChange={e => setCheckoutData({...checkoutData, customerEmail: e.target.value})} required />
+                  <input type="text" placeholder="Adresse (N°, rue, appartement...)" value={checkoutData.shippingAddress} onChange={e => setCheckoutData({...checkoutData, shippingAddress: e.target.value})} required />
+                  
+                  <div className="admin-row">
+                    <input type="text" placeholder="Code Postal" value={checkoutData.shippingZip} onChange={e => setCheckoutData({...checkoutData, shippingZip: e.target.value})} required />
+                    <input type="text" placeholder="Ville" value={checkoutData.shippingCity} onChange={e => setCheckoutData({...checkoutData, shippingCity: e.target.value})} required />
+                  </div>
+                  
+                  <input type="text" placeholder="Pays" value={checkoutData.shippingCountry} onChange={e => setCheckoutData({...checkoutData, shippingCountry: e.target.value})} required />
+                  
+                  <div className="admin-row" style={{marginTop:'16px'}}>
+                    <button type="button" className="btn btn-ghost" onClick={() => setCheckoutStep(1)}>⬅ Retour</button>
+                    <button type="submit" className="btn btn-primary">Étape Suivante ➔</button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: Review Details */}
+              {checkoutStep === 3 && (
+                <div className="checkout-step-container">
+                  <h3>🔍 Valider ton récapitulatif</h3>
+                  
+                  <div className="checkout-summary-box glass">
+                    <p><strong>Objet :</strong> {checkoutProduct.name} ({checkoutProduct.price})</p>
+                    <p><strong>Pseudo Graffiti :</strong> <span className="checkout-graffiti-badge">{checkoutData.customText}</span></p>
+                    {checkoutData.size && <p><strong>Taille :</strong> {checkoutData.size}</p>}
+                    <hr style={{borderColor:'rgba(255,85,0,0.2)', margin:'10px 0'}} />
+                    <p><strong>Destinataire :</strong> {checkoutData.customerName}</p>
+                    <p><strong>Contact :</strong> {checkoutData.customerEmail}</p>
+                    <p><strong>Adresse :</strong> {checkoutData.shippingAddress}, {checkoutData.shippingZip} {checkoutData.shippingCity}, {checkoutData.shippingCountry}</p>
+                  </div>
+                  
+                  <p className="checkout-warning-text">⚠️ En cliquant sur valider, votre commande sera enregistrée. Vous procéderez ensuite au règlement sécurisé sur PayPal.</p>
+
+                  <div className="admin-row" style={{marginTop:'16px'}}>
+                    <button type="button" className="btn btn-ghost" onClick={() => setCheckoutStep(2)}>⬅ Retour</button>
+                    <button type="submit" className="btn btn-primary">Valider et Payer ➔</button>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 4: PayPal Redirection */}
+              {checkoutStep === 4 && (
+                <div className="checkout-step-container text-center" style={{textAlign:'center'}}>
+                  <span style={{fontSize:'3rem'}}>🎉</span>
+                  <h3 style={{margin:'10px 0'}}>Commande Pré-Enregistrée !</h3>
+                  <p style={{color:'var(--text-secondary)', fontSize:'0.95rem', marginBottom:'20px'}}>
+                    Nous avons bien enregistré ta commande pour le pseudo <strong className="text-accent">{checkoutData.customText}</strong>.
+                    <br /><br />
+                    Pour finaliser l'achat et lancer la production, merci d'effectuer le paiement de <strong>{checkoutProduct.price}</strong> via PayPal.
+                  </p>
+                  
+                  <a href={`${checkoutProduct.url || 'https://paypal.me/CorentinCARTIER'}`} target="_blank" rel="noopener noreferrer" className="btn btn-primary checkout-paypal-btn" onClick={() => setCheckoutProduct(null)}>
+                    💰 Payer {checkoutProduct.price} via PayPal
+                  </a>
+                  
+                  <p className="checkout-hint" style={{marginTop:'16px', fontSize:'0.8rem', color:'var(--text-muted)'}}>
+                    Dès confirmation de ton paiement par notre équipe, ta commande passera en fabrication sur Printful ! Merci du soutien !
+                  </p>
+                </div>
+              )}
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Sleek Dynamic Forms and Lists Modal (Admin) ─── */}
       {activeForm && (
         <div className="admin-overlay">
           <div className="admin-panel glass admin-visual-modal">
@@ -545,79 +746,130 @@ function App() {
                 {activeForm === 'product' && '🛍️ Gérer Produit'}
                 {activeForm === 'team' && '👥 Gérer Rider'}
                 {activeForm === 'socials' && '🔗 Configurer Réseaux'}
+                {activeForm === 'orders' && '📦 Gestion des Commandes'}
               </h2>
               <button className="admin-close" onClick={() => { setActiveForm(null); setEditingItem(null) }}>✕</button>
             </div>
             
-            <form onSubmit={handleFormSubmit} className="admin-form">
-              {activeForm === 'event' && (
-                <>
-                  <input type="text" placeholder="Titre de l'événement" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} required />
-                  <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} required />
-                  <input type="text" placeholder="Lieu" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} required />
-                  <textarea placeholder="Description" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} rows={4} />
-                </>
-              )}
-
-              {activeForm === 'gallery' && (
-                <>
-                  <input type="text" placeholder="Titre de l'image/vidéo" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} required />
-                  <div className="admin-row">
-                    <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})}>
-                      <option value="photo">📸 Photo</option>
-                      <option value="video">🎥 Vidéo</option>
-                    </select>
-                    <select value={formData.source} onChange={e => setFormData({...formData, source: e.target.value})}>
-                      <option value="upload">📁 Importer un fichier</option>
-                      <option value="embed">🔗 Lien externe (YouTube, Insta...)</option>
-                    </select>
+            {activeForm === 'orders' ? (
+              <div className="admin-orders-container">
+                <h3>Liste des Commandes ({dbOrders.length})</h3>
+                {dbOrders.length === 0 ? (
+                  <p style={{color:'var(--text-muted)', textAlign:'center', padding:'30px'}}>Aucune commande enregistrée pour le moment.</p>
+                ) : (
+                  <div className="admin-orders-list">
+                    {dbOrders.map(o => (
+                      <div key={o.id} className="admin-order-card glass">
+                        <div className="admin-order-header">
+                          <div>
+                            <strong>{o.customer_name}</strong> ({o.customer_email})
+                            <span className="admin-order-date">{new Date(o.created_at).toLocaleDateString('fr-FR')}</span>
+                          </div>
+                          <span className={`status-badge ${o.status.toLowerCase().replace(/\s+/g, '-')}`}>
+                            {o.status}
+                          </span>
+                        </div>
+                        <div className="admin-order-details">
+                          <p>🛍️ <strong>Objet :</strong> {o.product_name} {o.size && `(Taille: ${o.size})`} · <span className="text-accent">{o.price}</span></p>
+                          <p>🎨 <strong>Pseudo à imprimer :</strong> <span className="checkout-graffiti-badge">{o.custom_text}</span></p>
+                          <p>📍 <strong>Adresse :</strong> {o.shipping_address}, {o.shipping_zip} {o.shipping_city}, {o.shipping_country}</p>
+                        </div>
+                        <div className="admin-order-actions">
+                          {o.status === 'En attente de paiement' && (
+                            <button className="btn btn-sm btn-primary" onClick={() => handleUpdateOrderStatus(o.id, 'Paiement Validé')}>
+                              ✅ Confirmer le Paiement
+                            </button>
+                          )}
+                          {o.status === 'Paiement Validé' && (
+                            <button className="btn btn-sm btn-outline" onClick={() => handleUpdateOrderStatus(o.id, 'En cours de fabrication')}>
+                              🏭 Lancer Fabrication
+                            </button>
+                          )}
+                          {o.status === 'En cours de fabrication' && (
+                            <button className="btn btn-sm btn-success" onClick={() => handleUpdateOrderStatus(o.id, 'Expédiée')}>
+                              📦 Marquer comme Expédiée
+                            </button>
+                          )}
+                          <button className="btn btn-sm btn-danger" onClick={() => handleDeleteItem('orders', o.id)} style={{marginLeft:'auto'}}>
+                            🗑️ Supprimer
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  {formData.source === 'upload' ? (
-                    <input type="file" accept="image/*,video/*" onChange={e => setFormData({...formData, file: e.target.files[0]})} required />
-                  ) : (
-                    <input type="url" placeholder="https://youtube.com/... ou https://instagram.com/..." value={formData.embed_url} onChange={e => setFormData({...formData, embed_url: e.target.value})} required />
-                  )}
-                </>
-              )}
+                )}
+              </div>
+            ) : (
+              <form onSubmit={handleFormSubmit} className="admin-form">
+                {activeForm === 'event' && (
+                  <>
+                    <input type="text" placeholder="Titre de l'événement" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} required />
+                    <input type="date" value={formData.date} onChange={e => setFormData({...formData, date: e.target.value})} required />
+                    <input type="text" placeholder="Lieu" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} required />
+                    <textarea placeholder="Description" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} rows={4} />
+                  </>
+                )}
 
-              {activeForm === 'product' && (
-                <>
-                  <input type="text" placeholder="Nom du produit" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
-                  <textarea placeholder="Description" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} rows={2} />
-                  <div className="admin-row">
-                    <input type="text" placeholder="Prix (ex: 35€)" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} required />
-                    <input type="url" placeholder="Lien boutique BigCartel" value={formData.url} onChange={e => setFormData({...formData, url: e.target.value})} required />
-                  </div>
-                  <input type="url" placeholder="URL photo produit (optionnel)" value={formData.image_url} onChange={e => setFormData({...formData, image_url: e.target.value})} />
-                </>
-              )}
+                {activeForm === 'gallery' && (
+                  <>
+                    <input type="text" placeholder="Titre de l'image/vidéo" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} required />
+                    <div className="admin-row">
+                      <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})}>
+                        <option value="photo">📸 Photo</option>
+                        <option value="video">🎥 Vidéo</option>
+                      </select>
+                      <select value={formData.source} onChange={e => setFormData({...formData, source: e.target.value})}>
+                        <option value="upload">📁 Importer un fichier</option>
+                        <option value="embed">🔗 Lien externe (YouTube, Insta...)</option>
+                      </select>
+                    </div>
+                    {formData.source === 'upload' ? (
+                      <input type="file" accept="image/*,video/*" onChange={e => setFormData({...formData, file: e.target.files[0]})} required />
+                    ) : (
+                      <input type="url" placeholder="https://youtube.com/... ou https://instagram.com/..." value={formData.embed_url} onChange={e => setFormData({...formData, embed_url: e.target.value})} required />
+                    )}
+                  </>
+                )}
 
-              {activeForm === 'team' && (
-                <>
-                  <input type="text" placeholder="Pseudo du Rider" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
-                  <input type="url" placeholder="URL Photo du Rider (optionnel)" value={formData.image_url} onChange={e => setFormData({...formData, image_url: e.target.value})} />
-                </>
-              )}
+                {activeForm === 'product' && (
+                  <>
+                    <input type="text" placeholder="Nom du produit" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
+                    <textarea placeholder="Description" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} rows={2} />
+                    <div className="admin-row">
+                      <input type="text" placeholder="Prix (ex: 35€)" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} required />
+                      <input type="url" placeholder="Lien Paypal (Optionnel)" value={formData.url} onChange={e => setFormData({...formData, url: e.target.value})} />
+                    </div>
+                    <input type="url" placeholder="URL photo produit (optionnel)" value={formData.image_url} onChange={e => setFormData({...formData, image_url: e.target.value})} />
+                  </>
+                )}
 
-              {activeForm === 'socials' && (
-                <>
-                  <label className="admin-label">Instagram</label>
-                  <input type="url" placeholder="https://instagram.com/..." value={formData.instagram} onChange={e => setFormData({...formData, instagram: e.target.value})} />
-                  <label className="admin-label">Facebook</label>
-                  <input type="url" placeholder="https://facebook.com/..." value={formData.facebook} onChange={e => setFormData({...formData, facebook: e.target.value})} />
-                  <label className="admin-label">TikTok</label>
-                  <input type="url" placeholder="https://tiktok.com/@..." value={formData.tiktok} onChange={e => setFormData({...formData, tiktok: e.target.value})} />
-                  <label className="admin-label">YouTube</label>
-                  <input type="url" placeholder="https://youtube.com/..." value={formData.youtube} onChange={e => setFormData({...formData, youtube: e.target.value})} />
-                  <label className="admin-label">Snapchat</label>
-                  <input type="url" placeholder="https://snapchat.com/..." value={formData.snapchat} onChange={e => setFormData({...formData, snapchat: e.target.value})} />
-                </>
-              )}
+                {activeForm === 'team' && (
+                  <>
+                    <input type="text" placeholder="Pseudo du Rider" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
+                    <input type="url" placeholder="URL Photo du Rider (optionnel)" value={formData.image_url} onChange={e => setFormData({...formData, image_url: e.target.value})} />
+                  </>
+                )}
 
-              <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '16px' }} disabled={uploading}>
-                {uploading ? 'Enregistrement en cours...' : 'Enregistrer'}
-              </button>
-            </form>
+                {activeForm === 'socials' && (
+                  <>
+                    <label className="admin-label">Instagram</label>
+                    <input type="url" placeholder="https://instagram.com/..." value={formData.instagram} onChange={e => setFormData({...formData, instagram: e.target.value})} />
+                    <label className="admin-label">Facebook</label>
+                    <input type="url" placeholder="https://facebook.com/..." value={formData.facebook} onChange={e => setFormData({...formData, facebook: e.target.value})} />
+                    <label className="admin-label">TikTok</label>
+                    <input type="url" placeholder="https://tiktok.com/@..." value={formData.tiktok} onChange={e => setFormData({...formData, tiktok: e.target.value})} />
+                    <label className="admin-label">YouTube</label>
+                    <input type="url" placeholder="https://youtube.com/..." value={formData.youtube} onChange={e => setFormData({...formData, youtube: e.target.value})} />
+                    <label className="admin-label">Snapchat</label>
+                    <input type="url" placeholder="https://snapchat.com/..." value={formData.snapchat} onChange={e => setFormData({...formData, snapchat: e.target.value})} />
+                  </>
+                )}
+
+                <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '16px' }} disabled={uploading}>
+                  {uploading ? 'Enregistrement en cours...' : 'Enregistrer'}
+                </button>
+              </form>
+            )}
           </div>
         </div>
       )}
