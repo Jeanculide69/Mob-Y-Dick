@@ -104,6 +104,7 @@ function App() {
   const [dbTeam, setDbTeam] = useState(null)
   const [dbSettings, setDbSettings] = useState({})
   const [dbOrders, setDbOrders] = useState([])
+  const [dbBikes, setDbBikes] = useState(null)
 
   // Form Modal States (Admin)
   const [activeForm, setActiveForm] = useState(null) // 'event' | 'gallery' | 'product' | 'team' | 'socials' | 'orders'
@@ -140,6 +141,8 @@ function App() {
         .then(({ data }) => { if (data) setDbProducts(data) })
       supabase.from('team').select('*').order('sort_order', { ascending: true })
         .then(({ data }) => { if (data) setDbTeam(data) })
+      supabase.from('bikes').select('*').order('sort_order', { ascending: true })
+        .then(({ data }) => { if (data) setDbBikes(data) })
       supabase.from('settings').select('*')
         .then(({ data }) => {
           if (data) {
@@ -329,6 +332,19 @@ function App() {
         youtube: dbSettings.youtube || '',
         snapchat: dbSettings.snapchat || ''
       })
+    } else if (type === 'bike_edit') {
+      const currentBikes = getBikesList()
+      const b = currentBikes[item]
+      setFormData({
+        id: item,
+        title: b.title,
+        plate: b.plate,
+        description: b.description,
+        image_urls: [...(b.images || [])],
+        specs: { ...(b.specs || {}) },
+        sort_order: item === 'rouge' ? 0 : item === 'orange' ? 1 : 2,
+        files: []
+      })
     }
   }
 
@@ -409,6 +425,31 @@ function App() {
           if (existing) await supabase.from('settings').update({ value }).eq('key', key)
           else await supabase.from('settings').insert([{ key, value }])
         }
+      } else if (activeForm === 'bike_edit') {
+        const uploadedUrls = []
+        if (formData.files && formData.files.length > 0) {
+          for (const file of formData.files) {
+            const fileName = `motos/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${file.name.split('.').pop()}`
+            const { error } = await supabase.storage.from('Gallery').upload(fileName, file)
+            if (error) throw error
+            const { data: { publicUrl } } = supabase.storage.from('Gallery').getPublicUrl(fileName)
+            uploadedUrls.push(publicUrl)
+          }
+        }
+        const allUrls = [...(formData.image_urls || []), ...uploadedUrls]
+        const finalImageUrl = allUrls.join(',')
+        
+        const bikePayload = {
+          title: formData.title,
+          plate: formData.plate,
+          description: formData.description,
+          images: finalImageUrl,
+          specs: formData.specs,
+          sort_order: formData.sort_order
+        }
+        
+        const { error } = await supabase.from('bikes').update(bikePayload).eq('id', formData.id)
+        if (error) throw error
       }
       setActiveForm(null)
       setEditingItem(null)
@@ -469,7 +510,23 @@ function App() {
     }
   }
 
-  // Generate secure dynamic PayPal links pre-filled with the exact numeric price
+  const getBikesList = () => {
+    if (dbBikes && dbBikes.length > 0) {
+      const list = {}
+      dbBikes.forEach(b => {
+        list[b.id] = {
+          title: b.title,
+          plate: b.plate,
+          description: b.description,
+          images: b.images ? b.images.split(',').filter(Boolean) : [],
+          specs: typeof b.specs === 'string' ? JSON.parse(b.specs) : b.specs
+        }
+      })
+      return list
+    }
+    return BIKES_LIST
+  }
+
   const getPayPalLink = (product) => {
     const numericPrice = product.price.replace(/[^0-9]/g, '')
     return `https://paypal.me/CorentinCARTIER/${numericPrice}`
@@ -502,6 +559,7 @@ function App() {
                 )}
               </button>
               <button className="btn btn-ghost btn-sm" onClick={() => handleOpenForm('socials')}>🔗 Configurer Réseaux</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => handleOpenForm('bikes_admin')}>🏍️ Gérer les Motos</button>
               <button className="btn btn-ghost btn-sm" onClick={handleLogout}>Déconnexion</button>
             </div>
           </div>
@@ -639,7 +697,7 @@ function App() {
 
                 {/* Bike Showcase details */}
                 {(() => {
-                  const bikeData = BIKES_LIST[selectedBike];
+                  const bikeData = getBikesList()[selectedBike];
                   const activeImg = bikeData.images[selectedBikeImgIndex] || bikeData.images[0];
                   return (
                     <div className="bike-showcase glass fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '40px', padding: '40px', borderRadius: '20px', border: '1px solid var(--border-subtle)', background: 'var(--bg-glass)' }}>
@@ -716,6 +774,15 @@ function App() {
                           <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => navigate('shop')}>
                             🛒 La Boutique
                           </button>
+                          {isAdmin && (
+                            <button 
+                              className="btn btn-outline" 
+                              style={{ width: '100%', borderColor: 'var(--accent)', color: 'var(--accent)', fontWeight: 'bold', marginTop: '10px' }} 
+                              onClick={() => handleOpenForm('bike_edit', selectedBike)}
+                            >
+                              ✏️ Modifier cette Moto
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1201,6 +1268,8 @@ function App() {
                 {activeForm === 'team' && '👥 Gérer Rider'}
                 {activeForm === 'socials' && '🔗 Configurer Réseaux'}
                 {activeForm === 'orders' && '📦 Gestion des Commandes'}
+                {activeForm === 'bikes_admin' && '🏍️ Gérer les Motos'}
+                {activeForm === 'bike_edit' && '✏️ Modifier la Moto'}
               </h2>
               <button className="admin-close" onClick={() => { setActiveForm(null); setEditingItem(null) }}>✕</button>
             </div>
@@ -1252,6 +1321,60 @@ function App() {
                     ))}
                   </div>
                 )}
+              </div>
+            ) : activeForm === 'bikes_admin' ? (
+              <div className="admin-orders-container" style={{ maxHeight: '75vh', overflowY: 'auto' }}>
+                {(!dbBikes || dbBikes.length === 0) && (
+                  <div style={{ background: 'rgba(255, 85, 0, 0.08)', border: '1px dashed var(--accent)', padding: '20px', borderRadius: '12px', marginBottom: '20px', textAlign: 'left' }}>
+                    <p style={{ margin: '0 0 12px 0', fontSize: '0.9rem', color: '#fff', lineHeight: '1.5' }}>
+                      ⚠️ <strong>Base de données :</strong> La table <code>bikes</code> n'existe pas encore dans votre base de données Supabase.
+                    </p>
+                    <p style={{ margin: '0 0 15px 0', fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: '1.4' }}>
+                      Pour pouvoir modifier les motos et charger vos propres photos en ligne, copiez la requête SQL ci-dessous, allez dans votre <strong>Dashboard Supabase</strong> → <strong>SQL Editor</strong> → cliquez sur <strong>New Query</strong>, collez et cliquez sur <strong>Run</strong>.
+                    </p>
+                    <textarea 
+                      readOnly 
+                      value={`-- Requete de creation de la table bikes\nCREATE TABLE IF NOT EXISTS public.bikes (\n    id text PRIMARY KEY,\n    title text NOT NULL,\n    plate text NOT NULL,\n    description text NOT NULL,\n    images text NOT NULL,\n    specs jsonb NOT NULL,\n    sort_order integer DEFAULT 0,\n    created_at timestamp with time zone DEFAULT timezone('utc'::text, now()) NOT NULL\n);\n\nALTER TABLE public.bikes ENABLE ROW LEVEL SECURITY;\n\nCREATE POLICY "Allow public read access for bikes" ON public.bikes FOR SELECT USING (true);\nCREATE POLICY "Allow admin full access for bikes" ON public.bikes USING (auth.role() = 'authenticated');\n\nINSERT INTO public.bikes (id, title, plate, description, images, specs, sort_order)\nVALUES \n(\n  'rouge',\n  'La Bête Rouge – Beast R-1',\n  'N° 1',\n  'Conçue pour dompter la poussière et les terrains les plus extrêmes, la Bête Rouge est une véritable icône de puissance. Avec son cadre allégé rouge vermillon et son kit déco rétro-moderne personnalisé à la main par nos graphistes, elle combine agressivité visuelle et performances mécaniques pures. Son échappement racing libère un son rauque emblématique qui annonce la couleur sur chaque piste.',\n  '/motos/2cd0ab6d-2472-4496-aac8-af9a290fbf14.jpg,/motos/6c3be747-ab9a-4ae3-8414-d6e23a6698fe.jpg,/motos/9ee5fac2-769a-461d-9f22-936c44a2b717.jpg,/motos/f5def3ab-7a3e-4eb4-85fc-1bd659ef0ea9.jpg',\n  '{"Cylindrée": "125 cc 2-Temps", "Suspensions": "Fourche inversée réglable", "Échappement": "Ligne FMF Gold Series", "Freinage": "Disques hydrauliques ventilés", "Poids à vide": "88 kg", "Pneus": "Michelin StarCross 5"}'::jsonb,\n  0\n),\n(\n  'orange',\n  'L''Étincelle Orange – Storm O-4',\n  'N° 4',\n  'L''Étincelle Orange ne passe jamais inaperçue. Conçue spécialement pour le stunt et le motocross freestyle, elle arbore un kit déco orange fluo éclatant qui rappelle les flammes légendaires de notre logo. Sa maniabilité hors du commun et sa reprise ultra-nerveuse à bas régime en font la machine favorite pour envoyer des figures de l''espace et survoler les bosses.',\n  '/motos/05c88f5e-250c-41fa-bdc4-dc97b785cd54.jpg,/motos/5bebfecf-6fbf-4327-a6ec-59df4de8dffd.jpg,/motos/c2b259ef-7132-42f1-bbe6-225949254c2a.jpg,/motos/e551714e-aa71-4599-9f6c-bcdea4e944b1.jpg',\n  '{"Cylindrée": "150 cc Haute-Compression", "Suspensions": "Monoamortisseur WP Pro", "Échappement": "Silencieux Akrapovič Custom", "Guidon": "Guidon Renthal Fatbar", "Poids à vide": "91 kg", "Pneus": "Pirelli Scorpion MX"}'::jsonb,\n  1\n),\n(\n  'noir',\n  'L''Ombre Noire – Stealth N-67',\n  'N° 67',\n  'Sombre, furtive et d''une élégance redoutable, l''Ombre Noire est bâtie pour la performance en toute discrétion. Son kit déco noir mat anthracite texturé en fibre de carbone lui confère un look agressif intemporel. Sous son carénage se cache une bête de course optimisée pour les départs rapides et les accélérations brutales, plébiscitée par les riders les plus techniques de la meute.',\n  '/motos/5e66cf75-e1de-41d7-8273-ed89eb9c8e3e.jpg,/motos/6fae5df4-0ec9-4e66-ba64-885a453960df.jpg,/motos/a5956043-1e5b-454c-82e1-db0afdad9d99.jpg,/motos/cfc2f2d9-647f-40f1-97bf-bc5e90eb423f.jpg',\n  '{"Cylindrée": "250 cc 4-Temps Injection", "Suspensions": "Showa SFF-Air TAC", "Échappement": "Double sortie Yoshimura Carbon", "Jantes": "Excel A60 noires renforcées", "Poids à vide": "98 kg", "Pneus": "Dunlop Geomax MX33"}'::jsonb,\n  2\n)\nON CONFLICT (id) DO NOTHING;`} 
+                      style={{ width: '100%', height: '120px', background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-muted)', fontSize: '0.75rem', padding: '10px', borderRadius: '6px', fontFamily: 'monospace', resize: 'none', outline: 'none' }} 
+                    />
+                    <button 
+                      type="button" 
+                      className="btn btn-sm btn-outline" 
+                      style={{ marginTop: '10px' }} 
+                      onClick={(e) => { 
+                        const txt = e.target.previousSibling;
+                        txt.select();
+                        document.execCommand('copy');
+                        alert('Script SQL copié dans le presse-papiers !');
+                      }}
+                    >
+                      📋 Copier le Script SQL
+                    </button>
+                  </div>
+                )}
+                
+                <h3>Liste des Motos</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+                  {['rouge', 'orange', 'noir'].map(id => {
+                    const b = getBikesList()[id];
+                    return (
+                      <div key={id} className="admin-order-card glass" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                          <div style={{ width: '50px', height: '50px', borderRadius: '8px', overflow: 'hidden', background: '#000' }}>
+                            <img src={b.images[0] || '/logo.png'} alt={b.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          </div>
+                          <div>
+                            <strong style={{ fontSize: '1.05rem', color: '#fff' }}>{b.title}</strong>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '4px' }}>Numéro : {b.plate}</div>
+                          </div>
+                        </div>
+                        <button className="btn btn-sm btn-primary" onClick={() => handleOpenForm('bike_edit', id)}>
+                          ✏️ Modifier
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ) : (
               <form onSubmit={handleFormSubmit} className="admin-form">
@@ -1382,6 +1505,79 @@ function App() {
                     <input type="url" placeholder="https://youtube.com/..." value={formData.youtube} onChange={e => setFormData({...formData, youtube: e.target.value})} />
                     <label className="admin-label">Snapchat</label>
                     <input type="url" placeholder="https://snapchat.com/..." value={formData.snapchat} onChange={e => setFormData({...formData, snapchat: e.target.value})} />
+                  </>
+                )}
+
+                {activeForm === 'bike_edit' && (
+                  <>
+                    <label className="admin-label" style={{ color: 'var(--text-muted)' }}>📋 Identifiant de la Moto (Lecture seule)</label>
+                    <input type="text" value={formData.id} readOnly style={{ background: 'rgba(255,255,255,0.02)', opacity: 0.7, color: 'var(--accent)', fontWeight: 'bold' }} />
+
+                    <label className="admin-label">🏷️ Titre de la Moto</label>
+                    <input type="text" placeholder="Titre de la moto" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} required />
+
+                    <label className="admin-label">🔢 Plaque / Numéro</label>
+                    <input type="text" placeholder="Ex: N° 1" value={formData.plate} onChange={e => setFormData({...formData, plate: e.target.value})} required />
+
+                    <label className="admin-label">📝 Description de la Machine</label>
+                    <textarea placeholder="Description complète..." value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} rows={4} required style={{ width: '100%', background: 'rgba(0,0,0,0.5)', border: '1px solid rgba(255,255,255,0.15)', borderRadius: '8px', color: '#fff', padding: '10px', fontSize: '0.9rem', outline: 'none' }} />
+
+                    <label className="admin-label">🖼️ Photos de la Moto (Plusieurs possibles)</label>
+                    {/* Render current images with delete buttons */}
+                    {formData.image_urls && formData.image_urls.length > 0 && (
+                      <div style={{display:'flex', flexWrap:'wrap', gap:'10px', marginBottom:'12px'}}>
+                        {formData.image_urls.map((url, idx) => (
+                          <div key={idx} style={{position:'relative', width:'60px', height:'60px', borderRadius:'6px', overflow:'hidden', border:'1px solid rgba(255,255,255,0.2)'}}>
+                            <img src={url} alt="Aperçu" style={{width:'100%', height:'100%', objectFit:'cover'}} />
+                            <button 
+                              type="button" 
+                              onClick={() => {
+                                const updated = formData.image_urls.filter((_, i) => i !== idx)
+                                setFormData({...formData, image_urls: updated})
+                              }}
+                              style={{position:'absolute', top:2, right:2, background:'rgba(0,0,0,0.8)', border:'none', color:'#ff3333', width:'18px', height:'18px', borderRadius:'4px', fontSize:'0.7rem', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer'}}
+                              title="Supprimer cette image"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {formData.files && formData.files.length > 0 && (
+                      <div style={{color:'var(--accent)', fontSize:'0.85rem', marginBottom:'10px'}}>
+                        📂 {formData.files.length} nouvelle(s) image(s) sélectionnée(s)
+                      </div>
+                    )}
+                    
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      multiple 
+                      onChange={e => {
+                        const newFiles = Array.from(e.target.files)
+                        setFormData({...formData, files: [...(formData.files || []), ...newFiles]})
+                      }} 
+                    />
+
+                    <label className="admin-label">⚙️ Fiche Technique (Caractéristiques)</label>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', marginTop: '10px' }}>
+                      {Object.keys(formData.specs || {}).map(key => (
+                        <div key={key} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{key}</span>
+                          <input 
+                            type="text" 
+                            value={formData.specs[key]} 
+                            onChange={e => {
+                              const updatedSpecs = { ...formData.specs, [key]: e.target.value }
+                              setFormData({...formData, specs: updatedSpecs})
+                            }} 
+                            required 
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </>
                 )}
 
