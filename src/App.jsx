@@ -78,6 +78,77 @@ const GoogleAd = ({ slot = '1234567890', format = 'auto', style = { display: 'bl
   );
 };
 
+// Sidebar skyscraper ads component for large desktop screens
+const SidebarAd = ({ side = 'left', navigate }) => {
+  const [adStatus, setAdStatus] = useState('unfilled')
+  const [adError, setAdError] = useState(false)
+  const slot = side === 'left' ? 'left-skyscraper' : 'right-skyscraper';
+
+  useEffect(() => {
+    try {
+      if (window.adsbygoogle) {
+        (window.adsbygoogle || []).push({});
+      }
+    } catch (e) {
+      setAdError(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    const checkStatus = () => {
+      const insElement = document.querySelector(`ins[data-ad-slot="${slot}"]`);
+      if (insElement) {
+        const status = insElement.getAttribute('data-ad-status');
+        if (status) {
+          setAdStatus(status);
+        }
+      }
+    };
+    checkStatus();
+    const interval = setInterval(checkStatus, 1500);
+    return () => clearInterval(interval);
+  }, [slot]);
+
+  const handleClick = () => {
+    navigate('sponsors');
+  };
+
+  if (adError || adStatus === 'unfilled') {
+    return (
+      <div className={`sidebar-ad sidebar-ad-${side} glass`} onClick={handleClick}>
+        <div className="sidebar-ad-fallback-content">
+          <span className="sidebar-ad-tag">📢 SPONSOR</span>
+          <div className="sidebar-ad-title">
+            <h3>VOTRE PUB ICI</h3>
+          </div>
+          <p>Affichez votre marque sur les côtés de notre site officiel !</p>
+          <button className="btn btn-primary btn-sm">Rejoindre 🤝</button>
+        </div>
+        <ins 
+          className="adsbygoogle"
+          style={{ display: 'none' }}
+          data-ad-client="ca-pub-6244816354585064"
+          data-ad-slot={slot}
+          data-ad-format="vertical"
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className={`sidebar-ad sidebar-ad-${side} glass`}>
+      <span className="sidebar-ad-label">📢 Publicité</span>
+      <ins 
+        className="adsbygoogle"
+        style={{ display: 'block', width: '136px', height: '560px' }}
+        data-ad-client="ca-pub-6244816354585064"
+        data-ad-slot={slot}
+        data-ad-format="vertical"
+      />
+    </div>
+  );
+};
+
 const TEAM = [
   { name: 'Alex', img: '/team/alex.png' },
   { name: 'Bob', img: '/team/bob.png' },
@@ -785,6 +856,13 @@ function App() {
           </nav>
         </div>
       </header>
+
+      {activeTab !== 'home' && (
+        <>
+          <SidebarAd side="left" navigate={navigate} />
+          <SidebarAd side="right" navigate={navigate} />
+        </>
+      )}
 
       <main className={isAdmin ? 'with-admin-banner' : ''}>
         {/* ─── HOME ─── */}

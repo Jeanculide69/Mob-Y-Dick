@@ -1713,6 +1713,90 @@ select option {
   }
 }
 
+/* ─── Skyscraper Sidebar Ads ─── */
+.sidebar-ad {
+  position: fixed;
+  top: 180px;
+  width: 160px;
+  height: 600px;
+  z-index: 100;
+  border-radius: 12px;
+  border: 1px dashed rgba(255, 85, 0, 0.15);
+  background: rgba(255, 255, 255, 0.01) !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  padding: 16px;
+  text-align: center;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.sidebar-ad-left {
+  left: 30px;
+}
+
+.sidebar-ad-right {
+  right: 30px;
+}
+
+.sidebar-ad:hover {
+  border-color: rgba(255, 85, 0, 0.4);
+  background: rgba(255, 85, 0, 0.02) !important;
+  transform: translateY(-4px);
+}
+
+.sidebar-ad-label {
+  display: block;
+  font-size: 0.6rem;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.sidebar-ad-fallback-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 4px;
+  cursor: pointer;
+}
+
+.sidebar-ad-tag {
+  font-size: 0.65rem;
+  letter-spacing: 2px;
+  font-weight: bold;
+  color: var(--accent);
+  text-transform: uppercase;
+}
+
+.sidebar-ad-title h3 {
+  font-size: 1rem;
+  font-family: var(--font-heading);
+  color: #fff;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.sidebar-ad-fallback-content p {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.sidebar-ad-fallback-content button {
+  width: 100%;
+}
+
+/* Hide on screens under 1440px wide to avoid overlaps with central content */
+@media (max-width: 1440px) {
+  .sidebar-ad {
+    display: none !important;
+  }
+}
+
 
 
 
