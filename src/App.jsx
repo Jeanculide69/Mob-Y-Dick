@@ -13,7 +13,21 @@ const TEAM = [
   { name: 'StickMan', img: '/team/stickman.png' },
   { name: 'Flo', img: '/team/flo.png' },
   { name: 'JeanCulide', img: '/team/jeanculide.png' },
+  { name: 'Leila', img: '/team/leila.png' },
 ]
+
+const NICKNAMES = {
+  alex: '/team/alex_nickname.png',
+  bob: '/team/bob_nickname.png',
+  fumax: '/team/fumax_nickname.png',
+  gauthier: '/team/gauthier_nickname.png',
+  madmat: '/team/madmat_nickname.png',
+  stickman: '/team/stickman_nickname.png',
+  flo: '/team/flo_nickname.png',
+  jeanculide: '/team/jeanculide_nickname.png',
+  leila: '/team/leila_nickname.png',
+}
+
 
 const EVENTS = [
   { title: 'Expo Éphémère', date: '2026-06-12', location: 'Lieu à définir', desc: 'Retrouvez nos dernières toiles et personnalisations en direct.' },
@@ -171,11 +185,35 @@ function App() {
     }
   }, [isAdmin])
 
+  // Automatically sync Leila to Supabase database if missing and admin is logged in
+  useEffect(() => {
+    if (isAdmin && dbTeam && dbTeam.length > 0 && supabase) {
+      const hasLeila = dbTeam.some(member => member.name.toLowerCase() === 'leila')
+      if (!hasLeila) {
+        supabase.from('team').insert([{
+          name: 'Leila',
+          image_url: '/team/leila.png',
+          sort_order: dbTeam.length
+        }]).then(({ error }) => {
+          if (!error) refreshData()
+        })
+      }
+    }
+  }, [isAdmin, dbTeam])
+
+
   // Fix Javascript empty array traps for default fallback render cards
   const displayEvents = (dbEvents && dbEvents.length > 0) ? dbEvents : EVENTS.map((e, i) => ({ ...e, id: i }))
   const displayGallery = dbGallery
   const displayProducts = (dbProducts && dbProducts.length > 0) ? dbProducts : PRODUCTS
-  const displayTeam = (dbTeam && dbTeam.length > 0) ? dbTeam : TEAM
+  const displayTeam = (() => {
+    const list = (dbTeam && dbTeam.length > 0) ? [...dbTeam] : [...TEAM]
+    const hasLeila = list.some(m => m.name.toLowerCase() === 'leila')
+    if (!hasLeila) {
+      list.push({ name: 'Leila', image_url: '/team/leila.png', img: '/team/leila.png' })
+    }
+    return list
+  })()
 
   // Filter products for the public (admins see hidden ones styled with low opacity)
   const visibleProducts = isAdmin 
@@ -644,7 +682,13 @@ function App() {
                         <div className="team-placeholder-icon">👤</div>
                       )}
                     </div>
-                    <h3 className="team-name">{m.name}</h3>
+                    {NICKNAMES[m.name.toLowerCase()] && m.name.toLowerCase() !== 'bob' && m.name.toLowerCase() !== 'fumax' && m.name.toLowerCase() !== 'gauthier' ? (
+                      <div className="team-nickname-wrap">
+                        <img src={NICKNAMES[m.name.toLowerCase()]} alt={m.name} className="team-nickname-img" />
+                      </div>
+                    ) : (
+                      <h3 className="team-name">{m.name}</h3>
+                    )}
 
                     {isAdmin && m.id && (
                       <div className="admin-inline-actions">
