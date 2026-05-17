@@ -133,6 +133,10 @@ function App() {
   const [lightboxImage, setLightboxImage] = useState(null)
   const [selectedBike, setSelectedBike] = useState('rouge')
   const [selectedBikeImgIndex, setSelectedBikeImgIndex] = useState(0)
+  const [showIntroSplash, setShowIntroSplash] = useState(false)
+  const [fadeIntro, setFadeIntro] = useState(false)
+  const [introMuted, setIntroMuted] = useState(true)
+  const [showTeaserModal, setShowTeaserModal] = useState(false)
   const [checkoutData, setCheckoutData] = useState({
     customText: '',
     size: 'M',
@@ -173,6 +177,22 @@ function App() {
         }
       })
     }
+  }
+
+  // Trigger cinematic splash screen on first visit in the current session
+  useEffect(() => {
+    const hasSeen = sessionStorage.getItem('myd_intro_seen')
+    if (!hasSeen) {
+      setShowIntroSplash(true)
+    }
+  }, [])
+
+  const handleSplashEnd = () => {
+    setFadeIntro(true)
+    setTimeout(() => {
+      setShowIntroSplash(false)
+      sessionStorage.setItem('myd_intro_seen', 'true')
+    }, 800)
   }
 
   // Check Supabase Auth session on mount
@@ -650,6 +670,7 @@ function App() {
               <div className="hero-btns fade-in fade-in-delay-3">
                 <button className="btn btn-primary" onClick={() => navigate('shop')}>Voir la Boutique</button>
                 <button className="btn btn-outline" onClick={() => navigate('team')}>Les Riders</button>
+                <button className="btn btn-outline" onClick={() => setShowTeaserModal(true)}>🎥 Voir le Teaser</button>
               </div>
             </div>
             <div className="hero-scroll-hint">
@@ -1644,6 +1665,44 @@ function App() {
           <button className="lightbox-close" onClick={() => setLightboxImage(null)}>✕</button>
           <div className="lightbox-content" onClick={e => e.stopPropagation()}>
             <img src={lightboxImage} alt="Agrandissement" className="lightbox-img" />
+          </div>
+        </div>
+      )}
+
+      {/* ─── Option 1: Cinematic Splash Screen ─── */}
+      {showIntroSplash && (
+        <div className={`intro-splash-overlay ${fadeIntro ? 'fade-out' : ''}`}>
+          <video 
+            src="/intro.mp4" 
+            autoPlay 
+            muted={introMuted} 
+            playsInline 
+            onEnded={handleSplashEnd} 
+            className="intro-splash-video" 
+          />
+          <div className="intro-actions">
+            <button className="intro-action-btn" onClick={() => setIntroMuted(!introMuted)}>
+              {introMuted ? '🔊 Activer le son' : '🔇 Couper le son'}
+            </button>
+            <button className="intro-action-btn" onClick={handleSplashEnd}>
+              Passer l'intro ➔
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Option 2: Lightbox Teaser Modal ─── */}
+      {showTeaserModal && (
+        <div className="teaser-modal-overlay" onClick={() => setShowTeaserModal(false)}>
+          <div className="teaser-modal-content" onClick={e => e.stopPropagation()}>
+            <button className="teaser-modal-close" onClick={() => setShowTeaserModal(false)}>✕</button>
+            <video 
+              src="/intro.mp4" 
+              autoPlay 
+              controls 
+              playsInline 
+              className="teaser-modal-video" 
+            />
           </div>
         </div>
       )}
