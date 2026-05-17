@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import './App.css'
+import AdminPanel, { SITE_VERSION } from './AdminPanel'
+import { supabase } from './supabaseClient'
 
 const TEAM = [
   { name: 'Alex', img: '/team/alex.png' },
@@ -27,6 +29,39 @@ const PRODUCTS = [
 function App() {
   const [activeTab, setActiveTab] = useState('home')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [showAdmin, setShowAdmin] = useState(false)
+  const [dbEvents, setDbEvents] = useState(null)
+  const [dbGallery, setDbGallery] = useState(null)
+  const [dbProducts, setDbProducts] = useState(null)
+  const [dbTeam, setDbTeam] = useState(null)
+  const [dbSettings, setDbSettings] = useState({})
+
+  // Load dynamic data from Supabase (if configured)
+  useEffect(() => {
+    if (supabase) {
+      supabase.from('events').select('*').order('date', { ascending: true })
+        .then(({ data }) => { if (data) setDbEvents(data) })
+      supabase.from('gallery').select('*').order('created_at', { ascending: false })
+        .then(({ data }) => { if (data) setDbGallery(data) })
+      supabase.from('products').select('*').order('sort_order', { ascending: true })
+        .then(({ data }) => { if (data) setDbProducts(data) })
+      supabase.from('team').select('*').order('sort_order', { ascending: true })
+        .then(({ data }) => { if (data) setDbTeam(data) })
+      supabase.from('settings').select('*')
+        .then(({ data }) => {
+          if (data) {
+            const s = {}
+            data.forEach(row => { s[row.key] = row.value })
+            setDbSettings(s)
+          }
+        })
+    }
+  }, [showAdmin]) // Refresh when admin closes
+
+  const displayEvents = dbEvents || EVENTS.map((e, i) => ({ ...e, id: i }))
+  const displayGallery = dbGallery
+  const displayProducts = dbProducts || PRODUCTS
+  const displayTeam = dbTeam || TEAM
 
   const navigate = (tab) => {
     setActiveTab(tab)
@@ -103,10 +138,14 @@ function App() {
                   <p className="section-sub">Les personnalités qui font vivre Mob Y Dick.</p>
                 </div>
                 <div className="team-grid">
-                  {TEAM.map((m, i) => (
-                    <div key={m.name} className={`team-card fade-in fade-in-delay-${i % 4 + 1}`}>
+                  {displayTeam.map((m, i) => (
+                    <div key={m.name || m.id} className={`team-card fade-in fade-in-delay-${i % 4 + 1}`}>
                       <div className="team-img-wrap">
-                        <img src={m.img} alt={m.name} className="team-img" />
+                        {m.image_url || m.img ? (
+                          <img src={m.image_url || m.img} alt={m.name} className="team-img" />
+                        ) : (
+                          <div className="team-placeholder-icon">👤</div>
+                        )}
                       </div>
                       <h3 className="team-name">{m.name}</h3>
                     </div>
@@ -127,32 +166,24 @@ function App() {
                 <p className="section-sub">Les meilleurs moments de la team Mob Y Dick.</p>
               </div>
               <div className="gallery-grid">
-                <div className="gallery-item glass fade-in fade-in-delay-1">
-                  <div className="gallery-placeholder">📸</div>
-                  <p>Session Ride - Mai 2026</p>
-                </div>
-                <div className="gallery-item glass fade-in fade-in-delay-2">
-                  <div className="gallery-placeholder">🎥</div>
-                  <p>Graff en live</p>
-                </div>
-                <div className="gallery-item glass fade-in fade-in-delay-3">
-                  <div className="gallery-placeholder">📸</div>
-                  <p>Le garage</p>
-                </div>
-                <div className="gallery-item glass fade-in fade-in-delay-4">
-                  <div className="gallery-placeholder">🎥</div>
-                  <p>Première sortie boue</p>
-                </div>
-                <div className="gallery-item glass fade-in fade-in-delay-1">
-                  <div className="gallery-placeholder">📸</div>
-                  <p>Expo éphémère #1</p>
-                </div>
-                <div className="gallery-item glass fade-in fade-in-delay-2">
-                  <div className="gallery-placeholder">📸</div>
-                  <p>Travail d'atelier</p>
-                </div>
+                {displayGallery && displayGallery.length > 0 ? (
+                  displayGallery.map((item, i) => (
+                    <div key={item.id} className={`gallery-item glass fade-in fade-in-delay-${i % 4 + 1}`}>
+                      {item.type === 'video' ? (
+                        <video src={item.url} controls className="gallery-media" />
+                      ) : (
+                        <img src={item.url} alt={item.title} className="gallery-media" />
+                      )}
+                      <p>{item.title}</p>
+                    </div>
+                  ))
+                ) : (
+                  <div className="gallery-empty">
+                    <p>📸 Les photos et vidéos arrivent bientôt !</p>
+                    <p>L'équipe prépare du contenu exclusif.</p>
+                  </div>
+                )}
               </div>
-              <p className="gallery-hint">📩 Tu fais partie de l'équipe ? Envoie tes photos et vidéos pour les voir ici !</p>
             </div>
           </section>
         )}
@@ -167,19 +198,26 @@ function App() {
                 <p className="section-sub">Nos prochains rassemblements et expos.</p>
               </div>
               <div className="events-list">
-                {EVENTS.map((ev, i) => (
-                  <div key={i} className={`event-row glass fade-in fade-in-delay-${i + 1}`}>
-                    <div className="event-date-block">
-                      <span className="event-day">{ev.date.split(' ')[0]}</span>
-                      <span className="event-month">{ev.date.split(' ').slice(1).join(' ')}</span>
+                {displayEvents.map((ev, i) => {
+                  const dateStr = ev.date || ''
+                  const dateObj = new Date(dateStr)
+                  const isValidDate = !isNaN(dateObj.getTime()) && dateStr.includes('-')
+                  const day = isValidDate ? dateObj.getDate() : dateStr.split(' ')[0]
+                  const month = isValidDate ? dateObj.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' }) : dateStr.split(' ').slice(1).join(' ')
+                  return (
+                    <div key={ev.id || i} className={`event-row glass fade-in fade-in-delay-${(i % 4) + 1}`}>
+                      <div className="event-date-block">
+                        <span className="event-day">{day}</span>
+                        <span className="event-month">{month}</span>
+                      </div>
+                      <div className="event-info">
+                        <h3>{ev.title}</h3>
+                        <p className="event-location">📍 {ev.location}</p>
+                        <p>{ev.description || ev.desc}</p>
+                      </div>
                     </div>
-                    <div className="event-info">
-                      <h3>{ev.title}</h3>
-                      <p className="event-location">📍 {ev.location}</p>
-                      <p>{ev.desc}</p>
-                    </div>
-                  </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           </section>
@@ -195,14 +233,14 @@ function App() {
                 <p className="section-sub">Pièces uniques et objets personnalisables.</p>
               </div>
               <div className="shop-grid">
-                {PRODUCTS.map((p, i) => (
-                  <div key={i} className={`product-card glass fade-in fade-in-delay-${i % 4 + 1}`}>
-                    <div className="product-img">
-                      <div className="product-badge">Nouveau</div>
+                {displayProducts.map((p, i) => (
+                  <div key={p.id || i} className={`product-card glass fade-in fade-in-delay-${i % 4 + 1}`}>
+                    <div className="product-img" style={p.image_url ? { backgroundImage: `url(${p.image_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
+                      {!p.image_url && <div className="product-badge">Nouveau</div>}
                     </div>
                     <div className="product-body">
                       <h3>{p.name}</h3>
-                      <p className="product-desc">{p.desc}</p>
+                      <p className="product-desc">{p.description || p.desc}</p>
                       <div className="product-footer">
                         <span className="product-price">{p.price}</span>
                         <a href={p.url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost">Commander</a>
@@ -260,15 +298,20 @@ function App() {
           </div>
           <div className="footer-links">
             <h4>Réseaux</h4>
-            <a href="#">Instagram</a>
-            <a href="#">Facebook</a>
-            <a href="#">TikTok</a>
+            <a href={dbSettings.instagram || "https://instagram.com"} target="_blank" rel="noopener noreferrer">Instagram</a>
+            <a href={dbSettings.facebook || "https://facebook.com"} target="_blank" rel="noopener noreferrer">Facebook</a>
+            <a href={dbSettings.tiktok || "https://tiktok.com"} target="_blank" rel="noopener noreferrer">TikTok</a>
+            {dbSettings.youtube && <a href={dbSettings.youtube} target="_blank" rel="noopener noreferrer">YouTube</a>}
+            {dbSettings.snapchat && <a href={dbSettings.snapchat} target="_blank" rel="noopener noreferrer">Snapchat</a>}
           </div>
         </div>
         <div className="footer-bottom container">
-          <p>&copy; 2026 Mob Y Dick. Tous droits réservés.</p>
+          <p>&copy; 2026 Mob Y Dick. Tous droits réservés. <span className="site-version">{SITE_VERSION}</span></p>
+          <button className="admin-trigger" onClick={() => setShowAdmin(true)}>⚙️ Admin</button>
         </div>
       </footer>
+
+      {showAdmin && <AdminPanel onClose={() => setShowAdmin(false)} />}
     </>
   )
 }
