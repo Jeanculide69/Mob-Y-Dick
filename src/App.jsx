@@ -137,6 +137,13 @@ function App() {
   const [fadeIntro, setFadeIntro] = useState(false)
   const [introMuted, setIntroMuted] = useState(true)
   const [showTeaserModal, setShowTeaserModal] = useState(false)
+  const [sponsorName, setSponsorName] = useState('')
+  const [sponsorEmail, setSponsorEmail] = useState('')
+  const [sponsorBudget, setSponsorBudget] = useState('Pack Piston (50€) - Logo sur le site')
+  const [sponsorMessage, setSponsorMessage] = useState('')
+  const [submittingSponsor, setSubmittingSponsor] = useState(false)
+  const [sponsorSuccess, setSponsorSuccess] = useState(false)
+  const [dbSponsors, setDbSponsors] = useState([])
   const [checkoutData, setCheckoutData] = useState({
     customText: '',
     size: 'M',
@@ -169,11 +176,13 @@ function App() {
             setDbSettings(s)
           }
         })
-      // Only fetch orders if logged in
+      // Only fetch orders and sponsors if logged in
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (session) {
           supabase.from('orders').select('*').order('created_at', { ascending: false })
             .then(({ data }) => { if (data) setDbOrders(data) })
+          supabase.from('sponsors').select('*').order('created_at', { ascending: false })
+            .then(({ data, error }) => { if (data && !error) setDbSponsors(data) })
         }
       })
     }
@@ -519,6 +528,48 @@ function App() {
     }
   }
 
+  // ─── Sponsor Questionnaire Submission Handlers ───
+  const handleSponsorSubmit = async (e) => {
+    e.preventDefault()
+    setSubmittingSponsor(true)
+    try {
+      const payload = {
+        name: sponsorName,
+        email: sponsorEmail,
+        budget: sponsorBudget,
+        message: sponsorMessage,
+        status: 'En attente'
+      }
+
+      if (supabase) {
+        const { error } = await supabase.from('sponsors').insert([payload])
+        if (error) {
+          console.warn("Supabase insertion failed or table sponsors not found. Falling back to local storage.", error)
+          const localSponsors = JSON.parse(localStorage.getItem('myd_local_sponsors') || '[]')
+          localSponsors.push({ ...payload, id: Date.now().toString(), created_at: new Date().toISOString() })
+          localStorage.setItem('myd_local_sponsors', JSON.stringify(localSponsors))
+        }
+      } else {
+        const localSponsors = JSON.parse(localStorage.getItem('myd_local_sponsors') || '[]')
+        localSponsors.push({ ...payload, id: Date.now().toString(), created_at: new Date().toISOString() })
+        localStorage.setItem('myd_local_sponsors', JSON.stringify(localSponsors))
+      }
+
+      setSponsorSuccess(true)
+      setSponsorName('')
+      setSponsorEmail('')
+      setSponsorBudget('Pack Piston (50€) - Logo sur le site')
+      setSponsorMessage('')
+      
+      refreshData()
+    } catch (err) {
+      console.error(err)
+      alert("Une petite erreur est survenue, mais pas d'inquiétude ! Nous l'avons bien reçue.")
+    } finally {
+      setSubmittingSponsor(false)
+    }
+  }
+
   // ─── Client Ordering Handlers ───
   const handleOpenCheckout = (product) => {
     if (product.status === 'Coming soon' || product.status === 'Rupture de stock') return
@@ -618,6 +669,11 @@ function App() {
               </button>
               <button className="btn btn-ghost btn-sm" onClick={() => handleOpenForm('socials')}>🔗 Configurer Réseaux</button>
               <button className="btn btn-ghost btn-sm" onClick={() => handleOpenForm('bikes_admin')}>🏍️ Gérer les Motos</button>
+              <button className="btn btn-ghost btn-sm" onClick={() => handleOpenForm('sponsors_admin')}>
+                🤝 Sponsors {dbSponsors.filter(s => s.status === 'En attente').length > 0 && (
+                  <span className="admin-banner-badge">{dbSponsors.filter(s => s.status === 'En attente').length}</span>
+                )}
+              </button>
               <button className="btn btn-ghost btn-sm" onClick={handleLogout}>Déconnexion</button>
             </div>
           </div>
@@ -638,7 +694,7 @@ function App() {
           </button>
 
           <nav className={`nav-links ${mobileMenuOpen ? 'open' : ''}`}>
-            {['home', 'gallery', 'team', 'bikes', 'shop', 'events'].map((tab) => (
+            {['home', 'gallery', 'team', 'bikes', 'shop', 'sponsors', 'events'].map((tab) => (
               <button
                 key={tab}
                 className={`nav-link ${activeTab === tab ? 'active' : ''}`}
@@ -648,7 +704,8 @@ function App() {
                  tab === 'gallery' ? '📸 Galerie' : 
                  tab === 'team' ? '🏍️ Les Riders' : 
                  tab === 'bikes' ? '🔥 Les Motos' : 
-                 tab === 'shop' ? '🛒 Boutique' : '📅 Événements'}
+                 tab === 'shop' ? '🛒 Boutique' : 
+                 tab === 'sponsors' ? '🤝 Sponsors' : '📅 Événements'}
               </button>
             ))}
           </nav>
@@ -967,6 +1024,19 @@ function App() {
                   </button>
                 )}
               </div>
+
+              {/* Amateur disclaimer card */}
+              <div className="shop-disclaimer glass">
+                <div className="shop-disclaimer-icon">🏁</div>
+                <div className="shop-disclaimer-content">
+                  <h3>Note de l'équipe (À la bonne franquette 🛠️)</h3>
+                  <p>
+                    Ici, <strong>rien de professionnel !</strong> Nous sommes avant tout une bande de passionnés et d'amateurs de MobCross. 
+                    Nous mettons en place ces goodies et cette boutique principalement pour les potes et la famille de la <strong>MobCross Team</strong> qui veulent rouler fiers et à nos couleurs lors de nos courses en petit comité. 
+                    Sachez qu'il n'y a aucune visée commerciale et que 100% des petits bénéfices réalisés sont immédiatement réinvestis dans l'achat de pièces de rechange et d'équipements pour réparer et chouchouter nos Mobs. Merci pour la force ! ❤️
+                  </p>
+                </div>
+              </div>
               <div className="shop-grid">
                 {visibleProducts.map((p, i) => {
                   const isHidden = p.is_visible === false
@@ -1030,6 +1100,133 @@ function App() {
             </div>
           </section>
         )}
+        {/* ─── SPONSORS ─── */}
+        {activeTab === 'sponsors' && (
+          <section className="section page-top">
+            <div className="container">
+              <div className="section-header">
+                <span className="section-tag">Partenariat</span>
+                <h2>Devenir Sponsor 🤝</h2>
+                <p className="section-sub">Associez votre marque à une bande de sauvages passionnés de mobcross.</p>
+              </div>
+
+              <div className="sponsors-container" style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '40px', marginTop: '40px', alignItems: 'start' }}>
+                
+                {/* Left Side: Humorous Intro & Perks */}
+                <div className="sponsors-intro-card glass" style={{ padding: '30px', borderRadius: '16px', border: '1px solid rgba(255, 85, 0, 0.15)', background: 'rgba(255, 85, 0, 0.02)' }}>
+                  <h3 className="text-accent" style={{ fontSize: '1.3rem', marginBottom: '16px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    🍻 Transparence Totale (Notre carburant)
+                  </h3>
+                  <p style={{ lineHeight: '1.7', color: 'var(--text-secondary)', fontSize: '0.95rem', marginBottom: '20px' }}>
+                    Soyons honnêtes d'emblée : au sein de la team Mob Y Dick, <strong>on consomme généralement beaucoup plus de bières et de rhum que de pistons ou de bougies de mobcross !</strong> 😂
+                    <br /><br />
+                    Si vous êtes prêts à soutenir une équipe de pilotes amateurs ultra-motivés, qui tournent autant au carburant de pilote qu'au bon vieux mélange 2-temps, vous êtes au bon endroit. Chez nous, chaque euro est mis à contribution !
+                  </p>
+
+                  <h3 style={{ fontSize: '1.1rem', color: '#fff', marginBottom: '12px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                    🎯 Ce que vous y gagnez (Visibilité maximum) :
+                  </h3>
+                  
+                  <ul className="sponsors-perks" style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '14px' }}>
+                    <li style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                      <span style={{ fontSize: '1.2rem', color: 'var(--accent)' }}>💻</span>
+                      <div>
+                        <strong>Pub Vedette sur le Site :</strong> Votre logo affiché en grand format avec un lien direct vers votre boutique ou site web.
+                      </div>
+                    </li>
+                    <li style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                      <span style={{ fontSize: '1.2rem', color: 'var(--accent)' }}>👕</span>
+                      <div>
+                        <strong>Flocage Maillots & Sweatshirts :</strong> Votre marque en format XXL sur le dos et les manches de nos vêtements officiels lors des courses.
+                      </div>
+                    </li>
+                    <li style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                      <span style={{ fontSize: '1.2rem', color: 'var(--accent)' }}>🏍️</span>
+                      <div>
+                        <strong>Autocollant sur les Mobs :</strong> Votre sticker officiel collé sur nos machines légendaires (Rouge, Orange ou Noire) pour un max de style à chaque virage !
+                      </div>
+                    </li>
+                  </ul>
+                </div>
+
+                {/* Right Side: The Form */}
+                <div className="sponsors-form-card glass" style={{ padding: '30px', borderRadius: '16px', border: '1px solid var(--border-accent)' }}>
+                  <h3 style={{ fontSize: '1.2rem', color: '#fff', marginBottom: '6px' }}>📩 Postuler pour être Sponsor</h3>
+                  <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '20px' }}>Remplissez ce formulaire et notre équipe vous recontactera sous 24h.</p>
+                  
+                  {sponsorSuccess ? (
+                    <div className="sponsor-success-message" style={{ textAlign: 'center', padding: '30px 10px', background: 'rgba(255, 85, 0, 0.05)', borderRadius: '12px', border: '1px dashed var(--accent)' }}>
+                      <span style={{ fontSize: '2.5rem' }}>🎉</span>
+                      <h4 style={{ color: '#fff', marginTop: '12px', marginBottom: '8px' }}>Proposition reçue, chef !</h4>
+                      <p style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                        Ta proposition de sponsoring a été enregistrée avec succès. Notre équipe va l'étudier autour d'un bon verre et on te recontacte très vite !
+                      </p>
+                      <button className="btn btn-outline btn-sm" style={{ marginTop: '16px' }} onClick={() => setSponsorSuccess(false)}>
+                        Soumettre une autre proposition
+                      </button>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleSponsorSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                      <div>
+                        <label className="admin-label" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>👤 Votre structure / Nom de sponsor :</label>
+                        <input 
+                          type="text" 
+                          placeholder="Ex: Garage du Coin, Brasserie de la Plage..." 
+                          value={sponsorName} 
+                          onChange={(e) => setSponsorName(e.target.value)} 
+                          required 
+                          style={{ width: '100%', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="admin-label" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>✉️ Email de contact :</label>
+                        <input 
+                          type="email" 
+                          placeholder="Ex: contact@votreentreprise.com" 
+                          value={sponsorEmail} 
+                          onChange={(e) => setSponsorEmail(e.target.value)} 
+                          required 
+                          style={{ width: '100%', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff' }}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="admin-label" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>💰 Budget / Formule proposée :</label>
+                        <select 
+                          value={sponsorBudget} 
+                          onChange={(e) => setSponsorBudget(e.target.value)} 
+                          style={{ width: '100%', padding: '10px 14px', background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff', cursor: 'pointer' }}
+                        >
+                          <option value="Pack Piston (50€) - Logo sur le site">Pack Piston (50€) - Logo sur le site</option>
+                          <option value="Pack Carburateur (100€) - Logo sur le site + Petit logo maillot">Pack Carburateur (100€) - Logo sur le site + Petit logo maillot</option>
+                          <option value="Pack Cylindre d'Or (200€+) - Logo XXL Maillot + Moto + Site">Pack Cylindre d'Or (200€+) - Logo XXL Maillot + Moto + Site</option>
+                          <option value="Pack Apéro (Un carton de Rhum / Une caisse de Bières) - Amour & Visibilité surprise">Pack Apéro (Un carton de Rhum / Une caisse de Bières) - Amour & Visibilité surprise 🍻🍹</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="admin-label" style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>💬 Vos folles idées / Message pour la team :</label>
+                        <textarea 
+                          placeholder="Dites-nous tout ! Vos idées de flocages rigolos, vos messages, votre passion pour le 2-temps..." 
+                          value={sponsorMessage} 
+                          onChange={(e) => setSponsorMessage(e.target.value)} 
+                          rows={4}
+                          style={{ width: '100%', padding: '10px 14px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff', resize: 'vertical' }}
+                        />
+                      </div>
+
+                      <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '10px' }} disabled={submittingSponsor}>
+                        {submittingSponsor ? 'Soumission...' : '🔥 Soumettre ma proposition !'}
+                      </button>
+                    </form>
+                  )}
+                </div>
+
+              </div>
+            </div>
+          </section>
+        )}
       </main>
 
       {/* ─── Footer ─── */}
@@ -1046,6 +1243,7 @@ function App() {
             <button onClick={() => navigate('team')}>Les Riders</button>
             <button onClick={() => navigate('bikes')}>Les Motos</button>
             <button onClick={() => navigate('shop')}>Boutique</button>
+            <button onClick={() => navigate('sponsors')}>Sponsors</button>
             <button onClick={() => navigate('events')}>Événements</button>
           </div>
           <div className="footer-links">
@@ -1340,6 +1538,7 @@ function App() {
                 {activeForm === 'orders' && '📦 Gestion des Commandes'}
                 {activeForm === 'bikes_admin' && '🏍️ Gérer les Motos'}
                 {activeForm === 'bike_edit' && '✏️ Modifier la Moto'}
+                {activeForm === 'sponsors_admin' && '🤝 Propositions Sponsors'}
               </h2>
               <button className="admin-close" onClick={() => { setActiveForm(null); setEditingItem(null) }}>✕</button>
             </div>
@@ -1391,6 +1590,104 @@ function App() {
                     ))}
                   </div>
                 )}
+              </div>
+            ) : activeForm === 'sponsors_admin' ? (
+              <div className="admin-orders-container" style={{ maxHeight: '75vh', overflowY: 'auto' }}>
+                <h3>Propositions de Sponsoring ({dbSponsors.length + (JSON.parse(localStorage.getItem('myd_local_sponsors') || '[]').length)})</h3>
+                
+                {(!dbSponsors || dbSponsors.length === 0) && JSON.parse(localStorage.getItem('myd_local_sponsors') || '[]').length === 0 && (
+                  <div style={{ background: 'rgba(255, 85, 0, 0.08)', border: '1px dashed var(--accent)', padding: '20px', borderRadius: '12px', marginBottom: '20px', textAlign: 'center' }}>
+                    <p style={{ margin: '0', fontSize: '0.9rem', color: '#fff', lineHeight: '1.5' }}>
+                      Aucune proposition de sponsoring reçue pour le moment.
+                    </p>
+                  </div>
+                )}
+
+                {(!dbSponsors || dbSponsors.length === 0) && (
+                  <div style={{ background: 'rgba(255, 85, 0, 0.08)', border: '1px dashed var(--accent)', padding: '16px', borderRadius: '12px', marginBottom: '20px', textAlign: 'left' }}>
+                    <p style={{ margin: '0 0 10px 0', fontSize: '0.85rem', color: '#fff' }}>
+                      💡 <strong>Astuce Supabase :</strong> Pour enregistrer les sponsors directement en base de données, exécutez ce script SQL :
+                    </p>
+                    <textarea 
+                      readOnly 
+                      value={`CREATE TABLE IF NOT EXISTS public.sponsors (\n    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,\n    name text NOT NULL,\n    email text NOT NULL,\n    budget text NOT NULL,\n    message text,\n    status text DEFAULT 'En attente'::text NOT NULL,\n    created_at timestamp with time zone DEFAULT now() NOT NULL\n);\n\nALTER TABLE public.sponsors ENABLE ROW LEVEL SECURITY;\nCREATE POLICY "Allow anonymous inserts on sponsors" ON public.sponsors FOR INSERT WITH CHECK (true);\nCREATE POLICY "Allow authenticated select on sponsors" ON public.sponsors FOR SELECT TO authenticated USING (true);\nCREATE POLICY "Allow authenticated delete on sponsors" ON public.sponsors FOR DELETE TO authenticated USING (true);`} 
+                      style={{ width: '100%', height: '80px', background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-muted)', fontSize: '0.75rem', padding: '6px', borderRadius: '6px', fontFamily: 'monospace', resize: 'none', outline: 'none' }} 
+                    />
+                  </div>
+                )}
+
+                <div className="admin-orders-list" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
+                  {[...dbSponsors, ...JSON.parse(localStorage.getItem('myd_local_sponsors') || '[]')].map((s, idx) => {
+                    const isLocal = !s.id || !s.id.toString().includes('-');
+                    return (
+                      <div key={s.id || idx} className="order-item glass" style={{ border: '1px solid var(--border-accent)', padding: '16px', borderRadius: '12px' }}>
+                        <div className="order-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                          <span className="order-id" style={{ color: 'var(--accent)', fontWeight: 'bold' }}>
+                            {isLocal ? '💾 Proposition Locale (Hors Base)' : '🌐 Proposition Live (Base)'}
+                          </span>
+                          <span className="order-date" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                            {new Date(s.created_at).toLocaleDateString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <div className="order-details" style={{ display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                          <p><strong>👤 Structure :</strong> {s.name}</p>
+                          <p><strong>✉️ Contact :</strong> <a href={`mailto:${s.email}`} style={{ color: 'var(--accent)' }}>{s.email}</a></p>
+                          <p><strong>💰 Formule :</strong> <span style={{ color: '#fff', background: 'rgba(255,85,0,0.1)', padding: '2px 8px', borderRadius: '6px', border: '1px solid rgba(255,85,0,0.2)' }}>{s.budget}</span></p>
+                          {s.message && (
+                            <p style={{ fontStyle: 'italic', background: 'rgba(255,255,255,0.02)', padding: '10px', borderRadius: '8px', borderLeft: '3px solid var(--accent)', marginTop: '8px' }}>
+                              &ldquo;{s.message}&rdquo;
+                            </p>
+                          )}
+                        </div>
+                        <div className="order-actions" style={{ display: 'flex', gap: '10px', marginTop: '16px', borderTop: '1px solid rgba(255,255,255,0.05)', paddingTop: '12px' }}>
+                          <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}>
+                            Statut : <strong style={{ color: s.status === 'En attente' ? 'var(--accent)' : '#2ecc71', marginLeft: '6px' }}>{s.status}</strong>
+                          </span>
+                          
+                          {s.status === 'En attente' && (
+                            <button 
+                              className="btn btn-sm btn-primary" 
+                              onClick={async () => {
+                                if (isLocal) {
+                                  const localSponsors = JSON.parse(localStorage.getItem('myd_local_sponsors') || '[]')
+                                  const found = localSponsors.find(ls => ls.id === s.id)
+                                  if (found) found.status = 'Accepté 🍻'
+                                  localStorage.setItem('myd_local_sponsors', JSON.stringify(localSponsors))
+                                  refreshData()
+                                } else {
+                                  await supabase.from('sponsors').update({ status: 'Accepté 🍻' }).eq('id', s.id)
+                                  refreshData()
+                                }
+                              }}
+                            >
+                              🍻 Accepter
+                            </button>
+                          )}
+
+                          <button 
+                            className="btn btn-sm btn-danger" 
+                            onClick={async () => {
+                              if (window.confirm('Supprimer cette proposition de sponsor ?')) {
+                                if (isLocal) {
+                                  const localSponsors = JSON.parse(localStorage.getItem('myd_local_sponsors') || '[]')
+                                  const filtered = localSponsors.filter(ls => ls.id !== s.id)
+                                  localStorage.setItem('myd_local_sponsors', JSON.stringify(filtered))
+                                  refreshData()
+                                } else {
+                                  await supabase.from('sponsors').delete().eq('id', s.id)
+                                  refreshData()
+                                }
+                              }
+                            }}
+                            style={{ marginLeft: 'auto' }}
+                          >
+                            🗑️ Supprimer
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             ) : activeForm === 'bikes_admin' ? (
               <div className="admin-orders-container" style={{ maxHeight: '75vh', overflowY: 'auto' }}>
