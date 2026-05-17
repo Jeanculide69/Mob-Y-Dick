@@ -6,6 +6,7 @@ const SITE_VERSION = 'v1.8.0'
 
 // Reusable Google AdSense component with highly premium, warm fallback mockup
 const GoogleAd = ({ slot = '1234567890', format = 'auto', style = { display: 'block' }, navigate }) => {
+  const [adStatus, setAdStatus] = useState('unfilled')
   const [adError, setAdError] = useState(false)
   
   useEffect(() => {
@@ -19,10 +20,27 @@ const GoogleAd = ({ slot = '1234567890', format = 'auto', style = { display: 'bl
     }
   }, [slot]);
 
-  // If there's an error, adblocker is active, or before the ad is filled by Google,
-  // we show a gorgeous glassmorphism banner promoting their direct sponsors option.
-  // This looks incredibly intentional and neat rather than a blank white box!
-  if (adError) {
+  // Set up an observer to check if Google fills the ad
+  useEffect(() => {
+    const checkStatus = () => {
+      const insElement = document.querySelector(`ins[data-ad-slot="${slot}"]`);
+      if (insElement) {
+        const status = insElement.getAttribute('data-ad-status');
+        if (status) {
+          setAdStatus(status);
+        }
+      }
+    };
+
+    // Run immediately and also set an interval for a few seconds
+    checkStatus();
+    const interval = setInterval(checkStatus, 1500);
+    return () => clearInterval(interval);
+  }, [slot]);
+
+  // If there's an error, an ad blocker, or if Google hasn't served an ad yet (unfilled/review status),
+  // we show the gorgeous premium fallback banner! This keeps the site looking beautiful and complete.
+  if (adError || adStatus === 'unfilled') {
     return (
       <div className="google-ad-container glass">
         <div className="google-ad-placeholder" onClick={() => navigate('sponsors')}>
@@ -32,8 +50,17 @@ const GoogleAd = ({ slot = '1234567890', format = 'auto', style = { display: 'bl
           </div>
           <button className="btn btn-primary btn-sm">En savoir plus 🤝</button>
         </div>
+        {/* Invisible AdSense tag running in the background so Google can crawl and approve it! */}
+        <ins 
+          className="adsbygoogle"
+          style={{ display: 'none' }}
+          data-ad-client="ca-pub-6244816354585064"
+          data-ad-slot={slot}
+          data-ad-format={format}
+          data-full-width-responsive="true"
+        />
       </div>
-    )
+    );
   }
 
   return (
@@ -762,25 +789,30 @@ function App() {
       <main className={isAdmin ? 'with-admin-banner' : ''}>
         {/* ─── HOME ─── */}
         {activeTab === 'home' && (
-          <section className="hero">
-            <div className="container hero-inner">
-              <img src="/logo.png" alt="Mob Y Dick" className="hero-logo fade-in" />
-              <h1 className="hero-title fade-in fade-in-delay-1">
-                MOBCROSS <span className="text-accent">TEAM</span>
-              </h1>
-              <p className="hero-sub fade-in fade-in-delay-2">
-                Vêtements & Objets Personnalisés
-              </p>
-              <div className="hero-btns fade-in fade-in-delay-3">
-                <button className="btn btn-primary" onClick={() => navigate('shop')}>Voir la Boutique</button>
-                <button className="btn btn-outline" onClick={() => navigate('team')}>Les Riders</button>
-                <button className="btn btn-outline" onClick={() => setShowTeaserModal(true)}>🎥 Voir le Teaser</button>
+          <>
+            <section className="hero">
+              <div className="container hero-inner">
+                <img src="/logo.png" alt="Mob Y Dick" className="hero-logo fade-in" />
+                <h1 className="hero-title fade-in fade-in-delay-1">
+                  MOBCROSS <span className="text-accent">TEAM</span>
+                </h1>
+                <p className="hero-sub fade-in fade-in-delay-2">
+                  Vêtements & Objets Personnalisés
+                </p>
+                <div className="hero-btns fade-in fade-in-delay-3">
+                  <button className="btn btn-primary" onClick={() => navigate('shop')}>Voir la Boutique</button>
+                  <button className="btn btn-outline" onClick={() => navigate('team')}>Les Riders</button>
+                  <button className="btn btn-outline" onClick={() => setShowTeaserModal(true)}>🎥 Voir le Teaser</button>
+                </div>
               </div>
+              <div className="hero-scroll-hint">
+                <span>↓</span>
+              </div>
+            </section>
+            <div className="container" style={{ marginTop: '20px', marginBottom: '20px' }}>
+              <GoogleAd slot="home-banner" navigate={navigate} />
             </div>
-            <div className="hero-scroll-hint">
-              <span>↓</span>
-            </div>
-          </section>
+          </>
         )}
 
         {/* ─── RIDERS (DEDICATED PAGE) ─── */}
@@ -963,7 +995,6 @@ function App() {
                   );
                 })()}
               </div>
-              <GoogleAd slot="home-banner" navigate={navigate} />
             </div>
           </section>
         )}
