@@ -1716,26 +1716,26 @@ select option {
 /* ─── Skyscraper Sidebar Ads ─── */
 .wing-panel {
   position: fixed;
-  top: 180px;
-  width: 160px;
-  height: 600px;
+  top: 140px;
+  width: 250px;
+  height: 720px;
   z-index: 100;
   border-radius: 12px;
   border: 1px dashed rgba(255, 85, 0, 0.15);
   background: rgba(255, 255, 255, 0.01) !important;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
-  padding: 16px;
+  padding: 24px 18px;
   text-align: center;
   transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   overflow: hidden;
 }
 
 .wing-panel-left {
-  left: 30px;
+  left: 40px;
 }
 
 .wing-panel-right {
-  right: 30px;
+  right: 40px;
 }
 
 .wing-panel:hover {

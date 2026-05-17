@@ -117,12 +117,23 @@ const SidebarAd = ({ side = 'left', navigate }) => {
     return (
       <div className={`wing-panel wing-panel-${side} glass`} onClick={handleClick}>
         <div className="wing-panel-inner">
-          <span className="wing-panel-accent">📢 SPONSOR</span>
+          <span className="wing-panel-accent">📢 PARTENAIRE</span>
           <div className="wing-panel-heading">
-            <h3>VOTRE PUB ICI</h3>
+            <h3 style={{ fontSize: '1.2rem', color: 'var(--accent)', fontWeight: 'bold', letterSpacing: '1px' }}>ESPACE DISPONIBLE</h3>
           </div>
-          <p>Affichez votre marque sur les côtés de notre site officiel !</p>
-          <button className="btn btn-primary btn-sm">Rejoindre 🤝</button>
+          <div style={{ margin: '15px 0' }}>
+            <span style={{ fontSize: '2.5rem' }}>🏍️</span>
+          </div>
+          <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: '1.6' }}>
+            Affichez votre marque en grand format sur les côtés de notre site officiel !
+          </p>
+          <div className="glass" style={{ padding: '12px 6px', borderRadius: '8px', border: '1px dashed rgba(255,85,0,0.15)', margin: '15px 0', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+            🎯 Idéal pour les bars locaux, garages moto et amis de la MobCross !
+          </div>
+          <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', fontStyle: 'italic', lineHeight: '1.5' }}>
+            Les bénéfices financent nos pièces de rechange... et notre réserve de bière/rhum ! 🍺🍹
+          </p>
+          <button className="btn btn-primary" style={{ width: '100%', marginTop: '15px' }}>Devenir Sponsor 🤝</button>
         </div>
         <ins 
           className="adsbygoogle"
@@ -140,7 +151,7 @@ const SidebarAd = ({ side = 'left', navigate }) => {
       <span className="wing-panel-header">📢 Publicité</span>
       <ins 
         className="adsbygoogle"
-        style={{ display: 'block', width: '136px', height: '560px' }}
+        style={{ display: 'block', width: '200px', height: '600px' }}
         data-ad-client="ca-pub-6244816354585064"
         data-ad-slot={slot}
         data-ad-format="vertical"
