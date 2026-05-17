@@ -621,9 +621,25 @@
 @media (max-width: 768px) {
   .hamburger { display: flex; }
 
+  .nav-inner { height: 70px; }
+  .nav-logo { height: 52px; }
+  .navbar.with-admin-banner .nav-links { top: 120px; }
+  
+  .page-top { padding-top: 100px; }
+  main.with-admin-banner .page-top { padding-top: 120px; }
+
+  .bike-showcase {
+    padding: 24px 16px !important;
+    gap: 24px !important;
+    grid-template-columns: 1fr !important;
+  }
+  .bike-main-img-wrap {
+    height: 260px !important;
+  }
+
   .nav-links {
     position: fixed;
-    top: 72px;
+    top: 70px;
     left: 0;
     right: 0;
     bottom: 0;
