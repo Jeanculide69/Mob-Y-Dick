@@ -242,6 +242,8 @@ function App() {
         image_urls: item.image_url ? item.image_url.split(',').filter(Boolean) : [],
         status: item.status || 'Coming soon',
         is_visible: item.is_visible !== undefined ? item.is_visible : true,
+        is_customizable: item.is_customizable !== undefined ? item.is_customizable : true,
+        has_sizes: item.has_sizes !== undefined ? item.has_sizes : false,
         files: []
       } : { 
         name: '', 
@@ -250,6 +252,8 @@ function App() {
         image_urls: [],
         status: 'Coming soon',
         is_visible: true,
+        is_customizable: true,
+        has_sizes: false,
         files: []
       })
     } else if (type === 'team') {
@@ -318,6 +322,8 @@ function App() {
           image_url: finalImageUrl,
           status: formData.status,
           is_visible: formData.is_visible,
+          is_customizable: formData.is_customizable !== undefined ? formData.is_customizable : true,
+          has_sizes: formData.has_sizes !== undefined ? formData.has_sizes : false,
           url: null, // Clear PayPal link column so it relies 100% on dynamic automated PayPal routing
           sort_order: editingItem ? editingItem.sort_order : (dbProducts?.length || 0)
         }
@@ -359,7 +365,7 @@ function App() {
     setCheckoutStep(1)
     setCheckoutData({
       customText: '',
-      size: product.name.toLowerCase().includes('shirt') || product.name.toLowerCase().includes('sweat') || product.name.toLowerCase().includes('hoodie') ? 'M' : '',
+      size: product.has_sizes ? 'M' : '',
       customerName: '',
       customerEmail: '',
       shippingAddress: '',
@@ -871,10 +877,14 @@ function App() {
                     </div>
                   )}
                   
-                  <label className="admin-label">✏️ Écris ton Pseudo Graffiti à imprimer :</label>
-                  <input type="text" placeholder="Ex: FLO, FUMAX, ALEX..." value={checkoutData.customText} onChange={e => setCheckoutData({...checkoutData, customText: e.target.value})} required maxLength={20} className="checkout-large-input" />
+                  {checkoutProduct.is_customizable !== false && (
+                    <>
+                      <label className="admin-label">✏️ Écris ton Pseudo Graffiti à imprimer :</label>
+                      <input type="text" placeholder="Ex: FLO, FUMAX, ALEX..." value={checkoutData.customText} onChange={e => setCheckoutData({...checkoutData, customText: e.target.value})} required maxLength={20} className="checkout-large-input" />
+                    </>
+                  )}
                   
-                  {checkoutData.size !== '' && (
+                  {checkoutProduct.has_sizes === true && (
                     <>
                       <label className="admin-label" style={{marginTop:'16px'}}>👚 Choisis ta taille :</label>
                       <select value={checkoutData.size} onChange={e => setCheckoutData({...checkoutData, size: e.target.value})} className="checkout-select">
@@ -922,8 +932,12 @@ function App() {
                   
                   <div className="checkout-summary-box glass">
                     <p><strong>Objet :</strong> {checkoutProduct.name} ({checkoutProduct.price})</p>
-                    <p><strong>Pseudo Graffiti :</strong> <span className="checkout-graffiti-badge">{checkoutData.customText}</span></p>
-                    {checkoutData.size && <p><strong>Taille :</strong> {checkoutData.size}</p>}
+                    {checkoutProduct.is_customizable !== false ? (
+                      <p><strong>Pseudo Graffiti :</strong> <span className="checkout-graffiti-badge">{checkoutData.customText}</span></p>
+                    ) : (
+                      <p><strong>Personnalisation :</strong> <span style={{color:'var(--text-muted)'}}>Aucune (Produit Standard)</span></p>
+                    )}
+                    {checkoutProduct.has_sizes === true && checkoutData.size && <p><strong>Taille :</strong> {checkoutData.size}</p>}
                     <hr style={{borderColor:'rgba(255,85,0,0.2)', margin:'10px 0'}} />
                     <p><strong>Destinataire :</strong> {checkoutData.customerName}</p>
                     <p><strong>Contact :</strong> {checkoutData.customerEmail}</p>
@@ -1122,6 +1136,18 @@ function App() {
                     <div className="admin-row-checkbox" style={{display:'flex', alignItems:'center', gap:'10px', marginTop:'8px'}}>
                       <input type="checkbox" id="is_visible" checked={formData.is_visible} onChange={e => setFormData({...formData, is_visible: e.target.checked})} style={{width:'auto', margin:0}} />
                       <label htmlFor="is_visible" style={{color:'#fff', fontSize:'0.9rem', cursor:'pointer'}}>Afficher le produit sur le site (Visible par le public)</label>
+                    </div>
+
+                    {/* Customization Toggle */}
+                    <div className="admin-row-checkbox" style={{display:'flex', alignItems:'center', gap:'10px', marginTop:'8px'}}>
+                      <input type="checkbox" id="is_customizable" checked={formData.is_customizable !== false} onChange={e => setFormData({...formData, is_customizable: e.target.checked})} style={{width:'auto', margin:0}} />
+                      <label htmlFor="is_customizable" style={{color:'#fff', fontSize:'0.9rem', cursor:'pointer'}}>🎨 Produit Personnalisable (Demande un pseudo graffiti à l'achat)</label>
+                    </div>
+
+                    {/* Sizes Toggle */}
+                    <div className="admin-row-checkbox" style={{display:'flex', alignItems:'center', gap:'10px', marginTop:'8px', marginBottom:'12px'}}>
+                      <input type="checkbox" id="has_sizes" checked={formData.has_sizes === true} onChange={e => setFormData({...formData, has_sizes: e.target.checked})} style={{width:'auto', margin:0}} />
+                      <label htmlFor="has_sizes" style={{color:'#fff', fontSize:'0.9rem', cursor:'pointer'}}>👕 Produit avec Tailles (XS, S, M, L, XL, XXL)</label>
                     </div>
                   </>
                 )}
