@@ -53,6 +53,7 @@ function App() {
 
   // Checkout Modal States (Client)
   const [checkoutProduct, setCheckoutProduct] = useState(null)
+  const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [checkoutStep, setCheckoutStep] = useState(1) // 1: Personalization, 2: Shipping, 3: Validation, 4: Redirection
   const [checkoutData, setCheckoutData] = useState({
     customText: '',
@@ -238,18 +239,18 @@ function App() {
         name: item.name, 
         description: item.description, 
         price: item.price, 
-        image_url: item.image_url || '',
+        image_urls: item.image_url ? item.image_url.split(',').filter(Boolean) : [],
         status: item.status || 'Coming soon',
         is_visible: item.is_visible !== undefined ? item.is_visible : true,
-        file: null
+        files: []
       } : { 
         name: '', 
         description: '', 
         price: '', 
-        image_url: '',
+        image_urls: [],
         status: 'Coming soon',
         is_visible: true,
-        file: null
+        files: []
       })
     } else if (type === 'team') {
       setFormData(item ? { name: item.name, image_url: item.image_url || '' } : { name: '', image_url: '' })
@@ -293,17 +294,22 @@ function App() {
           }])
         }
       } else if (activeForm === 'product') {
-        let finalImageUrl = formData.image_url
+        const uploadedUrls = []
 
-        // If local photo is uploaded, upload to gallery bucket in products subfolder
-        if (formData.file) {
-          const file = formData.file
-          const fileName = `products/${Date.now()}.${file.name.split('.').pop()}`
-          const { error } = await supabase.storage.from('gallery').upload(fileName, file)
-          if (error) throw error
-          const { data: { publicUrl } } = supabase.storage.from('gallery').getPublicUrl(fileName)
-          finalImageUrl = publicUrl
+        // Upload any new files selected to Supabase Storage
+        if (formData.files && formData.files.length > 0) {
+          for (const file of formData.files) {
+            const fileName = `products/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${file.name.split('.').pop()}`
+            const { error } = await supabase.storage.from('gallery').upload(fileName, file)
+            if (error) throw error
+            const { data: { publicUrl } } = supabase.storage.from('gallery').getPublicUrl(fileName)
+            uploadedUrls.push(publicUrl)
+          }
         }
+
+        // Combine existing (non-deleted) URLs with the newly uploaded URLs
+        const allUrls = [...(formData.image_urls || []), ...uploadedUrls]
+        const finalImageUrl = allUrls.join(',')
 
         const productPayload = {
           name: formData.name,
@@ -316,7 +322,7 @@ function App() {
           sort_order: editingItem ? editingItem.sort_order : (dbProducts?.length || 0)
         }
 
-        if (editingItem) {
+        if (editingItem && editingItem.id) {
           await supabase.from('products').update(productPayload).eq('id', editingItem.id)
         } else {
           await supabase.from('products').insert([productPayload])
@@ -349,6 +355,7 @@ function App() {
   const handleOpenCheckout = (product) => {
     if (product.status === 'Coming soon' || product.status === 'Rupture de stock') return
     setCheckoutProduct(product)
+    setCurrentImageIndex(0)
     setCheckoutStep(1)
     setCheckoutData({
       customText: '',
@@ -645,9 +652,15 @@ function App() {
                         <div className="product-hidden-badge">🚫 MASQUÉ DU PUBLIC</div>
                       )}
 
-                      <div className="product-img" style={p.image_url ? { backgroundImage: `url(${p.image_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
-                        {!p.image_url && <div className="product-badge">Graffiti</div>}
-                      </div>
+                      {(() => {
+                        const imageUrls = p.image_url ? p.image_url.split(',').filter(Boolean) : []
+                        const firstImage = imageUrls[0] || ''
+                        return (
+                          <div className="product-img" style={firstImage ? { backgroundImage: `url(${firstImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
+                            {!firstImage && <div className="product-badge">Graffiti</div>}
+                          </div>
+                        )
+                      })()}
                       <div className="product-body">
                         <h3>{p.name}</h3>
                         <p className="product-desc">{p.description || p.desc}</p>
@@ -801,6 +814,62 @@ function App() {
               {checkoutStep === 1 && (
                 <div className="checkout-step-container">
                   <h3>T-Shirt / Objet : <span className="text-accent">{checkoutProduct.name}</span></h3>
+                  
+                  {/* Image Carousel */}
+                  {checkoutProduct.image_url && (
+                    <div className="checkout-media-carousel" style={{ marginBottom: '20px', position: 'relative', textAlign: 'center' }}>
+                      {(() => {
+                        const urls = checkoutProduct.image_url.split(',').filter(Boolean)
+                        if (urls.length === 0) return null
+                        const activeUrl = urls[currentImageIndex] || urls[0]
+                        return (
+                          <>
+                            <div className="carousel-main-wrap" style={{ position: 'relative', display: 'inline-block', width: '100%', height: '240px', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.4)' }}>
+                              <img src={activeUrl} alt={checkoutProduct.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                              
+                              {urls.length > 1 && (
+                                <>
+                                  <button 
+                                    type="button"
+                                    className="carousel-arrow left"
+                                    onClick={() => setCurrentImageIndex((currentImageIndex - 1 + urls.length) % urls.length)}
+                                    style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.7)', border: '1px solid rgba(255,85,0,0.5)', color: '#fff', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                  >
+                                    ◀
+                                  </button>
+                                  <button 
+                                    type="button"
+                                    className="carousel-arrow right"
+                                    onClick={() => setCurrentImageIndex((currentImageIndex + 1) % urls.length)}
+                                    style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', background: 'rgba(0,0,0,0.7)', border: '1px solid rgba(255,85,0,0.5)', color: '#fff', width: '32px', height: '32px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+                                  >
+                                    ▶
+                                  </button>
+                                  <div className="carousel-counter" style={{ position: 'absolute', bottom: '10px', right: '10px', background: 'rgba(0,0,0,0.7)', padding: '2px 8px', borderRadius: '4px', fontSize: '0.75rem', color: 'var(--accent)' }}>
+                                    {currentImageIndex + 1} / {urls.length}
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                            
+                            {urls.length > 1 && (
+                              <div className="carousel-thumbnails" style={{ display: 'flex', gap: '8px', justifyContent: 'center', marginTop: '10px', overflowX: 'auto', padding: '4px 0' }}>
+                                {urls.map((url, idx) => (
+                                  <img 
+                                    key={idx}
+                                    src={url} 
+                                    alt="Thumbnail" 
+                                    onClick={() => setCurrentImageIndex(idx)}
+                                    style={{ width: '45px', height: '45px', objectFit: 'cover', borderRadius: '6px', border: currentImageIndex === idx ? '2px solid var(--accent)' : '1px solid rgba(255,255,255,0.2)', cursor: 'pointer', transition: 'all 0.2s ease', opacity: currentImageIndex === idx ? 1 : 0.6 }} 
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </>
+                        )
+                      })()}
+                    </div>
+                  )}
                   
                   <label className="admin-label">✏️ Écris ton Pseudo Graffiti à imprimer :</label>
                   <input type="text" placeholder="Ex: FLO, FUMAX, ALEX..." value={checkoutData.customText} onChange={e => setCheckoutData({...checkoutData, customText: e.target.value})} required maxLength={20} className="checkout-large-input" />
@@ -999,14 +1068,46 @@ function App() {
                     <input type="text" placeholder="Prix (ex: 35€)" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} required />
 
                     {/* Local File Photo Upload */}
-                    <label className="admin-label">🖼️ Photo du Produit</label>
-                    {formData.image_url && (
-                      <div style={{display:'flex', alignItems:'center', gap:'12px', marginBottom:'10px'}}>
-                        <img src={formData.image_url} alt="Aperçu" style={{height:'50px', width:'50px', objectFit:'cover', borderRadius:'4px', border:'1px solid rgba(255,255,255,0.2)'}} />
-                        <span style={{color:'var(--text-muted)', fontSize:'0.8rem'}}>Photo actuelle active</span>
+                    <label className="admin-label">🖼️ Photos du Produit (Plusieurs possibles)</label>
+                    
+                    {/* Render current images with delete buttons */}
+                    {formData.image_urls && formData.image_urls.length > 0 && (
+                      <div style={{display:'flex', flexWrap:'wrap', gap:'10px', marginBottom:'12px'}}>
+                        {formData.image_urls.map((url, idx) => (
+                          <div key={idx} style={{position:'relative', width:'60px', height:'60px', borderRadius:'6px', overflow:'hidden', border:'1px solid rgba(255,255,255,0.2)'}}>
+                            <img src={url} alt="Aperçu" style={{width:'100%', height:'100%', objectFit:'cover'}} />
+                            <button 
+                              type="button" 
+                              onClick={() => {
+                                const updated = formData.image_urls.filter((_, i) => i !== idx)
+                                setFormData({...formData, image_urls: updated})
+                              }}
+                              style={{position:'absolute', top:2, right:2, background:'rgba(0,0,0,0.8)', border:'none', color:'#ff3333', width:'18px', height:'18px', borderRadius:'4px', fontSize:'0.7rem', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer'}}
+                              title="Supprimer cette image"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     )}
-                    <input type="file" accept="image/*" onChange={e => setFormData({...formData, file: e.target.files[0]})} />
+                    
+                    {/* Show new files selected to be uploaded */}
+                    {formData.files && formData.files.length > 0 && (
+                      <div style={{color:'var(--accent)', fontSize:'0.85rem', marginBottom:'10px'}}>
+                        📂 {formData.files.length} nouvelle(s) image(s) sélectionnée(s)
+                      </div>
+                    )}
+                    
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      multiple 
+                      onChange={e => {
+                        const newFiles = Array.from(e.target.files)
+                        setFormData({...formData, files: [...(formData.files || []), ...newFiles]})
+                      }} 
+                    />
                     
                     {/* Stock Status Selector */}
                     <label className="admin-label">📦 Statut du Stock</label>
