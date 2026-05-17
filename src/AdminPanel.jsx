@@ -112,9 +112,9 @@ export default function AdminPanel({ onClose }) {
       if (!galleryForm.file) { setUploading(false); return }
       const file = galleryForm.file
       const fileName = `${Date.now()}.${file.name.split('.').pop()}`
-      const { error } = await supabase.storage.from('gallery').upload(fileName, file)
+      const { error } = await supabase.storage.from('Gallery').upload(fileName, file)
       if (error) { alert('Erreur upload: ' + error.message); setUploading(false); return }
-      const { data: { publicUrl } } = supabase.storage.from('gallery').getPublicUrl(fileName)
+      const { data: { publicUrl } } = supabase.storage.from('Gallery').getPublicUrl(fileName)
       await supabase.from('gallery').insert([{
         title: galleryForm.title, type: galleryForm.type,
         url: publicUrl, file_name: fileName, source: 'upload'
@@ -126,7 +126,7 @@ export default function AdminPanel({ onClose }) {
   }
   async function deleteGalleryItem(item) {
     if (!confirm('Supprimer ?')) return
-    if (item.source === 'upload' && item.file_name) await supabase.storage.from('gallery').remove([item.file_name])
+    if (item.source === 'upload' && item.file_name) await supabase.storage.from('Gallery').remove([item.file_name])
     await supabase.from('gallery').delete().eq('id', item.id)
     fetchAll()
   }

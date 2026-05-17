@@ -204,12 +204,12 @@ function App() {
     if (!confirm('Voulez-vous vraiment supprimer cet élément ?')) return
     try {
       if (table === 'gallery' && item && item.source === 'upload' && item.file_name) {
-        await supabase.storage.from('gallery').remove([item.file_name])
+        await supabase.storage.from('Gallery').remove([item.file_name])
       }
-      if (table === 'products' && item && item.image_url && item.image_url.includes('products/')) {
+      if (table === 'products' && item && item.image_url && (item.image_url.includes('/gallery/') || item.image_url.includes('/Gallery/'))) {
         // Extract fileName from public URL if uploaded locally
-        const fileName = item.image_url.split('/gallery/').pop()
-        if (fileName) await supabase.storage.from('gallery').remove([fileName])
+        const fileName = item.image_url.split(/\/gallery\/|\/Gallery\//i).pop()
+        if (fileName) await supabase.storage.from('Gallery').remove([fileName])
       }
       await supabase.from(table).delete().eq('id', id)
       refreshData()
@@ -285,9 +285,9 @@ function App() {
           if (!formData.file) { alert('Veuillez sélectionner un fichier.'); setUploading(false); return }
           const file = formData.file
           const fileName = `${Date.now()}.${file.name.split('.').pop()}`
-          const { error } = await supabase.storage.from('gallery').upload(fileName, file)
+          const { error } = await supabase.storage.from('Gallery').upload(fileName, file)
           if (error) throw error
-          const { data: { publicUrl } } = supabase.storage.from('gallery').getPublicUrl(fileName)
+          const { data: { publicUrl } } = supabase.storage.from('Gallery').getPublicUrl(fileName)
           await supabase.from('gallery').insert([{
             title: formData.title, type: formData.type,
             url: publicUrl, file_name: fileName, source: 'upload'
@@ -300,9 +300,9 @@ function App() {
         if (formData.files && formData.files.length > 0) {
           for (const file of formData.files) {
             const fileName = `products/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${file.name.split('.').pop()}`
-            const { error } = await supabase.storage.from('gallery').upload(fileName, file)
+            const { error } = await supabase.storage.from('Gallery').upload(fileName, file)
             if (error) throw error
-            const { data: { publicUrl } } = supabase.storage.from('gallery').getPublicUrl(fileName)
+            const { data: { publicUrl } } = supabase.storage.from('Gallery').getPublicUrl(fileName)
             uploadedUrls.push(publicUrl)
           }
         }
