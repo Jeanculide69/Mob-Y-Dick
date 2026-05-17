@@ -27,6 +27,66 @@ const PRODUCTS = [
   { name: 'Stickers Pack', price: '8€', desc: 'Lot de 5 stickers vinyle haute qualité.', status: 'En stock', is_visible: true },
 ]
 
+const BIKES_LIST = {
+  rouge: {
+    title: 'La Bête Rouge – Beast R-1',
+    plate: 'N° 1',
+    description: 'Conçue pour dompter la poussière et les terrains les plus extrêmes, la Bête Rouge est une véritable icône de puissance. Avec son cadre allégé rouge vermillon et son kit déco rétro-moderne personnalisé à la main par nos graphistes, elle combine agressivité visuelle et performances mécaniques pures. Son échappement racing libère un son rauque emblématique qui annonce la couleur sur chaque piste.',
+    images: [
+      '/motos/2cd0ab6d-2472-4496-aac8-af9a290fbf14.jpg',
+      '/motos/6c3be747-ab9a-4ae3-8414-d6e23a6698fe.jpg',
+      '/motos/9ee5fac2-769a-461d-9f22-936c44a2b717.jpg',
+      '/motos/f5def3ab-7a3e-4eb4-85fc-1bd659ef0ea9.jpg'
+    ],
+    specs: {
+      'Cylindrée': '125 cc 2-Temps',
+      'Suspensions': 'Fourche inversée réglable',
+      'Échappement': 'Ligne FMF Gold Series',
+      'Freinage': 'Disques hydrauliques ventilés',
+      'Poids à vide': '88 kg',
+      'Pneus': 'Michelin StarCross 5'
+    }
+  },
+  orange: {
+    title: 'L\'Étincelle Orange – Storm O-4',
+    plate: 'N° 4',
+    description: 'L\'Étincelle Orange ne passe jamais inaperçue. Conçue spécialement pour le stunt et le motocross freestyle, elle arbore un kit déco orange fluo éclatant qui rappelle les flammes légendaires de notre logo. Sa maniabilité hors du commun et sa reprise ultra-nerveuse à bas régime en font la machine favorite pour envoyer des figures de l\'espace et survoler les bosses.',
+    images: [
+      '/motos/05c88f5e-250c-41fa-bdc4-dc97b785cd54.jpg',
+      '/motos/5bebfecf-6fbf-4327-a6ec-59df4de8dffd.jpg',
+      '/motos/c2b259ef-7132-42f1-bbe6-225949254c2a.jpg',
+      '/motos/e551714e-aa71-4599-9f6c-bcdea4e944b1.jpg'
+    ],
+    specs: {
+      'Cylindrée': '150 cc Haute-Compression',
+      'Suspensions': 'Monoamortisseur WP Pro',
+      'Échappement': 'Silencieux Akrapovič Custom',
+      'Guidon': 'Guidon Renthal Fatbar',
+      'Poids à vide': '91 kg',
+      'Pneus': 'Pirelli Scorpion MX'
+    }
+  },
+  noir: {
+    title: 'L\'Ombre Noire – Stealth N-67',
+    plate: 'N° 67',
+    description: 'Sombre, furtive et d\'une élégance redoutable, l\'Ombre Noire est bâtie pour la performance en toute discrétion. Son kit déco noir mat anthracite texturé en fibre de carbone lui confère un look agressif intemporel. Sous son carénage se cache une bête de course optimisée pour les départs rapides et les accélérations brutales, plébiscitée par les riders les plus techniques de la meute.',
+    images: [
+      '/motos/5e66cf75-e1de-41d7-8273-ed89eb9c8e3e.jpg',
+      '/motos/6fae5df4-0ec9-4e66-ba64-885a453960df.jpg',
+      '/motos/a5956043-1e5b-454c-82e1-db0afdad9d99.jpg',
+      '/motos/cfc2f2d9-647f-40f1-97bf-bc5e90eb423f.jpg'
+    ],
+    specs: {
+      'Cylindrée': '250 cc 4-Temps Injection',
+      'Suspensions': 'Showa SFF-Air TAC',
+      'Échappement': 'Double sortie Yoshimura Carbon',
+      'Jantes': 'Excel A60 noires renforcées',
+      'Poids à vide': '98 kg',
+      'Pneus': 'Dunlop Geomax MX33'
+    }
+  }
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState('home')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -56,6 +116,8 @@ function App() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [checkoutStep, setCheckoutStep] = useState(1) // 1: Personalization, 2: Shipping, 3: Validation, 4: Redirection
   const [lightboxImage, setLightboxImage] = useState(null)
+  const [selectedBike, setSelectedBike] = useState('rouge')
+  const [selectedBikeImgIndex, setSelectedBikeImgIndex] = useState(0)
   const [checkoutData, setCheckoutData] = useState({
     customText: '',
     size: 'M',
@@ -460,13 +522,17 @@ function App() {
           </button>
 
           <nav className={`nav-links ${mobileMenuOpen ? 'open' : ''}`}>
-            {['home', 'gallery', 'team', 'shop', 'events'].map((tab) => (
+            {['home', 'gallery', 'team', 'bikes', 'shop', 'events'].map((tab) => (
               <button
                 key={tab}
                 className={`nav-link ${activeTab === tab ? 'active' : ''}`}
                 onClick={() => navigate(tab)}
               >
-                {tab === 'home' ? '🏠 Accueil' : tab === 'gallery' ? '📸 Galerie' : tab === 'team' ? '🏍️ Les Riders' : tab === 'shop' ? '🛒 Boutique' : '📅 Événements'}
+                {tab === 'home' ? '🏠 Accueil' : 
+                 tab === 'gallery' ? '📸 Galerie' : 
+                 tab === 'team' ? '🏍️ Les Riders' : 
+                 tab === 'bikes' ? '🔥 Les Motos' : 
+                 tab === 'shop' ? '🛒 Boutique' : '📅 Événements'}
               </button>
             ))}
           </nav>
@@ -530,6 +596,131 @@ function App() {
                     )}
                   </div>
                 ))}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* ─── BIKES ─── */}
+        {activeTab === 'bikes' && (
+          <section className="section page-top">
+            <div className="container">
+              <div className="section-header">
+                <span className="section-tag">Nos Machines</span>
+                <h2>Les Motos Mobcross</h2>
+                <p className="section-sub">Découvre les 3 monstres de la team Mob Y Dick, personnalisés à la main.</p>
+              </div>
+
+              <div className="bikes-container" style={{ display: 'flex', flexDirection: 'column', gap: '30px', marginTop: '40px' }}>
+                {/* Bike Selector Buttons */}
+                <div className="bikes-tabs" style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap', marginBottom: '20px' }}>
+                  {[
+                    { id: 'rouge', name: '🔴 Moto Rouge', color: '#ff3333' },
+                    { id: 'orange', name: '🟠 Moto Orange', color: '#ff5500' },
+                    { id: 'noir', name: '⚫ Moto Noir', color: '#888888' }
+                  ].map(bike => (
+                    <button
+                      key={bike.id}
+                      className={`btn ${selectedBike === bike.id ? 'btn-primary' : 'btn-ghost'}`}
+                      onClick={() => {
+                        setSelectedBike(bike.id);
+                        setSelectedBikeImgIndex(0);
+                      }}
+                      style={{ 
+                        border: selectedBike === bike.id ? 'none' : '1px solid rgba(255,255,255,0.1)',
+                        boxShadow: selectedBike === bike.id ? `0 4px 20px ${bike.id === 'rouge' ? 'rgba(255,51,51,0.3)' : bike.id === 'orange' ? 'var(--accent-glow)' : 'rgba(255,255,255,0.1)'}` : 'none',
+                        background: selectedBike === bike.id ? (bike.id === 'rouge' ? 'linear-gradient(135deg, #ff3333 0%, #aa0000 100%)' : bike.id === 'orange' ? 'linear-gradient(135deg, var(--accent) 0%, var(--accent-dark) 100%)' : 'linear-gradient(135deg, #333 0%, #111 100%)') : ''
+                      }}
+                    >
+                      {bike.name}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Bike Showcase details */}
+                {(() => {
+                  const bikeData = BIKES_LIST[selectedBike];
+                  const activeImg = bikeData.images[selectedBikeImgIndex] || bikeData.images[0];
+                  return (
+                    <div className="bike-showcase glass fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '40px', padding: '40px', borderRadius: '20px', border: '1px solid var(--border-subtle)', background: 'var(--bg-glass)' }}>
+                      {/* Left Side: Photo Carousel */}
+                      <div className="bike-gallery-side" style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                        <div 
+                          className="bike-main-img-wrap" 
+                          style={{ position: 'relative', width: '100%', height: '350px', borderRadius: '16px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', background: '#000', cursor: 'zoom-in' }} 
+                          onClick={() => setLightboxImage(activeImg)}
+                          title="Cliquez pour agrandir en plein écran"
+                        >
+                          <img src={activeImg} alt={bikeData.title} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                          <div style={{ position: 'absolute', bottom: '15px', right: '15px', background: 'rgba(0,0,0,0.7)', padding: '6px 12px', borderRadius: '8px', fontSize: '0.8rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            🔍 Plein Écran
+                          </div>
+                        </div>
+                        
+                        <div className="bike-thumbnails" style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '5px' }}>
+                          {bikeData.images.map((img, idx) => (
+                            <img
+                              key={idx}
+                              src={img}
+                              alt={`Aperçu ${idx + 1}`}
+                              style={{ 
+                                width: '70px', 
+                                height: '70px', 
+                                objectFit: 'cover', 
+                                borderRadius: '8px', 
+                                border: selectedBikeImgIndex === idx ? `2px solid ${selectedBike === 'rouge' ? '#ff3333' : selectedBike === 'orange' ? 'var(--accent)' : '#fff'}` : '1px solid rgba(255,255,255,0.1)', 
+                                cursor: 'pointer', 
+                                transition: 'all 0.2s ease',
+                                opacity: selectedBikeImgIndex === idx ? 1 : 0.6
+                              }}
+                              onClick={() => setSelectedBikeImgIndex(idx)}
+                            />
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Right Side: Description and Specifications */}
+                      <div className="bike-details-side" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                          <span style={{ 
+                            padding: '6px 14px', 
+                            borderRadius: '20px', 
+                            fontSize: '0.85rem', 
+                            fontWeight: 'bold', 
+                            fontFamily: 'var(--font-heading)',
+                            background: selectedBike === 'rouge' ? '#ff3333' : selectedBike === 'orange' ? 'var(--accent)' : '#333', 
+                            color: '#fff' 
+                          }}>
+                            {bikeData.plate}
+                          </span>
+                          <h3 style={{ margin: 0, fontSize: '1.8rem' }}>{bikeData.title}</h3>
+                        </div>
+
+                        <p style={{ color: 'var(--text-secondary)', fontSize: '0.95rem', lineHeight: '1.6', margin: 0 }}>
+                          {bikeData.description}
+                        </p>
+
+                        <div className="bike-specs-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginTop: '10px' }}>
+                          {Object.entries(bikeData.specs).map(([key, val]) => (
+                            <div key={key} style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid rgba(255,255,255,0.05)', padding: '12px', borderRadius: '10px' }}>
+                              <span style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>{key}</span>
+                              <span style={{ display: 'block', fontSize: '0.9rem', color: 'var(--text-primary)', fontWeight: '600', marginTop: '2px' }}>{val}</span>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div style={{ display: 'flex', gap: '12px', marginTop: '20px', flexWrap: 'wrap' }}>
+                          <button className="btn btn-outline" style={{ flex: 1 }} onClick={() => navigate('team')}>
+                            🏍️ Les Riders
+                          </button>
+                          <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => navigate('shop')}>
+                            🛒 La Boutique
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </section>
@@ -716,6 +907,7 @@ function App() {
             <button onClick={() => navigate('home')}>Accueil</button>
             <button onClick={() => navigate('gallery')}>Galerie</button>
             <button onClick={() => navigate('team')}>Les Riders</button>
+            <button onClick={() => navigate('bikes')}>Les Motos</button>
             <button onClick={() => navigate('shop')}>Boutique</button>
             <button onClick={() => navigate('events')}>Événements</button>
           </div>
