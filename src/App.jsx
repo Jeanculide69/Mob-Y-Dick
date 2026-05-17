@@ -1131,19 +1131,19 @@ function App() {
                     <li style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
                       <span style={{ fontSize: '1.2rem', color: 'var(--accent)' }}>💻</span>
                       <div>
-                        <strong>Pub Vedette sur le Site :</strong> Votre logo affiché en grand format avec un lien direct vers votre boutique ou site web.
+                        <strong>Pub sur le Site :</strong> Votre logo affiché avec un lien direct vers votre site ou page. La pub est incluse d'emblée, et sa taille/visibilité sera actualisée en fonction du nombre total de sponsors.
                       </div>
                     </li>
                     <li style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
                       <span style={{ fontSize: '1.2rem', color: 'var(--accent)' }}>👕</span>
                       <div>
-                        <strong>Flocage Maillots & Sweatshirts :</strong> Votre marque en format XXL sur le dos et les manches de nos vêtements officiels lors des courses.
+                        <strong>Flocage Maillots & Sweatshirts :</strong> Votre marque en format XXL sur le dos et les manches de nos vêtements officiels lors des courses <em>(fourniture des logos à vos frais ou en fonction du contrat de sponsoring)</em>.
                       </div>
                     </li>
                     <li style={{ display: 'flex', gap: '12px', alignItems: 'flex-start', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
                       <span style={{ fontSize: '1.2rem', color: 'var(--accent)' }}>🏍️</span>
                       <div>
-                        <strong>Autocollant sur les Mobs :</strong> Votre sticker officiel collé sur nos machines légendaires (Rouge, Orange ou Noire) pour un max de style à chaque virage !
+                        <strong>Autocollant sur les Mobs :</strong> Votre sticker officiel collé sur nos machines légendaires (Rouge, Orange ou Noire) pour un max de style à chaque virage <em>(impression des stickers à vos frais ou en fonction du contrat de sponsoring)</em>.
                       </div>
                     </li>
                   </ul>
