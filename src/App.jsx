@@ -868,12 +868,8 @@ function App() {
         </div>
       </header>
 
-      {activeTab !== 'home' && (
-        <>
-          <SidebarAd side="left" navigate={navigate} />
-          <SidebarAd side="right" navigate={navigate} />
-        </>
-      )}
+      <SidebarAd side="left" navigate={navigate} />
+      <SidebarAd side="right" navigate={navigate} />
 
       <main className={isAdmin ? 'with-admin-banner' : ''}>
         {/* ─── HOME ─── */}
