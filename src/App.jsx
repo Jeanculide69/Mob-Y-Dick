@@ -727,6 +727,13 @@ function App() {
             {dbSettings.youtube && <a href={dbSettings.youtube} target="_blank" rel="noopener noreferrer">YouTube</a>}
             {dbSettings.snapchat && <a href={dbSettings.snapchat} target="_blank" rel="noopener noreferrer">Snapchat</a>}
           </div>
+          <div className="footer-qr" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '10px', textAlign: 'center' }}>
+            <h4 style={{ margin: 0, fontSize: '0.85rem', letterSpacing: '1.5px', color: 'var(--text-primary)' }}>📱 Scanner</h4>
+            <div style={{ position: 'relative', padding: '6px', background: 'rgba(255, 255, 255, 0.03)', border: '1px solid var(--border-accent)', borderRadius: '12px', boxShadow: '0 4px 20px rgba(255, 85, 0, 0.1)', cursor: 'zoom-in', transition: 'all 0.3s ease' }} onClick={() => setLightboxImage('/QRCODEMYD.png')} title="Cliquez pour agrandir">
+              <img src="/QRCODEMYD.png" alt="QR Code Mob Y Dick" style={{ width: '80px', height: '80px', borderRadius: '6px', objectFit: 'contain' }} />
+            </div>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontFamily: 'var(--font-heading)', textTransform: 'uppercase', letterSpacing: '1px' }}>Version Mobile</span>
+          </div>
         </div>
         <div className="footer-bottom container">
           <p>&copy; 2026 Mob Y Dick. Tous droits réservés. <span className="site-version">{SITE_VERSION}</span></p>

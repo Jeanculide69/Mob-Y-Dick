@@ -47,7 +47,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 72px;
+  height: 90px;
 }
 
 .nav-brand {
@@ -57,7 +57,7 @@
 }
 
 .nav-logo {
-  height: 60px;
+  height: 76px;
   width: auto;
   filter: drop-shadow(0 0 8px var(--accent-glow));
   transition: all 0.3s var(--ease-out);
