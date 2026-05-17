@@ -685,3 +685,109 @@
   border-radius: 50%;
 }
 
+/* ─── Visual Editor Admin Banner ─── */
+.admin-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 50px;
+  z-index: 2000;
+  border-bottom: 2px solid var(--accent);
+  background: rgba(10, 10, 10, 0.85) !important;
+  box-shadow: 0 4px 30px rgba(255, 85, 0, 0.15);
+}
+
+.admin-banner-inner {
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9rem;
+}
+
+.admin-banner-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.admin-banner-actions .btn-sm {
+  font-size: 0.75rem;
+  padding: 6px 12px;
+}
+
+/* Layout offsets when admin banner is active */
+.navbar.with-admin-banner {
+  top: 50px;
+}
+
+main.with-admin-banner {
+  margin-top: 50px;
+}
+
+/* ─── Inline Admin Controls ─── */
+.admin-card-parent {
+  position: relative;
+}
+
+.admin-inline-actions {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  gap: 6px;
+  z-index: 100;
+  opacity: 0.3;
+  transition: opacity 0.3s ease;
+}
+
+.admin-card-parent:hover .admin-inline-actions {
+  opacity: 1;
+}
+
+.admin-inline-actions button {
+  background: rgba(0, 0, 0, 0.85);
+  border: 1px solid var(--border-accent);
+  color: #fff;
+  border-radius: 6px;
+  width: 32px;
+  height: 32px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.admin-inline-actions button:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+  transform: scale(1.1);
+  box-shadow: 0 0 10px rgba(255, 85, 0, 0.5);
+}
+
+/* Add buttons in page sections */
+.inline-add-btn {
+  margin-top: 16px !important;
+  font-family: var(--font-heading) !important;
+  letter-spacing: 1px;
+}
+
+.gallery-media-source-tag {
+  font-size: 0.7rem;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  padding: 2px 6px;
+  margin-left: 8px;
+  color: var(--text-muted);
+}
+
+/* Visual Editor Forms Premium Adaptability */
+.admin-visual-modal {
+  max-width: 550px !important;
+  border: 2px solid var(--border-accent) !important;
+  box-shadow: 0 0 40px rgba(255, 85, 0, 0.25) !important;
+}
+
+
