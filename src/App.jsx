@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import './App.css'
 import { supabase } from './supabaseClient'
 
-const SITE_VERSION = 'v1.7.0'
+const SITE_VERSION = 'v1.8.0'
 
 const TEAM = [
   { name: 'Alex', img: '/team/alex.png' },
@@ -21,10 +21,10 @@ const EVENTS = [
 ]
 
 const PRODUCTS = [
-  { name: 'T-Shirt Custom', price: '35€', desc: 'Ton pseudo en style graffiti sur coton premium.', url: 'https://paypal.me/CorentinCARTIER', status: 'En stock', is_visible: true },
-  { name: 'Sweat à Capuche', price: '55€', desc: 'Hoodie noir avec le logo Mob Y Dick brodé.', url: 'https://paypal.me/CorentinCARTIER', status: 'Coming soon', is_visible: true },
-  { name: 'Toile Originale', price: '120€', desc: 'Pièce unique peinte à la main par l\'équipe.', url: 'https://paypal.me/CorentinCARTIER', status: 'Sur commande', is_visible: true },
-  { name: 'Stickers Pack', price: '8€', desc: 'Lot de 5 stickers vinyle haute qualité.', url: 'https://paypal.me/CorentinCARTIER', status: 'En stock', is_visible: true },
+  { name: 'T-Shirt Custom', price: '35€', desc: 'Ton pseudo en style graffiti sur coton premium.', status: 'En stock', is_visible: true },
+  { name: 'Sweat à Capuche', price: '55€', desc: 'Hoodie noir avec le logo Mob Y Dick brodé.', status: 'Coming soon', is_visible: true },
+  { name: 'Toile Originale', price: '120€', desc: 'Pièce unique peinte à la main par l\'équipe.', status: 'Sur commande', is_visible: true },
+  { name: 'Stickers Pack', price: '8€', desc: 'Lot de 5 stickers vinyle haute qualité.', status: 'En stock', is_visible: true },
 ]
 
 function App() {
@@ -151,6 +151,11 @@ function App() {
       if (table === 'gallery' && item && item.source === 'upload' && item.file_name) {
         await supabase.storage.from('gallery').remove([item.file_name])
       }
+      if (table === 'products' && item && item.image_url && item.image_url.includes('products/')) {
+        // Extract fileName from public URL if uploaded locally
+        const fileName = item.image_url.split('/gallery/').pop()
+        if (fileName) await supabase.storage.from('gallery').remove([fileName])
+      }
       await supabase.from(table).delete().eq('id', id)
       refreshData()
     } catch (err) {
@@ -179,18 +184,18 @@ function App() {
         name: item.name, 
         description: item.description, 
         price: item.price, 
-        url: item.url, 
         image_url: item.image_url || '',
         status: item.status || 'Coming soon',
-        is_visible: item.is_visible !== undefined ? item.is_visible : true
+        is_visible: item.is_visible !== undefined ? item.is_visible : true,
+        file: null
       } : { 
         name: '', 
         description: '', 
         price: '', 
-        url: '', 
         image_url: '',
         status: 'Coming soon',
-        is_visible: true
+        is_visible: true,
+        file: null
       })
     } else if (type === 'team') {
       setFormData(item ? { name: item.name, image_url: item.image_url || '' } : { name: '', image_url: '' })
@@ -234,11 +239,33 @@ function App() {
           }])
         }
       } else if (activeForm === 'product') {
-        const productData = { ...formData, sort_order: editingItem ? editingItem.sort_order : (dbProducts?.length || 0) }
+        let finalImageUrl = formData.image_url
+
+        // If local photo is uploaded, upload to gallery bucket in products subfolder
+        if (formData.file) {
+          const file = formData.file
+          const fileName = `products/${Date.now()}.${file.name.split('.').pop()}`
+          const { error } = await supabase.storage.from('gallery').upload(fileName, file)
+          if (error) throw error
+          const { data: { publicUrl } } = supabase.storage.from('gallery').getPublicUrl(fileName)
+          finalImageUrl = publicUrl
+        }
+
+        const productPayload = {
+          name: formData.name,
+          description: formData.description,
+          price: formData.price,
+          image_url: finalImageUrl,
+          status: formData.status,
+          is_visible: formData.is_visible,
+          url: null, // Clear PayPal link column so it relies 100% on dynamic automated PayPal routing
+          sort_order: editingItem ? editingItem.sort_order : (dbProducts?.length || 0)
+        }
+
         if (editingItem) {
-          await supabase.from('products').update(productData).eq('id', editingItem.id)
+          await supabase.from('products').update(productPayload).eq('id', editingItem.id)
         } else {
-          await supabase.from('products').insert([productData])
+          await supabase.from('products').insert([productPayload])
         }
       } else if (activeForm === 'team') {
         const teamData = { ...formData, sort_order: editingItem ? editingItem.sort_order : (dbTeam?.length || 0) }
@@ -314,9 +341,6 @@ function App() {
 
   // Generate secure dynamic PayPal links pre-filled with the exact numeric price
   const getPayPalLink = (product) => {
-    if (product.url && product.url !== 'https://paypal.me/CorentinCARTIER') {
-      return product.url
-    }
     const numericPrice = product.price.replace(/[^0-9]/g, '')
     return `https://paypal.me/CorentinCARTIER/${numericPrice}`
   }
@@ -584,7 +608,7 @@ function App() {
                       {isAdmin && p.id && (
                         <div className="admin-inline-actions">
                           <button onClick={() => handleOpenForm('product', p)}>✏️</button>
-                          <button onClick={() => handleDeleteItem('products', p.id)}>🗑️</button>
+                          <button onClick={() => handleDeleteItem('products', p.id, p)}>🗑️</button>
                         </div>
                       )}
                     </div>
@@ -912,11 +936,18 @@ function App() {
                   <>
                     <input type="text" placeholder="Nom du produit" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
                     <textarea placeholder="Description" value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} rows={2} />
-                    <div className="admin-row">
-                      <input type="text" placeholder="Prix (ex: 35€)" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} required />
-                      <input type="url" placeholder="Lien Paypal (Optionnel)" value={formData.url} onChange={e => setFormData({...formData, url: e.target.value})} />
-                    </div>
-                    <input type="url" placeholder="URL photo produit (optionnel)" value={formData.image_url} onChange={e => setFormData({...formData, image_url: e.target.value})} />
+                    
+                    <input type="text" placeholder="Prix (ex: 35€)" value={formData.price} onChange={e => setFormData({...formData, price: e.target.value})} required />
+
+                    {/* Local File Photo Upload */}
+                    <label className="admin-label">🖼️ Photo du Produit</label>
+                    {formData.image_url && (
+                      <div style={{display:'flex', alignItems:'center', gap:'12px', marginBottom:'10px'}}>
+                        <img src={formData.image_url} alt="Aperçu" style={{height:'50px', width:'50px', objectFit:'cover', borderRadius:'4px', border:'1px solid rgba(255,255,255,0.2)'}} />
+                        <span style={{color:'var(--text-muted)', fontSize:'0.8rem'}}>Photo actuelle active</span>
+                      </div>
+                    )}
+                    <input type="file" accept="image/*" onChange={e => setFormData({...formData, file: e.target.files[0]})} />
                     
                     {/* Stock Status Selector */}
                     <label className="admin-label">📦 Statut du Stock</label>
