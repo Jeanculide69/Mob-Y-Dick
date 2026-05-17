@@ -144,6 +144,60 @@ function App() {
     setDbOrders([])
   }
 
+  const handleInitializeDatabase = async () => {
+    if (!supabase) {
+      alert("Supabase n'est pas configuré.")
+      return
+    }
+    setUploading(true)
+    try {
+      // 1. Initialize products if empty
+      if (!dbProducts || dbProducts.length === 0) {
+        const productsToInsert = PRODUCTS.map((p, i) => ({
+          name: p.name,
+          description: p.desc,
+          price: p.price,
+          status: p.status,
+          is_visible: p.is_visible,
+          sort_order: i,
+          image_url: ''
+        }))
+        const { error } = await supabase.from('products').insert(productsToInsert)
+        if (error) throw error
+      }
+      
+      // 2. Initialize team if empty
+      if (!dbTeam || dbTeam.length === 0) {
+        const teamToInsert = TEAM.map((t, i) => ({
+          name: t.name,
+          image_url: t.img,
+          sort_order: i
+        }))
+        const { error } = await supabase.from('team').insert(teamToInsert)
+        if (error) throw error
+      }
+
+      // 3. Initialize events if empty
+      if (!dbEvents || dbEvents.length === 0) {
+        const eventsToInsert = EVENTS.map(e => ({
+          title: e.title,
+          date: e.date,
+          location: e.location,
+          description: e.desc
+        }))
+        const { error } = await supabase.from('events').insert(eventsToInsert)
+        if (error) throw error
+      }
+
+      alert('Base de données initialisée avec succès ! Les produits, riders et événements par défaut sont maintenant modifiables.')
+      refreshData()
+    } catch (err) {
+      alert("Erreur lors de l'initialisation : " + err.message)
+    } finally {
+      setUploading(false)
+    }
+  }
+
   // ─── Inline CRUD Handlers ───
   const handleDeleteItem = async (table, id, item = null) => {
     if (!confirm('Voulez-vous vraiment supprimer cet élément ?')) return
@@ -361,6 +415,11 @@ function App() {
           <div className="admin-banner-inner container">
             <span>🛠️ <strong>Mode Édition Actif</strong> — Modifiez le contenu directement sur vos pages !</span>
             <div className="admin-banner-actions">
+              {(!dbProducts || dbProducts.length === 0) && (
+                <button className="btn btn-primary btn-sm" onClick={handleInitializeDatabase} style={{ backgroundColor: 'var(--accent)', borderColor: 'var(--accent)', color: '#fff', fontWeight: 'bold' }}>
+                  🚀 Remplir la base
+                </button>
+              )}
               <button className="btn btn-ghost btn-sm" onClick={() => handleOpenForm('orders')}>
                 📦 Commandes {dbOrders.filter(o => o.status === 'En attente de paiement').length > 0 && (
                   <span className="admin-banner-badge">{dbOrders.filter(o => o.status === 'En attente de paiement').length}</span>
