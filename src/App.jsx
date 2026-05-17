@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import './App.css'
 import { supabase } from './supabaseClient'
 
-const SITE_VERSION = 'v1.5.0'
+const SITE_VERSION = 'v1.6.0'
 
 const TEAM = [
   { name: 'Alex', img: '/team/alex.png' },
@@ -104,10 +104,11 @@ function App() {
     }
   }, [isAdmin])
 
-  const displayEvents = dbEvents || EVENTS.map((e, i) => ({ ...e, id: i }))
+  // Fix Javascript empty array traps for default fallback render cards
+  const displayEvents = (dbEvents && dbEvents.length > 0) ? dbEvents : EVENTS.map((e, i) => ({ ...e, id: i }))
   const displayGallery = dbGallery
-  const displayProducts = dbProducts || PRODUCTS
-  const displayTeam = dbTeam || TEAM
+  const displayProducts = (dbProducts && dbProducts.length > 0) ? dbProducts : PRODUCTS
+  const displayTeam = (dbTeam && dbTeam.length > 0) ? dbTeam : TEAM
 
   // Filter products for the public (admins see hidden ones styled with low opacity)
   const visibleProducts = isAdmin 
@@ -353,13 +354,13 @@ function App() {
           </button>
 
           <nav className={`nav-links ${mobileMenuOpen ? 'open' : ''}`}>
-            {['home', 'gallery', 'shop', 'events'].map((tab) => (
+            {['home', 'gallery', 'team', 'shop', 'events'].map((tab) => (
               <button
                 key={tab}
                 className={`nav-link ${activeTab === tab ? 'active' : ''}`}
                 onClick={() => navigate(tab)}
               >
-                {tab === 'home' ? '🏠 Accueil' : tab === 'gallery' ? '📸 Galerie' : tab === 'shop' ? '🛒 Boutique' : '📅 Événements'}
+                {tab === 'home' ? '🏠 Accueil' : tab === 'gallery' ? '📸 Galerie' : tab === 'team' ? '🏍️ Les Riders' : tab === 'shop' ? '🛒 Boutique' : '📅 Événements'}
               </button>
             ))}
           </nav>
@@ -369,63 +370,63 @@ function App() {
       <main className={isAdmin ? 'with-admin-banner' : ''}>
         {/* ─── HOME ─── */}
         {activeTab === 'home' && (
-          <>
-            <section className="hero">
-              <div className="container hero-inner">
-                <img src="/logo.png" alt="Mob Y Dick" className="hero-logo fade-in" />
-                <h1 className="hero-title fade-in fade-in-delay-1">
-                  MOBCROSS<br /><span className="text-accent">TEAM</span>
-                </h1>
-                <p className="hero-sub fade-in fade-in-delay-2">
-                  Vêtements & Objets Personnalisés
-                </p>
-                <div className="hero-btns fade-in fade-in-delay-3">
-                  <button className="btn btn-primary" onClick={() => navigate('shop')}>Voir la Boutique</button>
-                  <button className="btn btn-outline" onClick={() => navigate('events')}>Événements</button>
-                </div>
+          <section className="hero">
+            <div className="container hero-inner">
+              <img src="/logo.png" alt="Mob Y Dick" className="hero-logo fade-in" />
+              <h1 className="hero-title fade-in fade-in-delay-1">
+                MOBCROSS<br /><span className="text-accent">TEAM</span>
+              </h1>
+              <p className="hero-sub fade-in fade-in-delay-2">
+                Vêtements & Objets Personnalisés
+              </p>
+              <div className="hero-btns fade-in fade-in-delay-3">
+                <button className="btn btn-primary" onClick={() => navigate('shop')}>Voir la Boutique</button>
+                <button className="btn btn-outline" onClick={() => navigate('team')}>Les Riders</button>
               </div>
-              <div className="hero-scroll-hint">
-                <span>↓</span>
+            </div>
+            <div className="hero-scroll-hint">
+              <span>↓</span>
+            </div>
+          </section>
+        )}
+
+        {/* ─── RIDERS (DEDICATED PAGE) ─── */}
+        {activeTab === 'team' && (
+          <section className="section page-top">
+            <div className="container">
+              <div className="section-header">
+                <span className="section-tag">L'Équipe</span>
+                <h2>Les Riders</h2>
+                <p className="section-sub">Les personnalités qui font vivre Mob Y Dick.</p>
+                {isAdmin && (
+                  <button className="btn btn-primary btn-sm inline-add-btn" onClick={() => handleOpenForm('team')}>
+                    ➕ Ajouter un Rider
+                  </button>
+                )}
               </div>
-            </section>
-
-            {/* Team Section */}
-            <section className="section">
-              <div className="container">
-                <div className="section-header">
-                  <span className="section-tag">L'Équipe</span>
-                  <h2>Les Riders</h2>
-                  <p className="section-sub">Les personnalités qui font vivre Mob Y Dick.</p>
-                  {isAdmin && (
-                    <button className="btn btn-primary btn-sm inline-add-btn" onClick={() => handleOpenForm('team')}>
-                      ➕ Ajouter un Rider
-                    </button>
-                  )}
-                </div>
-                <div className="team-grid">
-                  {displayTeam.map((m, i) => (
-                    <div key={m.id || m.name} className={`team-card fade-in fade-in-delay-${i % 4 + 1} admin-card-parent`}>
-                      <div className="team-img-wrap">
-                        {m.image_url || m.img ? (
-                          <img src={m.image_url || m.img} alt={m.name} className="team-img" />
-                        ) : (
-                          <div className="team-placeholder-icon">👤</div>
-                        )}
-                      </div>
-                      <h3 className="team-name">{m.name}</h3>
-
-                      {isAdmin && m.id && (
-                        <div className="admin-inline-actions">
-                          <button onClick={() => handleOpenForm('team', m)}>✏️</button>
-                          <button onClick={() => handleDeleteItem('team', m.id)}>🗑️</button>
-                        </div>
+              <div className="team-grid">
+                {displayTeam.map((m, i) => (
+                  <div key={m.id || m.name} className={`team-card fade-in fade-in-delay-${i % 4 + 1} admin-card-parent`}>
+                    <div className="team-img-wrap">
+                      {m.image_url || m.img ? (
+                        <img src={m.image_url || m.img} alt={m.name} className="team-img" />
+                      ) : (
+                        <div className="team-placeholder-icon">👤</div>
                       )}
                     </div>
-                  ))}
-                </div>
+                    <h3 className="team-name">{m.name}</h3>
+
+                    {isAdmin && m.id && (
+                      <div className="admin-inline-actions">
+                        <button onClick={() => handleOpenForm('team', m)}>✏️</button>
+                        <button onClick={() => handleDeleteItem('team', m.id)}>🗑️</button>
+                      </div>
+                    )}
+                  </div>
+                ))}
               </div>
-            </section>
-          </>
+            </div>
+          </section>
         )}
 
         {/* ─── GALLERY ─── */}
@@ -463,7 +464,7 @@ function App() {
                 ) : (
                   <div className="gallery-empty">
                     <p>📸 Les photos et vidéos arrivent bientôt !</p>
-                    <p>L'équipe préape du contenu exclusif.</p>
+                    <p>L'équipe prépare du contenu exclusif.</p>
                   </div>
                 )}
               </div>
@@ -597,6 +598,7 @@ function App() {
             <h4>Navigation</h4>
             <button onClick={() => navigate('home')}>Accueil</button>
             <button onClick={() => navigate('gallery')}>Galerie</button>
+            <button onClick={() => navigate('team')}>Les Riders</button>
             <button onClick={() => navigate('shop')}>Boutique</button>
             <button onClick={() => navigate('events')}>Événements</button>
           </div>
