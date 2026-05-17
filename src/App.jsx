@@ -684,7 +684,12 @@ function App() {
                     </div>
                     {NICKNAMES[m.name.toLowerCase()] && m.name.toLowerCase() !== 'bob' && m.name.toLowerCase() !== 'fumax' && m.name.toLowerCase() !== 'gauthier' ? (
                       <div className="team-nickname-wrap">
-                        <img src={NICKNAMES[m.name.toLowerCase()]} alt={m.name} className="team-nickname-img" />
+                        <img 
+                          src={NICKNAMES[m.name.toLowerCase()]} 
+                          alt={m.name} 
+                          className="team-nickname-img" 
+                          style={m.name.toLowerCase() === 'jeanculide' ? { height: '54px', transform: 'scale(1.35)' } : {}}
+                        />
                       </div>
                     ) : (
                       <h3 className="team-name">{m.name}</h3>
