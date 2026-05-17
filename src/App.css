@@ -969,6 +969,15 @@ main.with-admin-banner {
   box-shadow: 0 0 10px rgba(255, 85, 0, 0.3);
 }
 
+/* Fix white-on-white dropdown option visibility */
+.checkout-select option,
+.admin-form select option,
+select option {
+  background-color: #1a1a1a !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+}
+
 .checkout-summary-box {
   background: rgba(255, 85, 0, 0.05);
   border: 1px solid rgba(255, 85, 0, 0.15);
