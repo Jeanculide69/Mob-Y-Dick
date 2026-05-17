@@ -858,7 +858,7 @@ function App() {
               >
                 {tab === 'home' ? '🏠 Accueil' : 
                  tab === 'gallery' ? '📸 Galerie' : 
-                 tab === 'team' ? '🧑‍🏍️ Les Riders' : 
+                 tab === 'team' ? '😎 Les Riders' : 
                  tab === 'bikes' ? '🏍️ Les Motos' : 
                  tab === 'shop' ? '🛒 Boutique' : 
                  tab === 'sponsors' ? '🤝 Sponsors' : '📅 Événements'}
