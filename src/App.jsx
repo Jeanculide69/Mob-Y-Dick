@@ -4,6 +4,53 @@ import { supabase } from './supabaseClient'
 
 const SITE_VERSION = 'v1.8.0'
 
+// Reusable Google AdSense component with highly premium, warm fallback mockup
+const GoogleAd = ({ slot = '1234567890', format = 'auto', style = { display: 'block' }, navigate }) => {
+  const [adError, setAdError] = useState(false)
+  
+  useEffect(() => {
+    try {
+      if (window.adsbygoogle) {
+        (window.adsbygoogle || []).push({});
+      }
+    } catch (e) {
+      console.warn("Google AdSense loading failed or ad blocker active.", e);
+      setAdError(true);
+    }
+  }, [slot]);
+
+  // If there's an error, adblocker is active, or before the ad is filled by Google,
+  // we show a gorgeous glassmorphism banner promoting their direct sponsors option.
+  // This looks incredibly intentional and neat rather than a blank white box!
+  if (adError) {
+    return (
+      <div className="google-ad-container glass">
+        <div className="google-ad-placeholder" onClick={() => navigate('sponsors')}>
+          <div className="google-ad-placeholder-text">
+            <h4>📢 Espace publicitaire disponible</h4>
+            <p>Devenez sponsor de la team Mob Y Dick et affichez votre marque ici !</p>
+          </div>
+          <button className="btn btn-primary btn-sm">En savoir plus 🤝</button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="google-ad-container glass">
+      <span className="google-ad-label">📢 Publicité Partenaire</span>
+      <ins 
+        className="adsbygoogle"
+        style={style}
+        data-ad-client="ca-pub-6316279933560759"
+        data-ad-slot={slot}
+        data-ad-format={format}
+        data-full-width-responsive="true"
+      />
+    </div>
+  );
+};
+
 const TEAM = [
   { name: 'Alex', img: '/team/alex.png' },
   { name: 'Bob', img: '/team/bob.png' },
@@ -916,6 +963,7 @@ function App() {
                   );
                 })()}
               </div>
+              <GoogleAd slot="home-banner" navigate={navigate} />
             </div>
           </section>
         )}
@@ -1097,6 +1145,7 @@ function App() {
                   )
                 })}
               </div>
+              <GoogleAd slot="shop-banner" navigate={navigate} />
             </div>
           </section>
         )}
@@ -1224,6 +1273,7 @@ function App() {
                 </div>
 
               </div>
+              <GoogleAd slot="sponsors-banner" navigate={navigate} />
             </div>
           </section>
         )}
