@@ -55,6 +55,7 @@ function App() {
   const [checkoutProduct, setCheckoutProduct] = useState(null)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [checkoutStep, setCheckoutStep] = useState(1) // 1: Personalization, 2: Shipping, 3: Validation, 4: Redirection
+  const [lightboxImage, setLightboxImage] = useState(null)
   const [checkoutData, setCheckoutData] = useState({
     customText: '',
     size: 'M',
@@ -662,7 +663,12 @@ function App() {
                         const imageUrls = p.image_url ? p.image_url.split(',').filter(Boolean) : []
                         const firstImage = imageUrls[0] || ''
                         return (
-                          <div className="product-img" style={firstImage ? { backgroundImage: `url(${firstImage})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
+                          <div 
+                            className="product-img" 
+                            style={firstImage ? { backgroundImage: `url(${firstImage})`, backgroundSize: 'cover', backgroundPosition: 'center', cursor: 'zoom-in' } : { cursor: 'zoom-in' }}
+                            onClick={() => { if (firstImage) setLightboxImage(firstImage); }}
+                            title="Cliquez pour agrandir"
+                          >
                             {!firstImage && <div className="product-badge">Graffiti</div>}
                           </div>
                         )
@@ -831,7 +837,13 @@ function App() {
                         return (
                           <>
                             <div className="carousel-main-wrap" style={{ position: 'relative', display: 'inline-block', width: '100%', height: '240px', borderRadius: '12px', overflow: 'hidden', border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(0,0,0,0.4)' }}>
-                              <img src={activeUrl} alt={checkoutProduct.name} style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                              <img 
+                                src={activeUrl} 
+                                alt={checkoutProduct.name} 
+                                style={{ width: '100%', height: '100%', objectFit: 'contain', cursor: 'zoom-in' }} 
+                                onClick={() => setLightboxImage(activeUrl)}
+                                title="Cliquez pour voir en plein écran"
+                              />
                               
                               {urls.length > 1 && (
                                 <>
@@ -1179,6 +1191,15 @@ function App() {
                 </button>
               </form>
             )}
+          </div>
+        </div>
+      )}
+      {/* ─── Premium Fullscreen Lightbox Overlay ─── */}
+      {lightboxImage && (
+        <div className="lightbox-overlay" onClick={() => setLightboxImage(null)}>
+          <button className="lightbox-close" onClick={() => setLightboxImage(null)}>✕</button>
+          <div className="lightbox-content" onClick={e => e.stopPropagation()}>
+            <img src={lightboxImage} alt="Agrandissement" className="lightbox-img" />
           </div>
         </div>
       )}
