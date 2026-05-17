@@ -1010,6 +1010,80 @@ main.with-admin-banner {
   box-shadow: 0 6px 20px rgba(255, 196, 57, 0.6);
 }
 
+/* ─── Floating Product Status Badges & Admin Filters ─── */
+.product-status-tag {
+  position: absolute;
+  top: 15px;
+  left: 15px;
+  z-index: 10;
+  font-size: 0.75rem;
+  font-weight: bold;
+  padding: 4px 12px;
+  border-radius: 20px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-family: var(--font-heading);
+}
+
+.product-status-tag.coming-soon {
+  background: rgba(180, 0, 255, 0.15);
+  border: 1px solid #b026ff;
+  color: #b026ff;
+  box-shadow: 0 0 12px rgba(180, 0, 255, 0.4);
+}
+
+.product-status-tag.rupture-de-stock {
+  background: rgba(255, 0, 0, 0.15);
+  border: 1px solid #ff3333;
+  color: #ff3333;
+  box-shadow: 0 0 12px rgba(255, 51, 51, 0.4);
+}
+
+.product-status-tag.sur-commande {
+  background: rgba(255, 120, 0, 0.15);
+  border: 1px solid #ff7800;
+  color: #ff7800;
+  box-shadow: 0 0 12px rgba(255, 120, 0, 0.4);
+}
+
+.product-status-tag.en-stock {
+  background: rgba(0, 255, 80, 0.15);
+  border: 1px solid #00ff50;
+  color: #00ff50;
+  box-shadow: 0 0 12px rgba(0, 255, 80, 0.4);
+}
+
+/* Admin hidden products layout styling */
+.product-hidden-admin {
+  opacity: 0.45;
+  border: 1px dashed #ff3333 !important;
+  box-shadow: 0 0 15px rgba(255, 51, 51, 0.15) !important;
+}
+
+.product-hidden-admin:hover {
+  opacity: 0.85;
+}
+
+.product-hidden-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) rotate(-12deg);
+  z-index: 20;
+  background: #ff3333;
+  color: #fff;
+  font-family: var(--font-heading);
+  padding: 6px 14px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  font-weight: bold;
+  letter-spacing: 1px;
+  box-shadow: 0 4px 15px rgba(255, 51, 51, 0.5);
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+
 /* ─── Admin Order Management Styles ─── */
 .admin-orders-container {
   display: flex;

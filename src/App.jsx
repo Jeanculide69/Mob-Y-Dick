@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import './App.css'
 import { supabase } from './supabaseClient'
 
-const SITE_VERSION = 'v1.2.0'
+const SITE_VERSION = 'v1.3.0'
 
 const TEAM = [
   { name: 'Alex', img: '/team/alex.png' },
@@ -21,10 +21,10 @@ const EVENTS = [
 ]
 
 const PRODUCTS = [
-  { name: 'T-Shirt Custom', price: '35€', desc: 'Ton pseudo en style graffiti sur coton premium.', url: 'https://paypal.me/CorentinCARTIER' },
-  { name: 'Sweat à Capuche', price: '55€', desc: 'Hoodie noir avec le logo Mob Y Dick brodé.', url: 'https://paypal.me/CorentinCARTIER' },
-  { name: 'Toile Originale', price: '120€', desc: 'Pièce unique peinte à la main par l\'équipe.', url: 'https://paypal.me/CorentinCARTIER' },
-  { name: 'Stickers Pack', price: '8€', desc: 'Lot de 5 stickers vinyle haute qualité.', url: 'https://paypal.me/CorentinCARTIER' },
+  { name: 'T-Shirt Custom', price: '35€', desc: 'Ton pseudo en style graffiti sur coton premium.', url: 'https://paypal.me/CorentinCARTIER', status: 'En stock', is_visible: true },
+  { name: 'Sweat à Capuche', price: '55€', desc: 'Hoodie noir avec le logo Mob Y Dick brodé.', url: 'https://paypal.me/CorentinCARTIER', status: 'Coming soon', is_visible: true },
+  { name: 'Toile Originale', price: '120€', desc: 'Pièce unique peinte à la main par l\'équipe.', url: 'https://paypal.me/CorentinCARTIER', status: 'Sur commande', is_visible: true },
+  { name: 'Stickers Pack', price: '8€', desc: 'Lot de 5 stickers vinyle haute qualité.', url: 'https://paypal.me/CorentinCARTIER', status: 'En stock', is_visible: true },
 ]
 
 function App() {
@@ -108,6 +108,11 @@ function App() {
   const displayProducts = dbProducts || PRODUCTS
   const displayTeam = dbTeam || TEAM
 
+  // Filter products for the public (admins see hidden ones styled with low opacity)
+  const visibleProducts = isAdmin 
+    ? displayProducts 
+    : displayProducts.filter(p => p.is_visible !== false)
+
   const navigate = (tab) => {
     setActiveTab(tab)
     setMobileMenuOpen(false)
@@ -168,7 +173,23 @@ function App() {
     } else if (type === 'gallery') {
       setFormData({ title: '', type: 'photo', source: 'upload', file: null, embed_url: '' })
     } else if (type === 'product') {
-      setFormData(item ? { name: item.name, description: item.description, price: item.price, url: item.url, image_url: item.image_url || '' } : { name: '', description: '', price: '', url: '', image_url: '' })
+      setFormData(item ? { 
+        name: item.name, 
+        description: item.description, 
+        price: item.price, 
+        url: item.url, 
+        image_url: item.image_url || '',
+        status: item.status || 'Coming soon',
+        is_visible: item.is_visible !== undefined ? item.is_visible : true
+      } : { 
+        name: '', 
+        description: '', 
+        price: '', 
+        url: '', 
+        image_url: '',
+        status: 'Coming soon',
+        is_visible: true
+      })
     } else if (type === 'team') {
       setFormData(item ? { name: item.name, image_url: item.image_url || '' } : { name: '', image_url: '' })
     } else if (type === 'socials') {
@@ -243,6 +264,7 @@ function App() {
 
   // ─── Client Ordering Handlers ───
   const handleOpenCheckout = (product) => {
+    if (product.status === 'Coming soon' || product.status === 'Rupture de stock') return
     setCheckoutProduct(product)
     setCheckoutStep(1)
     setCheckoutData({
@@ -510,28 +532,53 @@ function App() {
                 )}
               </div>
               <div className="shop-grid">
-                {displayProducts.map((p, i) => (
-                  <div key={p.id || i} className={`product-card glass fade-in fade-in-delay-${i % 4 + 1} admin-card-parent`}>
-                    <div className="product-img" style={p.image_url ? { backgroundImage: `url(${p.image_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
-                      {!p.image_url && <div className="product-badge">Graffiti</div>}
-                    </div>
-                    <div className="product-body">
-                      <h3>{p.name}</h3>
-                      <p className="product-desc">{p.description || p.desc}</p>
-                      <div className="product-footer">
-                        <span className="product-price">{p.price}</span>
-                        <button className="btn btn-primary" onClick={() => handleOpenCheckout(p)}>Commander</button>
+                {visibleProducts.map((p, i) => {
+                  const isHidden = p.is_visible === false
+                  const status = p.status || 'Coming soon'
+                  return (
+                    <div key={p.id || i} className={`product-card glass fade-in fade-in-delay-${i % 4 + 1} admin-card-parent ${isHidden ? 'product-hidden-admin' : ''}`}>
+                      
+                      {/* Product Status Badge */}
+                      <div className={`product-status-tag ${status.toLowerCase().replace(/\s+/g, '-')}`}>
+                        {status === 'Coming soon' && '🔮 Bientôt'}
+                        {status === 'Rupture de stock' && '❌ Rupture'}
+                        {status === 'Sur commande' && '⚡ Sur Commande'}
+                        {status === 'En stock' && '✅ En Stock'}
                       </div>
-                    </div>
 
-                    {isAdmin && p.id && (
-                      <div className="admin-inline-actions">
-                        <button onClick={() => handleOpenForm('product', p)}>✏️</button>
-                        <button onClick={() => handleDeleteItem('products', p.id)}>🗑️</button>
+                      {/* Admin Hidden Badge */}
+                      {isAdmin && isHidden && (
+                        <div className="product-hidden-badge">🚫 MASQUÉ DU PUBLIC</div>
+                      )}
+
+                      <div className="product-img" style={p.image_url ? { backgroundImage: `url(${p.image_url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}>
+                        {!p.image_url && <div className="product-badge">Graffiti</div>}
                       </div>
-                    )}
-                  </div>
-                ))}
+                      <div className="product-body">
+                        <h3>{p.name}</h3>
+                        <p className="product-desc">{p.description || p.desc}</p>
+                        <div className="product-footer">
+                          <span className="product-price">{p.price}</span>
+                          
+                          {status === 'Coming soon' ? (
+                            <button className="btn btn-ghost" disabled>Bientôt dispo</button>
+                          ) : status === 'Rupture de stock' ? (
+                            <button className="btn btn-ghost" disabled>En Rupture</button>
+                          ) : (
+                            <button className="btn btn-primary" onClick={() => handleOpenCheckout(p)}>Commander</button>
+                          )}
+                        </div>
+                      </div>
+
+                      {isAdmin && p.id && (
+                        <div className="admin-inline-actions">
+                          <button onClick={() => handleOpenForm('product', p)}>✏️</button>
+                          <button onClick={() => handleDeleteItem('products', p.id)}>🗑️</button>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             </div>
           </section>
@@ -840,6 +887,21 @@ function App() {
                       <input type="url" placeholder="Lien Paypal (Optionnel)" value={formData.url} onChange={e => setFormData({...formData, url: e.target.value})} />
                     </div>
                     <input type="url" placeholder="URL photo produit (optionnel)" value={formData.image_url} onChange={e => setFormData({...formData, image_url: e.target.value})} />
+                    
+                    {/* Stock Status Selector */}
+                    <label className="admin-label">📦 Statut du Stock</label>
+                    <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})}>
+                      <option value="Coming soon">🔮 Coming soon (Bientôt)</option>
+                      <option value="En stock">✅ En stock</option>
+                      <option value="Sur commande">⚡ Sur commande</option>
+                      <option value="Rupture de stock">❌ Rupture de stock</option>
+                    </select>
+
+                    {/* Visibility Toggle */}
+                    <div className="admin-row-checkbox" style={{display:'flex', alignItems:'center', gap:'10px', marginTop:'8px'}}>
+                      <input type="checkbox" id="is_visible" checked={formData.is_visible} onChange={e => setFormData({...formData, is_visible: e.target.checked})} style={{width:'auto', margin:0}} />
+                      <label htmlFor="is_visible" style={{color:'#fff', fontSize:'0.9rem', cursor:'pointer'}}>Afficher le produit sur le site (Visible par le public)</label>
+                    </div>
                   </>
                 )}
 
