@@ -542,9 +542,10 @@
 
 .footer-inner {
   display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-columns: 1.5fr 1fr 1fr 1.2fr;
   gap: 40px;
   padding: 60px 0 40px;
+  align-items: start;
 }
 
 .footer-logo {
@@ -674,6 +675,7 @@
 
   .footer-inner { grid-template-columns: 1fr; text-align: center; }
   .footer-links { align-items: center; }
+  .footer-qr { align-items: center; text-align: center; }
 
   .donate-card { padding: 40px 24px; }
 }
@@ -1528,6 +1530,58 @@ select option {
   background: #f44336;
   border-color: #f44336;
   transform: scale(1.1);
+}
+
+/* ─── Footer QR Code Styling ─── */
+.footer-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  text-align: left;
+}
+
+.footer-qr h4 {
+  font-size: 0.8rem;
+  letter-spacing: 2px;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.footer-qr-img-wrap {
+  position: relative;
+  padding: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-accent);
+  border-radius: 12px;
+  box-shadow: 0 4px 20px rgba(255, 85, 0, 0.1);
+  cursor: zoom-in;
+  transition: all 0.3s ease;
+  width: fit-content;
+  display: block;
+}
+
+.footer-qr-img-wrap:hover {
+  transform: scale(1.05);
+  border-color: var(--accent);
+  box-shadow: 0 6px 24px rgba(255, 85, 0, 0.2);
+}
+
+.footer-qr img {
+  width: 80px;
+  height: 80px;
+  border-radius: 6px;
+  object-fit: contain;
+  display: block;
+}
+
+.footer-qr span {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-family: var(--font-heading);
+  text-transform: uppercase;
+  letter-spacing: 1px;
 }
 
 
