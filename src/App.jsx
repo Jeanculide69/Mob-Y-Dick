@@ -139,7 +139,7 @@ function App() {
   const [showTeaserModal, setShowTeaserModal] = useState(false)
   const [sponsorName, setSponsorName] = useState('')
   const [sponsorEmail, setSponsorEmail] = useState('')
-  const [sponsorBudget, setSponsorBudget] = useState('Pack Piston (50€) - Logo sur le site')
+  const [sponsorBudget, setSponsorBudget] = useState('Pack Piston - Logo sur le site')
   const [sponsorMessage, setSponsorMessage] = useState('')
   const [submittingSponsor, setSubmittingSponsor] = useState(false)
   const [sponsorSuccess, setSponsorSuccess] = useState(false)
@@ -558,7 +558,7 @@ function App() {
       setSponsorSuccess(true)
       setSponsorName('')
       setSponsorEmail('')
-      setSponsorBudget('Pack Piston (50€) - Logo sur le site')
+      setSponsorBudget('Pack Piston - Logo sur le site')
       setSponsorMessage('')
       
       refreshData()
@@ -1198,9 +1198,9 @@ function App() {
                           onChange={(e) => setSponsorBudget(e.target.value)} 
                           style={{ width: '100%', padding: '10px 14px', background: '#111', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: '#fff', cursor: 'pointer' }}
                         >
-                          <option value="Pack Piston (50€) - Logo sur le site">Pack Piston (50€) - Logo sur le site</option>
-                          <option value="Pack Carburateur (100€) - Logo sur le site + Petit logo maillot">Pack Carburateur (100€) - Logo sur le site + Petit logo maillot</option>
-                          <option value="Pack Cylindre d'Or (200€+) - Logo XXL Maillot + Moto + Site">Pack Cylindre d'Or (200€+) - Logo XXL Maillot + Moto + Site</option>
+                          <option value="Pack Piston - Logo sur le site">Pack Piston - Logo sur le site</option>
+                          <option value="Pack Carburateur - Logo sur le site + Petit logo maillot">Pack Carburateur - Logo sur le site + Petit logo maillot</option>
+                          <option value="Pack Cylindre d'Or - Logo XXL Maillot + Moto + Site">Pack Cylindre d'Or - Logo XXL Maillot + Moto + Site</option>
                           <option value="Pack Apéro (Un carton de Rhum / Une caisse de Bières) - Amour & Visibilité surprise">Pack Apéro (Un carton de Rhum / Une caisse de Bières) - Amour & Visibilité surprise 🍻🍹</option>
                         </select>
                       </div>
