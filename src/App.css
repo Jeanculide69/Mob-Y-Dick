@@ -1083,6 +1083,48 @@ main.with-admin-banner {
   white-space: nowrap;
 }
 
+/* ─── Legal & CGV Compliance Modal Styles ─── */
+.footer-bottom-actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.footer-legal-btn {
+  background: none !important;
+  border: none !important;
+  color: var(--text-muted) !important;
+  font-size: 0.85rem !important;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  padding: 0 !important;
+}
+
+.footer-legal-btn:hover {
+  color: var(--accent) !important;
+  text-shadow: 0 0 5px rgba(255, 85, 0, 0.4);
+}
+
+.legal-modal-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.legal-modal-scrollbar::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 10px;
+}
+
+.legal-modal-scrollbar::-webkit-scrollbar-thumb {
+  background: var(--accent);
+  border-radius: 10px;
+  box-shadow: 0 0 5px rgba(255, 85, 0, 0.5);
+}
+
+.legal-content-container p {
+  text-align: justify;
+}
+
+
 
 /* ─── Admin Order Management Styles ─── */
 .admin-orders-container {

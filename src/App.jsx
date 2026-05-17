@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import './App.css'
 import { supabase } from './supabaseClient'
 
-const SITE_VERSION = 'v1.3.0'
+const SITE_VERSION = 'v1.4.0'
 
 const TEAM = [
   { name: 'Alex', img: '/team/alex.png' },
@@ -32,6 +32,7 @@ function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(false)
+  const [showLegalModal, setShowLegalModal] = useState(false)
   const [adminEmail, setAdminEmail] = useState('')
   const [adminPassword, setAdminPassword] = useState('')
   const [loginError, setLoginError] = useState('')
@@ -376,7 +377,7 @@ function App() {
                   MOBCROSS<br /><span className="text-accent">TEAM</span>
                 </h1>
                 <p className="hero-sub fade-in fade-in-delay-2">
-                  Punk · Graffiti · 70cc · Boue · Passion
+                  GRAFFITI · FREESTYLE · CUSTOM WEAR · UNDERGROUND
                 </p>
                 <div className="hero-btns fade-in fade-in-delay-3">
                   <button className="btn btn-primary" onClick={() => navigate('shop')}>Voir la Boutique</button>
@@ -618,7 +619,7 @@ function App() {
         <div className="container footer-inner">
           <div className="footer-brand">
             <img src="/logo.png" alt="Mob Y Dick" className="footer-logo" />
-            <p>Mobcross Team — Punk & Graffiti since day one.</p>
+            <p>Mobcross Team — L'art du ride urbain et de la customisation sur-mesure.</p>
           </div>
           <div className="footer-links">
             <h4>Navigation</h4>
@@ -638,13 +639,16 @@ function App() {
         </div>
         <div className="footer-bottom container">
           <p>&copy; 2026 Mob Y Dick. Tous droits réservés. <span className="site-version">{SITE_VERSION}</span></p>
-          <button className="admin-trigger" onClick={() => {
-            if (isAdmin) {
-              handleOpenForm('orders')
-            } else {
-              setShowLoginModal(true)
-            }
-          }}>{isAdmin ? '📦 Gérer Commandes' : '⚙️ Admin'}</button>
+          <div className="footer-bottom-actions">
+            <button className="footer-legal-btn" onClick={() => setShowLegalModal(true)}>⚖️ Mentions Légales & CGV</button>
+            <button className="admin-trigger" onClick={() => {
+              if (isAdmin) {
+                handleOpenForm('orders')
+              } else {
+                setShowLoginModal(true)
+              }
+            }}>{isAdmin ? '📦 Gérer Commandes' : '⚙️ Admin'}</button>
+          </div>
         </div>
       </footer>
 
@@ -661,6 +665,49 @@ function App() {
               {loginError && <p className="admin-error">{loginError}</p>}
               <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Se connecter</button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Legal & CGV Compliance Modal ─── */}
+      {showLegalModal && (
+        <div className="admin-overlay">
+          <div className="admin-panel glass admin-visual-modal legal-modal-scrollbar" style={{maxWidth:'650px', maxHeight:'80vh', overflowY:'auto'}}>
+            <div className="admin-header">
+              <h2>⚖️ Mentions Légales & CGV</h2>
+              <button className="admin-close" onClick={() => setShowLegalModal(false)}>✕</button>
+            </div>
+            <div className="legal-content-container" style={{fontSize:'0.85rem', lineHeight:'1.5', color:'var(--text-secondary)'}}>
+              
+              <h3 className="text-accent" style={{fontSize:'1rem', marginTop:0}}>1. Mentions Légales</h3>
+              <p>
+                <strong>Éditeur du site :</strong> Mob Y Dick Brand, représenté par Corentin Cartier.<br />
+                <strong>Contact :</strong> via nos liens de réseaux sociaux officiels ou par e-mail.<br />
+                <strong>Hébergeur :</strong> Vercel Inc., 650 2nd St, San Francisco, CA 94107, USA (https://vercel.com).<br />
+                <strong>Propriété intellectuelle :</strong> L'intégralité des visuels, logos, marques et designs de lettrages graffiti présentés sur ce site sont la propriété exclusive de l'équipe Mob Y Dick. Toute reproduction est interdite sans accord écrit.
+              </p>
+
+              <h3 className="text-accent" style={{fontSize:'1rem', marginTop:'20px'}}>2. Politique de Confidentialité (RGPD)</h3>
+              <p>
+                Nous prenons la protection de vos données personnelles très au sérieux. Les informations que vous saisissez lors d'une commande (nom, adresse de livraison, adresse e-mail) sont **uniquement** collectées et transmises à notre prestataire de fabrication à la demande (Printful) dans le but exclusif de fabriquer et d'expédier vos articles. <br />
+                * Aucune donnée n'est revendue à des tiers ou utilisée à des fins de ciblage publicitaire.<br />
+                * Vous disposez d'un droit d'accès, de rectification et de suppression de vos données personnelles sur simple demande par mail.
+              </p>
+
+              <h3 className="text-accent" style={{fontSize:'1rem', marginTop:'20px'}}>3. CGV : Commande de Produits Personnalisés</h3>
+              <p>
+                <strong>Nature des Produits :</strong> Nos produits (T-shirts, hoodies, mugs, etc.) sont entièrement personnalisés et fabriqués à l'unité selon le pseudo graffiti fourni par le client. <br />
+                <strong>Droit de Rétractation Spécifique :</strong> Conformément à l'article **L221-28 du Code de la Consommation français**, le droit de rétractation de 14 jours **ne s'applique pas** aux biens confectionnés nettement personnalisés selon les spécifications du consommateur. Ainsi, une fois la commande validée et payée, aucun retour, remboursement ou échange n'est possible (sauf en cas d'erreur avérée de fabrication ou produit défectueux).<br />
+                <strong>Livraison & Délais :</strong> Nos produits étant fabriqués à la demande par Printful, les délais de livraison varient généralement entre 5 et 10 jours ouvrés selon le pays de destination.
+              </p>
+
+              <h3 className="text-accent" style={{fontSize:'1rem', marginTop:'20px'}}>4. Règlement des Litiges & Paiements</h3>
+              <p>
+                Les transactions financières s'effectuent de manière externe et sécurisée via la plateforme PayPal ou Stripe. Mob Y Dick n'enregistre aucune information bancaire sur ses propres serveurs. En cas de litige, nous vous invitons à contacter notre équipe via nos réseaux sociaux afin de trouver une solution amiable.
+              </p>
+
+              <button className="btn btn-primary" style={{width:'100%', marginTop:'24px'}} onClick={() => setShowLegalModal(false)}>J'ai compris et j'accepte</button>
+            </div>
           </div>
         </div>
       )}
@@ -748,7 +795,7 @@ function App() {
                     <p><strong>Adresse :</strong> {checkoutData.shippingAddress}, {checkoutData.shippingZip} {checkoutData.shippingCity}, {checkoutData.shippingCountry}</p>
                   </div>
                   
-                  <p className="checkout-warning-text">⚠️ En cliquant sur valider, votre commande sera enregistrée. Vous procéderez ensuite au règlement sécurisé sur PayPal.</p>
+                  <p className="checkout-warning-text">⚠️ En cliquant sur valider, ton achat sera enregistré. Tu procéderas ensuite au règlement sécurisé sur PayPal.</p>
 
                   <div className="admin-row" style={{marginTop:'16px'}}>
                     <button type="button" className="btn btn-ghost" onClick={() => setCheckoutStep(2)}>⬅ Retour</button>
