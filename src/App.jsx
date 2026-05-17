@@ -479,7 +479,7 @@ function App() {
             <div className="container hero-inner">
               <img src="/logo.png" alt="Mob Y Dick" className="hero-logo fade-in" />
               <h1 className="hero-title fade-in fade-in-delay-1">
-                MOBCROSS<br /><span className="text-accent">TEAM</span>
+                MOBCROSS <span className="text-accent">TEAM</span>
               </h1>
               <p className="hero-sub fade-in fade-in-delay-2">
                 Vêtements & Objets Personnalisés
