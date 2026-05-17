@@ -1386,23 +1386,25 @@ select option {
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 48px;
-  margin-top: 10px;
-  width: 100%;
+  height: 64px;
+  margin-top: 12px;
+  margin-bottom: -4px;
+  margin-left: -15px;
+  margin-right: -15px;
   overflow: visible;
 }
 
 .team-nickname-img {
-  height: 46px;
+  height: 58px;
   width: auto;
-  max-width: 95%;
+  max-width: 98%;
   object-fit: contain;
-  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.5));
+  filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.6));
   transition: transform 0.3s ease;
 }
 
 .team-card:hover .team-nickname-img {
-  transform: scale(1.1);
+  transform: scale(1.15);
 }
 
 
