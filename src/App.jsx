@@ -18,10 +18,10 @@ const EVENTS = [
 ]
 
 const PRODUCTS = [
-  { name: 'T-Shirt Custom', price: '35€', desc: 'Ton pseudo en style graffiti sur coton premium.' },
-  { name: 'Sweat à Capuche', price: '55€', desc: 'Hoodie noir avec le logo Mob Y Dick brodé.' },
-  { name: 'Toile Originale', price: '120€', desc: 'Pièce unique peinte à la main par l\'équipe.' },
-  { name: 'Stickers Pack', price: '8€', desc: 'Lot de 5 stickers vinyle haute qualité.' },
+  { name: 'T-Shirt Custom', price: '35€', desc: 'Ton pseudo en style graffiti sur coton premium.', url: 'https://corentin-cartier.bigcartel.com/product/t-shirt-mob-y-dick-logo-officiel' },
+  { name: 'Sweat à Capuche', price: '55€', desc: 'Hoodie noir avec le logo Mob Y Dick brodé.', url: 'https://corentin-cartier.bigcartel.com' },
+  { name: 'Toile Originale', price: '120€', desc: 'Pièce unique peinte à la main par l\'équipe.', url: 'https://corentin-cartier.bigcartel.com' },
+  { name: 'Stickers Pack', price: '8€', desc: 'Lot de 5 stickers vinyle haute qualité.', url: 'https://corentin-cartier.bigcartel.com' },
 ]
 
 function App() {
@@ -205,7 +205,7 @@ function App() {
                       <p className="product-desc">{p.desc}</p>
                       <div className="product-footer">
                         <span className="product-price">{p.price}</span>
-                        <a href="https://corentin-cartier.bigcartel.com" target="_blank" rel="noopener noreferrer" className="btn btn-ghost">Commander</a>
+                        <a href={p.url} target="_blank" rel="noopener noreferrer" className="btn btn-ghost">Commander</a>
                       </div>
                     </div>
                   </div>
