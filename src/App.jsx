@@ -42,9 +42,9 @@ const GoogleAd = ({ slot = '1234567890', format = 'auto', style = { display: 'bl
   // we show the gorgeous premium fallback banner! This keeps the site looking beautiful and complete.
   if (adError || adStatus === 'unfilled') {
     return (
-      <div className="google-ad-container glass">
-        <div className="google-ad-placeholder" onClick={() => navigate('sponsors')}>
-          <div className="google-ad-placeholder-text">
+      <div className="partner-box glass">
+        <div className="partner-box-inner" onClick={() => navigate('sponsors')}>
+          <div className="partner-box-body">
             <h4>📢 Espace publicitaire disponible</h4>
             <p>Devenez sponsor de la team Mob Y Dick et affichez votre marque ici !</p>
           </div>
@@ -64,8 +64,8 @@ const GoogleAd = ({ slot = '1234567890', format = 'auto', style = { display: 'bl
   }
 
   return (
-    <div className="google-ad-container glass">
-      <span className="google-ad-label">📢 Publicité Partenaire</span>
+    <div className="partner-box glass">
+      <span className="partner-box-header">📢 Publicité Partenaire</span>
       <ins 
         className="adsbygoogle"
         style={style}
@@ -115,10 +115,10 @@ const SidebarAd = ({ side = 'left', navigate }) => {
 
   if (adError || adStatus === 'unfilled') {
     return (
-      <div className={`sidebar-ad sidebar-ad-${side} glass`} onClick={handleClick}>
-        <div className="sidebar-ad-fallback-content">
-          <span className="sidebar-ad-tag">📢 SPONSOR</span>
-          <div className="sidebar-ad-title">
+      <div className={`wing-panel wing-panel-${side} glass`} onClick={handleClick}>
+        <div className="wing-panel-inner">
+          <span className="wing-panel-accent">📢 SPONSOR</span>
+          <div className="wing-panel-heading">
             <h3>VOTRE PUB ICI</h3>
           </div>
           <p>Affichez votre marque sur les côtés de notre site officiel !</p>
@@ -136,8 +136,8 @@ const SidebarAd = ({ side = 'left', navigate }) => {
   }
 
   return (
-    <div className={`sidebar-ad sidebar-ad-${side} glass`}>
-      <span className="sidebar-ad-label">📢 Publicité</span>
+    <div className={`wing-panel wing-panel-${side} glass`}>
+      <span className="wing-panel-header">📢 Publicité</span>
       <ins 
         className="adsbygoogle"
         style={{ display: 'block', width: '136px', height: '560px' }}
