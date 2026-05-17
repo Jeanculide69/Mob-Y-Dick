@@ -795,16 +795,18 @@ main.with-admin-banner {
   position: fixed;
   top: 0;
   left: 0;
-  width: 100vw;
-  height: 100vh;
+  width: 100%;
+  height: 100%;
   background: rgba(0, 0, 0, 0.85);
   backdrop-filter: blur(10px);
   display: flex;
-  align-items: center;
+  align-items: flex-start; /* Start from top so we can scroll down if keyboard is open */
   justify-content: center;
   z-index: 9999;
-  padding: 20px;
+  padding: 20px 10px;
   box-sizing: border-box;
+  overflow-y: auto; /* Enable scrolling if form is taller than the viewport */
+  -webkit-overflow-scrolling: touch;
 }
 
 .admin-login, .admin-panel {
@@ -817,6 +819,7 @@ main.with-admin-banner {
   max-width: 500px;
   position: relative;
   box-sizing: border-box;
+  margin: auto 0; /* Automatically centers when fits, aligns top and scrolls when overflows */
   animation: modal-appear 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   color: #fff;
 }
@@ -866,12 +869,24 @@ main.with-admin-banner {
   padding: 12px;
   background: rgba(255, 255, 255, 0.03) !important;
   border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  color: #fff !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important; /* Force white text on iOS Mobile */
   border-radius: 8px !important;
   box-sizing: border-box;
   outline: none;
   font-size: 0.95rem;
   transition: all 0.2s ease;
+}
+
+/* Fix mobile browser autofill/autocomplete ugly background and black text */
+.admin-form input:-webkit-autofill,
+.admin-form input:-webkit-autofill:hover, 
+.admin-form input:-webkit-autofill:focus,
+.admin-form textarea:-webkit-autofill,
+.admin-form select:-webkit-autofill {
+  -webkit-text-fill-color: #ffffff !important;
+  transition: background-color 5000s ease-in-out 0s;
+  box-shadow: 0 0 0px 1000px rgba(15, 15, 15, 0.98) inset !important;
 }
 
 .admin-form input:focus, .admin-form textarea:focus, .admin-form select:focus {
