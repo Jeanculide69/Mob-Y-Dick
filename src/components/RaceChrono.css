@@ -1,0 +1,443 @@
+.chrono-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+/* ─── Top Bar ─── */
+.chrono-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.chrono-top-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.chrono-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(255, 50, 50, 0.15);
+  border: 1px solid rgba(255, 50, 50, 0.3);
+  border-radius: 20px;
+  color: #ff3333;
+  font-weight: 800;
+  font-size: 0.82rem;
+  letter-spacing: 2px;
+}
+
+.chrono-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff3333;
+  animation: livePulse 1.2s infinite;
+}
+
+@keyframes livePulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px #ff3333; }
+  50% { opacity: 0.3; box-shadow: 0 0 2px #ff3333; }
+}
+
+.chrono-title {
+  margin: 0;
+  font-size: 1.2rem;
+  color: #fff;
+}
+
+.chrono-finish-btn {
+  color: #ffaa00 !important;
+  border-color: #ffaa00 !important;
+}
+
+.chrono-finish-btn:hover {
+  background: rgba(255, 170, 0, 0.1) !important;
+}
+
+/* ─── Layout ─── */
+.chrono-layout {
+  display: grid;
+  grid-template-columns: 400px 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+/* ─── Left Panel ─── */
+.chrono-panel-left {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ─── Chrono Display ─── */
+.chrono-display {
+  text-align: center;
+  padding: 30px 20px;
+  border-radius: 16px;
+  border: 2px solid rgba(255, 85, 0, 0.3);
+  background: linear-gradient(135deg, rgba(0,0,0,0.6), rgba(20,10,0,0.8));
+}
+
+.chrono-time {
+  font-size: 3.5rem;
+  font-weight: 800;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 2px;
+  text-shadow: 0 0 30px rgba(255, 85, 0, 0.3);
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+}
+
+.chrono-controls {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.chrono-btn {
+  padding: 12px 30px;
+  border: none;
+  border-radius: 10px;
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: 1px;
+  transition: transform 0.15s, box-shadow 0.2s;
+}
+
+.chrono-btn:active {
+  transform: scale(0.96);
+}
+
+.chrono-btn-start {
+  background: linear-gradient(135deg, #00cc66, #009944);
+  color: #fff;
+  box-shadow: 0 4px 15px rgba(0, 200, 100, 0.3);
+}
+
+.chrono-btn-start:hover {
+  box-shadow: 0 6px 20px rgba(0, 200, 100, 0.5);
+}
+
+.chrono-btn-reset {
+  background: linear-gradient(135deg, #ff4444, #cc2222);
+  color: #fff;
+  box-shadow: 0 4px 15px rgba(255, 60, 60, 0.3);
+}
+
+/* ─── Input Area ─── */
+.chrono-input-area {
+  padding: 20px;
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+}
+
+.chrono-input-label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+
+.chrono-input-row {
+  display: flex;
+  gap: 10px;
+}
+
+.chrono-moto-input {
+  flex: 1;
+  padding: 14px 16px;
+  background: rgba(0, 0, 0, 0.5);
+  border: 2px solid var(--border-subtle);
+  border-radius: 12px;
+  color: #fff;
+  font-size: 2rem;
+  font-weight: 800;
+  text-align: center;
+  font-family: var(--font-body);
+  transition: border-color 0.2s;
+}
+
+.chrono-moto-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 15px rgba(255, 85, 0, 0.2);
+}
+
+.chrono-moto-input:disabled {
+  opacity: 0.3;
+}
+
+.chrono-record-btn {
+  padding: 14px 20px !important;
+  font-size: 0.95rem !important;
+  font-weight: 700 !important;
+  white-space: nowrap;
+}
+
+.chrono-moto-preview {
+  margin-top: 8px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 4px;
+  background: rgba(255, 85, 0, 0.05);
+  border-radius: 6px;
+}
+
+/* ─── Flash ─── */
+.chrono-flash {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-radius: 12px;
+  border: 2px solid #00cc66;
+  background: rgba(0, 200, 100, 0.08);
+  animation: flashIn 0.3s ease;
+}
+
+@keyframes flashIn {
+  from { transform: translateY(-10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.chrono-flash-moto {
+  font-size: 1.4rem;
+  font-weight: 800;
+  color: #00cc66;
+}
+
+.chrono-flash-time {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.chrono-flash-pilot {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+/* ─── Recent Laps ─── */
+.chrono-recent {
+  padding: 16px;
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+}
+
+.chrono-recent h3 {
+  margin: 0 0 12px;
+  font-size: 0.95rem;
+  color: #fff;
+}
+
+.chrono-recent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.chrono-recent-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  transition: background 0.2s;
+}
+
+.chrono-recent-item:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.chrono-recent-moto {
+  font-weight: 700;
+  color: var(--accent);
+  min-width: 40px;
+}
+
+.chrono-recent-name {
+  flex: 1;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+}
+
+.chrono-recent-time {
+  font-weight: 600;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+}
+
+.chrono-recent-delete {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s, color 0.2s;
+  padding: 4px;
+}
+
+.chrono-recent-item:hover .chrono-recent-delete {
+  opacity: 1;
+}
+
+.chrono-recent-delete:hover {
+  color: #ff4444;
+}
+
+/* ─── Right Panel: Rankings ─── */
+.chrono-panel-right {
+  position: sticky;
+  top: 100px;
+}
+
+.chrono-rankings {
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
+  max-height: 75vh;
+  overflow-y: auto;
+}
+
+.chrono-rankings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.chrono-rankings-header h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 1.1rem;
+}
+
+.chrono-cat-filter {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-family: var(--font-body);
+}
+
+.chrono-rankings-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.chrono-cat-section {
+  margin-bottom: 20px;
+}
+
+.chrono-cat-title {
+  margin: 0 0 10px;
+  font-size: 0.9rem;
+  color: var(--accent);
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 85, 0, 0.2);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.chrono-rankings-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.chrono-rankings-table th {
+  text-align: left;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.chrono-rankings-table td {
+  padding: 8px;
+  font-size: 0.88rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+}
+
+.chrono-pos {
+  font-weight: 700;
+  text-align: center;
+  width: 40px;
+}
+
+.chrono-num {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.chrono-pilot {
+  color: var(--text-primary);
+}
+
+.chrono-best {
+  font-weight: 700;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.chrono-laps-count {
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.chrono-podium-1 td { background: rgba(255, 215, 0, 0.06); }
+.chrono-podium-2 td { background: rgba(192, 192, 192, 0.04); }
+.chrono-podium-3 td { background: rgba(205, 127, 50, 0.04); }
+
+/* ─── Responsive ─── */
+@media (max-width: 900px) {
+  .chrono-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .chrono-panel-right {
+    position: static;
+  }
+
+  .chrono-time {
+    font-size: 2.5rem;
+  }
+
+  .chrono-moto-input {
+    font-size: 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .chrono-top-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .chrono-time {
+    font-size: 2rem;
+  }
+}

@@ -1,0 +1,452 @@
+.race-setup {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.race-setup-loading {
+  text-align: center;
+  padding: 60px;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+}
+
+/* ─── Header ─── */
+.race-setup-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+}
+
+.race-setup-header h2 {
+  margin: 0;
+  font-size: 1.6rem;
+  color: #fff;
+}
+
+.race-setup-event-name {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+/* ─── Create Session CTA ─── */
+.race-setup-create {
+  text-align: center;
+  padding: 60px 30px;
+  border-radius: 16px;
+  border: 2px dashed var(--border-subtle);
+}
+
+.race-setup-create-icon {
+  font-size: 4rem;
+  margin-bottom: 10px;
+}
+
+.race-setup-create h3 {
+  color: #fff;
+  margin: 0 0 8px;
+  font-size: 1.3rem;
+}
+
+.race-setup-create p {
+  color: var(--text-secondary);
+  margin: 0 0 20px;
+}
+
+/* ─── Status Bar ─── */
+.race-status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 20px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border-subtle);
+}
+
+.race-status-bar.status-setup { border-left: 4px solid #888; }
+.race-status-bar.status-live { border-left: 4px solid #ff3333; background: rgba(255, 50, 50, 0.05); }
+.race-status-bar.status-finished { border-left: 4px solid #ffaa00; }
+.race-status-bar.status-published { border-left: 4px solid #00cc66; }
+
+.race-status-indicator {
+  font-weight: 700;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.race-status-teams {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+/* ─── Categories ─── */
+.race-categories {
+  padding: 20px;
+  border-radius: 14px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border-subtle);
+}
+
+.race-categories h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.race-cat-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.race-cat-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: rgba(255, 85, 0, 0.1);
+  border: 1px solid rgba(255, 85, 0, 0.2);
+  border-radius: 20px;
+  color: var(--accent);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.race-cat-remove {
+  background: none;
+  border: none;
+  color: rgba(255, 85, 0, 0.5);
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.race-cat-remove:hover {
+  color: #ff3333;
+}
+
+.race-cat-add {
+  display: flex;
+  gap: 8px;
+}
+
+.race-cat-add input {
+  flex: 1;
+  padding: 6px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-family: var(--font-body);
+}
+
+.race-cat-add input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* ─── Team Form ─── */
+.race-team-form {
+  padding: 24px;
+  border-radius: 14px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border-subtle);
+}
+
+.race-team-form h3 {
+  margin: 0 0 16px;
+  color: #fff;
+  font-size: 1.05rem;
+}
+
+.race-form-row {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.race-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+}
+
+.race-form-group label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.race-form-group input,
+.race-form-group select {
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-family: var(--font-body);
+}
+
+.race-form-group input:focus,
+.race-form-group select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.race-input-number {
+  width: 80px !important;
+  text-align: center;
+  font-weight: 700;
+  font-size: 1.2rem !important;
+}
+
+.race-pilot-row {
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.15);
+  border-radius: 10px;
+}
+
+.race-form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+/* ─── Import Button ─── */
+.race-import-btn {
+  width: 100%;
+  margin-bottom: 20px;
+  padding: 14px;
+  font-size: 0.95rem;
+}
+
+/* ─── Teams List ─── */
+.race-teams-list {
+  margin-bottom: 20px;
+}
+
+.race-teams-list h3 {
+  color: #fff;
+  margin: 0 0 16px;
+  font-size: 1.1rem;
+}
+
+.race-empty {
+  text-align: center;
+  padding: 30px;
+  color: var(--text-muted);
+  font-style: italic;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 12px;
+}
+
+.race-teams-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.race-team-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--border-subtle);
+  transition: border-color 0.2s;
+}
+
+.race-team-card:hover {
+  border-color: rgba(255, 85, 0, 0.3);
+}
+
+.race-team-number {
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: var(--accent);
+  min-width: 60px;
+  text-align: center;
+  font-family: var(--font-heading, var(--font-body));
+}
+
+.race-team-info {
+  flex: 1;
+}
+
+.race-team-category {
+  display: inline-block;
+  padding: 2px 10px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+.race-team-pilots {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.race-team-pilots span {
+  font-size: 0.88rem;
+  color: var(--text-primary);
+}
+
+.race-team-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.race-team-actions button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 6px;
+  border-radius: 6px;
+  transition: background 0.2s;
+}
+
+.race-team-actions button:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+/* ─── Action Buttons ─── */
+.race-setup-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px;
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+}
+
+.race-start-btn {
+  font-size: 1.1rem !important;
+  padding: 14px 40px !important;
+  letter-spacing: 1px;
+  animation: raceStartPulse 2s infinite;
+}
+
+@keyframes raceStartPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 85, 0, 0.4); }
+  50% { box-shadow: 0 0 0 10px rgba(255, 85, 0, 0); }
+}
+
+.race-delete-btn {
+  color: #ff4444 !important;
+  font-size: 0.85rem;
+}
+
+/* ─── Import Modal ─── */
+.race-import-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.race-import-modal {
+  width: 90%;
+  max-width: 500px;
+  padding: 30px;
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
+}
+
+.race-import-modal h3 {
+  margin: 0 0 8px;
+  color: #fff;
+}
+
+.race-import-desc {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0 0 16px;
+}
+
+.race-import-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.race-import-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.race-import-item:hover {
+  border-color: var(--accent);
+  background: rgba(255, 85, 0, 0.05);
+}
+
+.race-import-item strong {
+  color: #fff;
+  display: block;
+}
+
+.race-import-date {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+  display: block;
+}
+
+.race-import-count {
+  font-size: 0.82rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 768px) {
+  .race-form-row {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .race-pilot-row {
+    flex-direction: column;
+  }
+
+  .race-setup-header {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .race-setup-actions {
+    flex-direction: column;
+  }
+
+  .race-team-card {
+    flex-wrap: wrap;
+  }
+}

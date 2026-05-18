@@ -1797,7 +1797,50 @@ select option {
   }
 }
 
+/* ─── LIVE Navbar Button ─── */
+.nav-live-btn {
+  color: #ff3333 !important;
+  font-weight: 800 !important;
+  letter-spacing: 2px !important;
+  animation: navLiveGlow 2s infinite;
+  position: relative;
+}
 
+.nav-live-btn.active {
+  background: rgba(255, 50, 50, 0.12) !important;
+}
 
+@keyframes navLiveGlow {
+  0%, 100% { text-shadow: 0 0 8px rgba(255, 50, 50, 0.3); }
+  50% { text-shadow: 0 0 16px rgba(255, 50, 50, 0.6); }
+}
 
+.nav-live-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff3333;
+  margin-right: 4px;
+  animation: navLivePulse 1.2s infinite;
+}
+
+@keyframes navLivePulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 6px #ff3333; }
+  50% { opacity: 0.3; box-shadow: 0 0 2px #ff3333; }
+}
+
+/* ─── Event Race Button ─── */
+.event-race-btn {
+  margin-top: 10px;
+  border-color: #00cc66 !important;
+  color: #00cc66 !important;
+  font-weight: 600;
+  transition: all 0.2s;
+}
+
+.event-race-btn:hover {
+  background: rgba(0, 200, 100, 0.1) !important;
+  box-shadow: 0 0 12px rgba(0, 200, 100, 0.2);
+}
 

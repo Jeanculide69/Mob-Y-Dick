@@ -1,8 +1,17 @@
 import { useState, useEffect } from 'react'
 import './App.css'
 import { supabase } from './supabaseClient'
+import AuthModal from './components/AuthModal'
+import LiveChat from './components/LiveChat'
+import PhotoComments from './components/PhotoComments'
+import ProfilePage from './components/ProfilePage'
+import UserManagement from './components/UserManagement'
+import RaceSetup from './components/RaceSetup'
+import RaceChrono from './components/RaceChrono'
+import LiveRace from './components/LiveRace'
+import './components/AuthNavbar.css'
 
-const SITE_VERSION = 'v1.8.0'
+const SITE_VERSION = 'v2.0.0'
 
 // Reusable Google AdSense component with highly premium, warm fallback mockup
 const GoogleAd = ({ slot = '1234567890', format = 'auto', style = { display: 'block' }, navigate }) => {
@@ -261,11 +270,20 @@ function App() {
   const [activeTab, setActiveTab] = useState('home')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
-  const [showLoginModal, setShowLoginModal] = useState(false)
+  const [isModerator, setIsModerator] = useState(false)
+  const [isOrganisateur, setIsOrganisateur] = useState(false)
+  const [session, setSession] = useState(null)
+  const [profile, setProfile] = useState(null)
+  const [showAuthModal, setShowAuthModal] = useState(false)
+
+  // Race state
+  const [liveSession, setLiveSession] = useState(null)
+  const [raceSessions, setRaceSessions] = useState([])
+  const [activeRaceView, setActiveRaceView] = useState(null) // 'setup' | 'chrono' | null
+  const [selectedRaceEvent, setSelectedRaceEvent] = useState(null)
+  const [activeRaceSession, setActiveRaceSession] = useState(null)
+  const [activeRaceTeams, setActiveRaceTeams] = useState([])
   const [showLegalModal, setShowLegalModal] = useState(false)
-  const [adminEmail, setAdminEmail] = useState('')
-  const [adminPassword, setAdminPassword] = useState('')
-  const [loginError, setLoginError] = useState('')
 
   // Database Data States
   const [dbEvents, setDbEvents] = useState(null)
@@ -275,6 +293,7 @@ function App() {
   const [dbSettings, setDbSettings] = useState({})
   const [dbOrders, setDbOrders] = useState([])
   const [dbBikes, setDbBikes] = useState(null)
+  const [dbUsers, setDbUsers] = useState([])
 
   // Form Modal States (Admin)
   const [activeForm, setActiveForm] = useState(null) // 'event' | 'gallery' | 'product' | 'team' | 'socials' | 'orders'
@@ -332,6 +351,13 @@ function App() {
             setDbSettings(s)
           }
         })
+
+      // Fetch Users (only if admin)
+      if (isAdmin) {
+        supabase.from('profiles').select('*').order('created_at', { ascending: false })
+          .then(({ data }) => { if (data) setDbUsers(data) })
+      }
+
       // Only fetch orders and sponsors if logged in
       supabase.auth.getSession().then(({ data: { session } }) => {
         if (session) {
@@ -360,15 +386,59 @@ function App() {
     }, 800)
   }
 
-  // Check Supabase Auth session on mount
+  // Check Supabase Auth session on mount and listen to changes
   useEffect(() => {
     refreshData()
     if (supabase) {
       supabase.auth.getSession().then(({ data: { session } }) => {
-        if (session) setIsAdmin(true)
+        setSession(session)
+        if (session) fetchProfile(session.user.id)
       })
+
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        setSession(session)
+        if (session) {
+          fetchProfile(session.user.id).then((adminStatus) => {
+            if (adminStatus) refreshData()
+          })
+        } else {
+          setProfile(null)
+          setIsAdmin(false)
+          setIsModerator(false)
+          setIsOrganisateur(false)
+        }
+      })
+
+      return () => subscription.unsubscribe()
     }
   }, [isAdmin])
+
+  const fetchProfile = async (userId) => {
+    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
+    if (data) {
+      setProfile(data)
+      setIsAdmin(data.role === 'admin')
+      setIsModerator(data.role === 'moderator')
+      setIsOrganisateur(data.role === 'organisateur')
+      return data.role === 'admin'
+    } else {
+      // Temporary fallback for legacy admin until profile triggers are set up
+      setIsAdmin(true)
+      return true
+    }
+  }
+
+  // ─── Granular Permission System ───
+  const hasPermission = (perm) => {
+    if (isAdmin) return true
+    if (!profile) return false
+    const perms = profile.permissions || []
+    return perms.includes(perm)
+  }
+
+  const handleProfileUpdate = () => {
+    if (session) fetchProfile(session.user.id)
+  }
 
   // Automatically sync Leila to Supabase database if missing and admin is logged in
   useEffect(() => {
@@ -430,7 +500,6 @@ function App() {
 
   const handleLogout = async () => {
     if (supabase) await supabase.auth.signOut()
-    setIsAdmin(false)
     setDbOrders([])
   }
 
@@ -764,7 +833,8 @@ function App() {
         shipping_city: checkoutData.shippingCity,
         shipping_zip: checkoutData.shippingZip,
         shipping_country: checkoutData.shippingCountry,
-        status: 'En attente de paiement'
+        status: 'En attente de paiement',
+        user_id: session ? session.user.id : null
       }
       
       const { error } = await supabase.from('orders').insert([orderPayload])
@@ -830,6 +900,7 @@ function App() {
                   <span className="admin-banner-badge">{dbSponsors.filter(s => s.status === 'En attente').length}</span>
                 )}
               </button>
+              <button className="btn btn-ghost btn-sm" onClick={() => handleOpenForm('users_admin')}>👥 Utilisateurs</button>
               <button className="btn btn-ghost btn-sm" onClick={handleLogout}>Déconnexion</button>
             </div>
           </div>
@@ -864,6 +935,30 @@ function App() {
                  tab === 'sponsors' ? '🤝 Sponsors' : '📅 Événements'}
               </button>
             ))}
+
+            {/* Conditional LIVE tab */}
+            {liveSession && liveSession.status === 'live' && (
+              <button
+                className={`nav-link nav-live-btn ${activeTab === 'live' ? 'active' : ''}`}
+                onClick={() => navigate('live')}
+              >
+                <span className="nav-live-dot" />
+                📺 LIVE
+              </button>
+            )}
+            
+            <div className="nav-divider"></div>
+            
+            {session ? (
+              <button className="nav-link profile-btn" onClick={() => navigate('profile')}>
+                <img src={profile?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${session.user.email}`} alt="Profil" className="nav-avatar" />
+                <span>{profile?.display_name || session.user.email.split('@')[0]}</span>
+              </button>
+            ) : (
+              <button className="nav-link login-btn" onClick={() => setShowAuthModal(true)}>
+                🔑 Connexion
+              </button>
+            )}
           </nav>
         </div>
       </header>
@@ -897,6 +992,8 @@ function App() {
             <div className="container" style={{ marginTop: '20px', marginBottom: '20px' }}>
               <GoogleAd slot="home-banner" navigate={navigate} />
             </div>
+            {/* Live Chat component overlay */}
+            <LiveChat session={session} profile={profile} isAdmin={isAdmin} isModerator={isModerator} />
           </>
         )}
 
@@ -1091,7 +1188,7 @@ function App() {
                 <span className="section-tag">Galerie</span>
                 <h2>Photos & Vidéos</h2>
                 <p className="section-sub">Les meilleurs moments de la team Mob Y Dick.</p>
-                {isAdmin && (
+                {(isAdmin || isModerator) && (
                   <button className="btn btn-primary btn-sm inline-add-btn" onClick={() => handleOpenForm('gallery')}>
                     ➕ Ajouter une Photo/Vidéo
                   </button>
@@ -1108,7 +1205,7 @@ function App() {
                       )}
                       <p>{item.title} <span className="gallery-media-source-tag">{item.source === 'embed' ? '🔗 Lien' : '📁 Upload'}</span></p>
 
-                      {isAdmin && (
+                      {(isAdmin || isModerator) && (
                         <div className="admin-inline-actions">
                           <button onClick={() => handleDeleteItem('gallery', item.id, item)}>🗑️ Supprimer</button>
                         </div>
@@ -1164,6 +1261,20 @@ function App() {
                           <button onClick={() => handleOpenForm('event', ev)}>✏️ Modifier</button>
                           <button onClick={() => handleDeleteItem('events', ev.id)}>🗑️ Supprimer</button>
                         </div>
+                      )}
+
+                      {/* Race button for organisateurs & admins */}
+                      {(hasPermission('manage_races')) && ev.id && (
+                        <button 
+                          className="btn btn-sm btn-outline event-race-btn"
+                          onClick={() => {
+                            setSelectedRaceEvent(ev)
+                            setActiveRaceView('setup')
+                            setActiveTab('race')
+                          }}
+                        >
+                          🏁 Gérer la course
+                        </button>
                       )}
                     </div>
                   )
@@ -1394,6 +1505,67 @@ function App() {
         )}
       </main>
 
+      {/* ─── LIVE RACE (public) ─── */}
+      {activeTab === 'live' && (
+        <LiveRace />
+      )}
+
+      {/* ─── RACE SETUP (organisateur) ─── */}
+      {activeTab === 'race' && activeRaceView === 'setup' && selectedRaceEvent && (
+        <section className="section page-top">
+          <div className="container">
+            <RaceSetup 
+              event={selectedRaceEvent}
+              session={session}
+              onStartRace={(rSession, rTeams) => {
+                setActiveRaceSession(rSession)
+                setActiveRaceTeams(rTeams)
+                setActiveRaceView('chrono')
+                setLiveSession(rSession)
+              }}
+              onClose={() => {
+                setActiveRaceView(null)
+                setSelectedRaceEvent(null)
+                setActiveTab('events')
+              }}
+            />
+          </div>
+        </section>
+      )}
+
+      {/* ─── RACE CHRONO (organisateur live) ─── */}
+      {activeTab === 'race' && activeRaceView === 'chrono' && activeRaceSession && (
+        <section className="section page-top">
+          <div className="container">
+            <RaceChrono 
+              raceSession={activeRaceSession}
+              teams={activeRaceTeams}
+              session={session}
+              onFinish={() => {
+                setActiveRaceView(null)
+                setActiveRaceSession(null)
+                setLiveSession(null)
+                setActiveTab('events')
+              }}
+              onClose={() => {
+                setActiveRaceView('setup')
+              }}
+            />
+          </div>
+        </section>
+      )}
+
+      {/* ─── USER PROFILE / ORDER HISTORY ─── */}
+      {activeTab === 'profile' && session && (
+        <ProfilePage 
+          session={session}
+          profile={profile}
+          onLogout={handleLogout}
+          orders={dbOrders}
+          onProfileUpdate={handleProfileUpdate}
+        />
+      )}
+
       {/* ─── Footer ─── */}
       <footer className="footer">
         <div className="container footer-inner">
@@ -1435,29 +1607,15 @@ function App() {
               if (isAdmin) {
                 handleOpenForm('orders')
               } else {
-                setShowLoginModal(true)
+                setShowAuthModal(true)
               }
             }}>{isAdmin ? '📦 Gérer Commandes' : '⚙️ Admin'}</button>
           </div>
         </div>
       </footer>
 
-      {/* ─── Login Modal ─── */}
-      {showLoginModal && (
-        <div className="admin-overlay">
-          <div className="admin-login glass">
-            <button className="admin-close" onClick={() => setShowLoginModal(false)}>✕</button>
-            <h2>🔐 Espace Admin</h2>
-            <p>Connectez-vous pour activer l'édition visuelle.</p>
-            <form onSubmit={handleLoginSubmit}>
-              <input type="email" placeholder="Email" value={adminEmail} onChange={(e) => setAdminEmail(e.target.value)} required />
-              <input type="password" placeholder="Mot de passe" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} required />
-              {loginError && <p className="admin-error">{loginError}</p>}
-              <button type="submit" className="btn btn-primary" style={{ width: '100%' }}>Se connecter</button>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* ─── Auth Modal (Google & Email) ─── */}
+      <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
 
       {/* ─── Legal & CGV Compliance Modal ─── */}
       {showLegalModal && (
@@ -1704,6 +1862,7 @@ function App() {
                 {activeForm === 'bikes_admin' && '🏍️ Gérer les Motos'}
                 {activeForm === 'bike_edit' && '✏️ Modifier la Moto'}
                 {activeForm === 'sponsors_admin' && '🤝 Propositions Sponsors'}
+                {activeForm === 'users_admin' && '👥 Gestion des Utilisateurs'}
               </h2>
               <button className="admin-close" onClick={() => { setActiveForm(null); setEditingItem(null) }}>✕</button>
             </div>
@@ -1854,6 +2013,14 @@ function App() {
                   })}
                 </div>
               </div>
+            ) : activeForm === 'users_admin' ? (
+              <UserManagement 
+                users={dbUsers}
+                onRefresh={() => {
+                  supabase.from('profiles').select('*').order('created_at', { ascending: false })
+                    .then(({ data }) => { if (data) setDbUsers(data) })
+                }}
+              />
             ) : activeForm === 'bikes_admin' ? (
               <div className="admin-orders-container" style={{ maxHeight: '75vh', overflowY: 'auto' }}>
                 {(!dbBikes || dbBikes.length === 0) && (
@@ -2123,10 +2290,11 @@ function App() {
       )}
       {/* ─── Premium Fullscreen Lightbox Overlay ─── */}
       {lightboxImage && (
-        <div className="lightbox-overlay" onClick={() => setLightboxImage(null)}>
+        <div className="lightbox-overlay" onClick={() => setLightboxImage(null)} style={{ overflowY: 'auto' }}>
           <button className="lightbox-close" onClick={() => setLightboxImage(null)}>✕</button>
-          <div className="lightbox-content" onClick={e => e.stopPropagation()}>
-            <img src={lightboxImage} alt="Agrandissement" className="lightbox-img" />
+          <div className="lightbox-content" onClick={e => e.stopPropagation()} style={{ padding: '40px 20px', margin: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <img src={lightboxImage} alt="Agrandissement" className="lightbox-img" style={{ maxHeight: '70vh' }} />
+            <PhotoComments photoUrl={lightboxImage} session={session} isAdmin={isAdmin} isModerator={isModerator} />
           </div>
         </div>
       )}
