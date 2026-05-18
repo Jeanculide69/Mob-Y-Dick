@@ -21,6 +21,47 @@ export default function LiveRace() {
   const [elapsed, setElapsed] = useState(0)
   const elapsedRef = useRef(null)
 
+  // Spectator Realtime Video Stream State
+  const [streamFrame, setStreamFrame] = useState(null)
+  useEffect(() => {
+    if (!session || !session.live_stream_active) {
+      setStreamFrame(null)
+      return
+    }
+
+    const channel = supabase.channel(`live-stream-${session.id}`)
+      .on('broadcast', { event: 'video-frame' }, (payload) => {
+        if (payload.payload && payload.payload.image) {
+          setStreamFrame(payload.payload.image)
+        }
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [session])
+
+  // Live race standings and laps realtime subscriptions
+  useEffect(() => {
+    if (!session?.id) return
+
+    const channel = supabase.channel(`live_race_public_${session.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'race_laps', filter: `session_id=eq.${session.id}` }, (payload) => {
+        setLaps(prev => [payload.new, ...prev])
+        setHighlightedLap(payload.new.id)
+        setTimeout(() => setHighlightedLap(null), 4000)
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'race_sessions', filter: `id=eq.${session.id}` }, (payload) => {
+        setSession(payload.new)
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [session?.id])
+
   useEffect(() => {
     loadLiveSession()
   }, [])
@@ -69,19 +110,6 @@ export default function LiveRace() {
         .order('recorded_at', { ascending: false })
       setLaps(lapsData || [])
 
-      // Realtime subscriptions
-      const channel = supabase.channel('live_race_public')
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'race_laps', filter: `session_id=eq.${s.id}` }, (payload) => {
-          setLaps(prev => [payload.new, ...prev])
-          setHighlightedLap(payload.new.id)
-          setTimeout(() => setHighlightedLap(null), 4000)
-        })
-        .on('postgres_changes', { event: '*', schema: 'public', table: 'race_sessions', filter: `id=eq.${s.id}` }, (payload) => {
-          setSession(payload.new)
-        })
-        .subscribe()
-
-      return () => { supabase.removeChannel(channel) }
     }
     setLoading(false)
   }
@@ -154,26 +182,7 @@ export default function LiveRace() {
     return `${h}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`
   }
 
-  // Spectator Realtime Video Stream State
-  const [streamFrame, setStreamFrame] = useState(null)
-  useEffect(() => {
-    if (!session || !session.live_stream_active) {
-      setStreamFrame(null)
-      return
-    }
 
-    const channel = supabase.channel(`live-stream-${session.id}`)
-      .on('broadcast', { event: 'video-frame' }, (payload) => {
-        if (payload.payload && payload.payload.image) {
-          setStreamFrame(payload.payload.image)
-        }
-      })
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [session])
 
   return (
     <section className="section page-top live-section">
