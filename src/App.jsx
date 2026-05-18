@@ -402,6 +402,35 @@ function App() {
 
   // Check Supabase Auth session on mount and listen to changes
   useEffect(() => {
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    
+    if (isLocalhost) {
+      const mockUser = {
+        id: '00000000-0000-0000-0000-000000000000',
+        email: 'admin-local@mobcross.fr',
+      };
+      const mockSession = {
+        user: mockUser,
+        access_token: 'local-token',
+      };
+      const mockProfile = {
+        id: mockUser.id,
+        email: mockUser.email,
+        display_name: 'JEANCULIDE69 (Local)',
+        avatar_url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=local-admin',
+        role: 'admin',
+        permissions: ['manage_events', 'manage_products', 'manage_gallery', 'manage_team', 'manage_bikes', 'manage_settings', 'manage_races', 'manage_users', 'moderate_content']
+      };
+
+      setSession(mockSession);
+      setProfile(mockProfile);
+      setIsAdmin(true);
+      setIsModerator(true);
+      setIsOrganisateur(true);
+      refreshData(true);
+      return;
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session)
       if (session) {
@@ -924,27 +953,32 @@ function App() {
       {isAdmin && (
         <div className="admin-banner glass">
           <div className="admin-banner-inner container">
-            <span>🛠️ <strong>Mode Édition Actif</strong> — Modifiez le contenu directement sur vos pages !</span>
+            <div className="admin-status-indicator">
+              <span className="admin-status-dot"></span>
+              <span>🛠️ <strong>MODE ADMIN ACTIF</strong></span>
+            </div>
             <div className="admin-banner-actions">
               {(!dbProducts || dbProducts.length === 0) && (
-                <button className="btn btn-primary btn-sm" onClick={handleInitializeDatabase} style={{ backgroundColor: 'var(--accent)', borderColor: 'var(--accent)', color: '#fff', fontWeight: 'bold' }}>
+                <button className="btn-db-init" onClick={handleInitializeDatabase}>
                   🚀 Remplir la base
                 </button>
               )}
-              <button className="btn btn-ghost btn-sm" onClick={() => handleOpenForm('orders')}>
-                📦 Commandes {dbOrders.filter(o => o.status === 'En attente de paiement').length > 0 && (
+              <button onClick={() => handleOpenForm('orders')}>
+                📦 Commandes
+                {dbOrders.filter(o => o.status === 'En attente de paiement').length > 0 && (
                   <span className="admin-banner-badge">{dbOrders.filter(o => o.status === 'En attente de paiement').length}</span>
                 )}
               </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => handleOpenForm('socials')}>🔗 Configurer Réseaux</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => handleOpenForm('bikes_admin')}>🏍️ Gérer les Motos</button>
-              <button className="btn btn-ghost btn-sm" onClick={() => handleOpenForm('sponsors_admin')}>
-                🤝 Sponsors {dbSponsors.filter(s => s.status === 'En attente').length > 0 && (
+              <button onClick={() => handleOpenForm('socials')}>🔗 Réseaux</button>
+              <button onClick={() => handleOpenForm('bikes_admin')}>🏍️ Motos</button>
+              <button onClick={() => handleOpenForm('sponsors_admin')}>
+                🤝 Sponsors
+                {dbSponsors.filter(s => s.status === 'En attente').length > 0 && (
                   <span className="admin-banner-badge">{dbSponsors.filter(s => s.status === 'En attente').length}</span>
                 )}
               </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => handleOpenForm('users_admin')}>👥 Utilisateurs</button>
-              <button className="btn btn-ghost btn-sm" onClick={handleLogout}>Déconnexion</button>
+              <button onClick={() => handleOpenForm('users_admin')}>👥 Utilisateurs</button>
+              <button className="btn-logout" onClick={handleLogout}>🔑 Déconnexion</button>
             </div>
           </div>
         </div>
@@ -970,12 +1004,12 @@ function App() {
                 className={`nav-link ${activeTab === tab ? 'active' : ''}`}
                 onClick={() => navigate(tab)}
               >
-                {tab === 'home' ? '🏠 Accueil' : 
-                 tab === 'gallery' ? '📸 Galerie' : 
-                 tab === 'team' ? '😎 Les Riders' : 
-                 tab === 'bikes' ? '🏍️ Les Motos' : 
-                 tab === 'shop' ? '🛒 Boutique' : 
-                 tab === 'sponsors' ? '🤝 Sponsors' : '📅 Événements'}
+                {tab === 'home' ? 'Accueil' : 
+                 tab === 'gallery' ? 'Galerie' : 
+                 tab === 'team' ? 'Riders' : 
+                 tab === 'bikes' ? 'Motos' : 
+                 tab === 'shop' ? 'Boutique' : 
+                 tab === 'sponsors' ? 'Sponsors' : 'Événements'}
               </button>
             ))}
 
@@ -1997,18 +2031,7 @@ function App() {
                   </div>
                 )}
 
-                {(!dbSponsors || dbSponsors.length === 0) && (
-                  <div style={{ background: 'rgba(255, 85, 0, 0.08)', border: '1px dashed var(--accent)', padding: '16px', borderRadius: '12px', marginBottom: '20px', textAlign: 'left' }}>
-                    <p style={{ margin: '0 0 10px 0', fontSize: '0.85rem', color: '#fff' }}>
-                      💡 <strong>Astuce Supabase :</strong> Pour enregistrer les sponsors directement en base de données, exécutez ce script SQL :
-                    </p>
-                    <textarea 
-                      readOnly 
-                      value={`CREATE TABLE IF NOT EXISTS public.sponsors (\n    id uuid DEFAULT gen_random_uuid() PRIMARY KEY,\n    name text NOT NULL,\n    email text NOT NULL,\n    budget text NOT NULL,\n    message text,\n    status text DEFAULT 'En attente'::text NOT NULL,\n    created_at timestamp with time zone DEFAULT now() NOT NULL\n);\n\nALTER TABLE public.sponsors ENABLE ROW LEVEL SECURITY;\nCREATE POLICY "Allow anonymous inserts on sponsors" ON public.sponsors FOR INSERT WITH CHECK (true);\nCREATE POLICY "Allow authenticated select on sponsors" ON public.sponsors FOR SELECT TO authenticated USING (true);\nCREATE POLICY "Allow authenticated delete on sponsors" ON public.sponsors FOR DELETE TO authenticated USING (true);`} 
-                      style={{ width: '100%', height: '80px', background: '#0a0a0a', border: '1px solid rgba(255,255,255,0.1)', color: 'var(--text-muted)', fontSize: '0.75rem', padding: '6px', borderRadius: '6px', fontFamily: 'monospace', resize: 'none', outline: 'none' }} 
-                    />
-                  </div>
-                )}
+
 
                 <div className="admin-orders-list" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
                   {[...dbSponsors, ...JSON.parse(localStorage.getItem('myd_local_sponsors') || '[]')].map((s, idx) => {

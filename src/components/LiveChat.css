@@ -135,6 +135,13 @@
   gap: 4px;
 }
 
+.msg-me .msg-author {
+  align-self: flex-end;
+  margin-right: 5px;
+  margin-left: 0;
+  flex-direction: row-reverse;
+}
+
 .author-name {
   color: var(--text-secondary);
   font-weight: 600;

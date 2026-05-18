@@ -116,7 +116,7 @@ export default function LiveRace() {
   // Build rankings
   const getRankings = (cat) => {
     const catTeams = cat === 'all' ? teams : teams.filter(t => t.category === cat)
-    return catTeams.map(team => {
+    const sorted = catTeams.map(team => {
       const teamLaps = laps.filter(l => l.team_id === team.id)
       const bestLap = teamLaps.length > 0 ? Math.min(...teamLaps.map(l => l.lap_time_ms)) : null
       const avgLap = teamLaps.length > 0 ? Math.round(teamLaps.reduce((s, l) => s + l.lap_time_ms, 0) / teamLaps.length) : null
@@ -124,6 +124,18 @@ export default function LiveRace() {
       return { ...team, bestLap, avgLap, lastLap, totalLaps: teamLaps.length, laps: teamLaps }
     }).filter(t => t.totalLaps > 0)
       .sort((a, b) => (a.bestLap || Infinity) - (b.bestLap || Infinity))
+
+    // Map over sorted to calculate F1 gaps and intervals
+    return sorted.map((r, index) => {
+      if (index === 0) {
+        return { ...r, gapToLeader: 'LEADER', interval: '-' }
+      }
+      const leaderBest = sorted[0].bestLap
+      const prevBest = sorted[index - 1].bestLap
+      const gapToLeader = `+${((r.bestLap - leaderBest) / 1000).toFixed(3)}s`
+      const interval = `+${((r.bestLap - prevBest) / 1000).toFixed(3)}s`
+      return { ...r, gapToLeader, interval }
+    })
   }
 
   const allRankings = getRankings(selectedCategory)
@@ -141,6 +153,27 @@ export default function LiveRace() {
     const s = Math.floor((ms % 60000) / 1000)
     return `${h}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`
   }
+
+  // Spectator Realtime Video Stream State
+  const [streamFrame, setStreamFrame] = useState(null)
+  useEffect(() => {
+    if (!session || !session.live_stream_active) {
+      setStreamFrame(null)
+      return
+    }
+
+    const channel = supabase.channel(`live-stream-${session.id}`)
+      .on('broadcast', { event: 'video-frame' }, (payload) => {
+        if (payload.payload && payload.payload.image) {
+          setStreamFrame(payload.payload.image)
+        }
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [session])
 
   return (
     <section className="section page-top live-section">
@@ -200,6 +233,30 @@ export default function LiveRace() {
           </div>
         )}
 
+        {/* ─── Live Video Broadcast Container ─── */}
+        {session.live_stream_active && (
+          <div className="live-video-container glass" style={{ marginBottom: '30px', padding: '20px', borderRadius: '16px', border: '1px solid var(--accent)', background: 'rgba(255, 85, 0, 0.03)', textAlign: 'center' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px' }}>
+              <span style={{ display: 'inline-block', width: '10px', height: '10px', background: '#ff3b30', borderRadius: '50%', animation: 'pulse 1.5s infinite' }} />
+              <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#fff', fontWeight: 'bold' }}>🎥 EN DIRECT DE LA PISTE</h3>
+            </div>
+            <div style={{ position: 'relative', width: '100%', maxWidth: '640px', margin: '0 auto', aspectRatio: '16/9', borderRadius: '12px', overflow: 'hidden', background: '#000', border: '1px solid rgba(255,255,255,0.1)' }}>
+              {streamFrame ? (
+                <img 
+                  src={streamFrame} 
+                  alt="Live video stream" 
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                />
+              ) : (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', color: 'var(--text-secondary)' }}>
+                  <div style={{ width: '32px', height: '32px', border: '3px solid rgba(255,255,255,0.1)', borderTopColor: 'var(--accent)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                  <p style={{ margin: 0, fontSize: '0.9rem' }}>Connexion au flux vidéo de l'organisateur...</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ─── Category Filter ─── */}
         <div className="live-cat-tabs">
           <button 
@@ -238,6 +295,8 @@ export default function LiveRace() {
                       <th>PILOTE</th>
                       <th>CATÉGORIE</th>
                       <th className="live-th-time">MEILLEUR</th>
+                      <th className="live-th-time">ÉCART 1ER</th>
+                      <th className="live-th-time">INTERVALLE</th>
                       <th className="live-th-time">DERNIER</th>
                       <th className="live-th-time">MOYEN</th>
                       <th>TOURS</th>
@@ -263,6 +322,12 @@ export default function LiveRace() {
                           <span className="live-cat-badge">{r.category}</span>
                         </td>
                         <td className="live-time live-time-best">{formatTime(r.bestLap)}</td>
+                        <td className="live-time" style={{ color: i === 0 ? 'var(--accent)' : 'var(--text-secondary)', fontWeight: i === 0 ? 'bold' : 'normal' }}>
+                          {r.gapToLeader}
+                        </td>
+                        <td className="live-time" style={{ color: 'var(--text-muted)' }}>
+                          {r.interval}
+                        </td>
                         <td className="live-time">{formatTime(r.lastLap)}</td>
                         <td className="live-time live-time-avg">{formatTime(r.avgLap)}</td>
                         <td className="live-laps">{r.totalLaps}</td>

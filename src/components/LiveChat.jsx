@@ -88,7 +88,7 @@ export default function LiveChat({ session, profile, isAdmin, isModerator }) {
     <div className={`live-chat-container ${isOpen ? 'open' : 'closed'}`}>
       {!isOpen && (
         <button className="chat-toggle-btn glass" onClick={() => setIsOpen(true)}>
-          💬 Chat de la meute
+          💬 Chat
         </button>
       )}
 
@@ -109,17 +109,13 @@ export default function LiveChat({ session, profile, isAdmin, isModerator }) {
                 
                 return (
                   <div key={msg.id} className={`chat-msg ${isMe ? 'msg-me' : 'msg-other'}`}>
-                    {!isMe && (
-                      <img src={msg.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${msg.user_id}`} alt="avatar" className="chat-avatar" />
-                    )}
+                    <img src={msg.profiles?.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${msg.user_id}`} alt="avatar" className="chat-avatar" />
                     <div className="msg-content-wrapper">
-                      {!isMe && (
-                        <div className="msg-author">
-                          <span className={`author-name role-${authorRole}`}>{msg.profiles?.display_name || 'Rider Anonyme'}</span>
-                          {authorRole === 'admin' && <span className="author-badge">👑</span>}
-                          {authorRole === 'moderator' && <span className="author-badge">🛡️</span>}
-                        </div>
-                      )}
+                      <div className="msg-author">
+                        <span className={`author-name role-${authorRole}`}>{msg.profiles?.display_name || 'Rider Anonyme'}</span>
+                        {authorRole === 'admin' && <span className="author-badge">👑</span>}
+                        {authorRole === 'moderator' && <span className="author-badge">🛡️</span>}
+                      </div>
                       <div className="msg-bubble">
                         <p>{msg.message}</p>
                         <span className="msg-time">{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>

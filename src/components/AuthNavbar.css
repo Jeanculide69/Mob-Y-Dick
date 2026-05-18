@@ -9,11 +9,16 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
+  padding: 6px 16px 6px 10px; /* Balances the avatar space on the left */
   border-radius: 20px;
   background: rgba(255, 85, 0, 0.1);
   border: 1px solid rgba(255, 85, 0, 0.2);
   transition: all 0.3s;
+  width: max-content;
+  min-width: max-content;
+  max-width: none;
+  white-space: nowrap;
+  flex-shrink: 0; /* Prevents button from being squished in flex row */
 }
 
 .profile-btn:hover {

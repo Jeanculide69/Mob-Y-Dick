@@ -1,8 +1,31 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../supabaseClient'
 import './RaceSetup.css'
 
 const DEFAULT_CATEGORIES = ['Prototype', 'Cadre en V', 'Origine', '50cc', '70cc']
+
+const DEMO_TEAMS = [
+  { moto_number: 11, category: 'Prototype', pilot_1_name: 'Maxime Durand', pilot_1_sex: 'M', pilot_2_name: 'Lucas Martin', pilot_2_sex: 'M' },
+  { moto_number: 12, category: 'Prototype', pilot_1_name: 'Arthur Chevalier', pilot_1_sex: 'M', pilot_2_name: 'Chloé Dubois', pilot_2_sex: 'F' },
+  { moto_number: 13, category: 'Prototype', pilot_1_name: 'Florian Girard', pilot_1_sex: 'M', pilot_2_name: 'Jean-Marc Lartigue', pilot_2_sex: 'M' },
+  { moto_number: 14, category: 'Prototype', pilot_1_name: 'Jérôme Bricard', pilot_1_sex: 'M', pilot_2_name: 'Pierre Vaillant', pilot_2_sex: 'M' },
+  { moto_number: 21, category: 'Cadre en V', pilot_1_name: 'Nicolas Vasseur', pilot_1_sex: 'M', pilot_2_name: 'Clément Roussel', pilot_2_sex: 'M' },
+  { moto_number: 22, category: 'Cadre en V', pilot_1_name: 'Elodie Bertrand', pilot_1_sex: 'F', pilot_2_name: 'Mathieu Picard', pilot_2_sex: 'M' },
+  { moto_number: 23, category: 'Cadre en V', pilot_1_name: 'Thomas Colin', pilot_1_sex: 'M', pilot_2_name: 'Romain Bonnet', pilot_2_sex: 'M' },
+  { moto_number: 24, category: 'Cadre en V', pilot_1_name: 'Damien Leclerc', pilot_1_sex: 'M', pilot_2_name: 'Julien Mercier', pilot_2_sex: 'M' },
+  { moto_number: 31, category: 'Origine', pilot_1_name: 'Benoît Lemaire', pilot_1_sex: 'M', pilot_2_name: 'Jean Culide', pilot_2_sex: 'M' },
+  { moto_number: 32, category: 'Origine', pilot_1_name: 'Sarah Gauthier', pilot_1_sex: 'F', pilot_2_name: 'Alexandre Roy', pilot_2_sex: 'M' },
+  { moto_number: 33, category: 'Origine', pilot_1_name: 'Stéphane Vidal', pilot_1_sex: 'M', pilot_2_name: 'Philippe Henry', pilot_2_sex: 'M' },
+  { moto_number: 34, category: 'Origine', pilot_1_name: 'Valérie Caron', pilot_1_sex: 'F', pilot_2_name: 'Laurent Fontaine', pilot_2_sex: 'M' },
+  { moto_number: 51, category: '50cc', pilot_1_name: 'Hugo Marchand', pilot_1_sex: 'M', pilot_2_name: 'Antoine Aubry', pilot_2_sex: 'M' },
+  { moto_number: 52, category: '50cc', pilot_1_name: 'Manon Renard', pilot_1_sex: 'F', pilot_2_name: 'Audrey Dumont', pilot_2_sex: 'F' },
+  { moto_number: 53, category: '50cc', pilot_1_name: 'Guillaume Perrin', pilot_1_sex: 'M', pilot_2_name: 'Fabien Mathieu', pilot_2_sex: 'M' },
+  { moto_number: 54, category: '50cc', pilot_1_name: 'Vincent Barbier', pilot_1_sex: 'M', pilot_2_name: 'Olivier Brunet', pilot_2_sex: 'M' },
+  { moto_number: 71, category: '70cc', pilot_1_name: 'Sébastien Brun', pilot_1_sex: 'M', pilot_2_name: 'Pascal Dumas', pilot_2_sex: 'M' },
+  { moto_number: 72, category: '70cc', pilot_1_name: 'Coralie Lamy', pilot_1_sex: 'F', pilot_2_name: 'David Lefebvre', pilot_2_sex: 'M' },
+  { moto_number: 73, category: '70cc', pilot_1_name: 'Mickaël Gautier', pilot_1_sex: 'M', pilot_2_name: 'Yannick Morin', pilot_2_sex: 'M' },
+  { moto_number: 74, category: '70cc', pilot_1_name: 'Cédric Roger', pilot_1_sex: 'M', pilot_2_name: 'Arnaud Leroy', pilot_2_sex: 'M' }
+]
 
 export default function RaceSetup({ event, session, onStartRace, onClose }) {
   const [raceSession, setRaceSession] = useState(null)
@@ -171,6 +194,26 @@ export default function RaceSetup({ event, session, onStartRace, onClose }) {
     loadSession()
   }
 
+  const handleImportDemoTeams = async () => {
+    if (!raceSession) return
+    const toInsert = DEMO_TEAMS.map(t => ({
+      session_id: raceSession.id,
+      moto_number: t.moto_number,
+      category: t.category,
+      pilot_1_name: t.pilot_1_name,
+      pilot_1_sex: t.pilot_1_sex,
+      pilot_2_name: t.pilot_2_name,
+      pilot_2_sex: t.pilot_2_sex,
+    }))
+
+    const { error } = await supabase.from('race_teams').insert(toInsert)
+    if (error) {
+      alert("Erreur lors de l'importation de la liste démo : " + error.message)
+      return
+    }
+    loadSession()
+  }
+
   const handleStartRace = async () => {
     if (teams.length === 0) {
       alert('Ajoutez au moins une équipe avant de lancer la course !')
@@ -317,11 +360,28 @@ export default function RaceSetup({ event, session, onStartRace, onClose }) {
             </div>
           </form>
 
-          {/* ─── Import from previous ─── */}
-          {previousSessions.length > 0 && teams.length === 0 && (
-            <button className="btn btn-outline race-import-btn" onClick={() => setShowImportModal(true)}>
-              📥 Importer depuis une session précédente
-            </button>
+          {/* ─── Import actions ─── */}
+          {teams.length === 0 && (
+            <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', width: '100%' }}>
+              <button 
+                type="button"
+                className="btn btn-outline" 
+                onClick={handleImportDemoTeams}
+                style={{ flex: 1, minWidth: '240px', borderColor: 'var(--accent)', color: 'var(--accent)', background: 'rgba(255, 85, 0, 0.05)', fontWeight: 'bold' }}
+              >
+                🚀 Importer la Liste Démo (20 équipes de test)
+              </button>
+              {previousSessions.length > 0 && (
+                <button 
+                  type="button"
+                  className="btn btn-outline" 
+                  onClick={() => setShowImportModal(true)}
+                  style={{ flex: 1, minWidth: '240px' }}
+                >
+                  📥 Importer depuis une session précédente ({previousSessions.length})
+                </button>
+              )}
+            </div>
           )}
 
           {/* ─── Teams List ─── */}
@@ -351,6 +411,14 @@ export default function RaceSetup({ event, session, onStartRace, onClose }) {
               </div>
             )}
           </div>
+
+          {/* ─── Live Video Broadcasting (Organiser) ─── */}
+          {raceSession.status === 'live' && (
+            <LiveVideoBroadcaster 
+              session={session} 
+              raceSession={raceSession} 
+            />
+          )}
 
           {/* ─── Action Buttons ─── */}
           <div className="race-setup-actions glass">
@@ -394,3 +462,184 @@ export default function RaceSetup({ event, session, onStartRace, onClose }) {
     </div>
   )
 }
+
+function LiveVideoBroadcaster({ session, raceSession }) {
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState(null)
+  
+  const videoRef = useRef(null)
+  const streamRef = useRef(null)
+  const intervalRef = useRef(null)
+  const channelRef = useRef(null)
+
+  // Auto clean-up on unmount
+  useEffect(() => {
+    return () => {
+      // Clear capture loop
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+      // Stop camera track
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop())
+      }
+    }
+  }, [])
+
+  const startStreaming = async () => {
+    setLoading(true)
+    setErrorMsg(null)
+    try {
+      // 1. Concurrency Check: Check if someone else is already streaming
+      const { data: latestSession, error: checkError } = await supabase
+        .from('race_sessions')
+        .select('live_stream_active, live_stream_user_id')
+        .eq('id', raceSession.id)
+        .single()
+
+      if (checkError) throw checkError
+
+      if (latestSession.live_stream_active && latestSession.live_stream_user_id !== session.user.id) {
+        throw new Error("⚠️ Un live est déjà en cours de diffusion sur cette course par un autre organisateur.")
+      }
+
+      // 2. Request camera stream
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 360 } },
+        audio: false
+      })
+
+      streamRef.current = stream
+      // Small timeout to allow video tag to mount and be ready
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+        }
+      }, 100)
+
+      // 3. Update DB
+      await supabase.from('race_sessions').update({
+        live_stream_active: true,
+        live_stream_user_id: session.user.id
+      }).eq('id', raceSession.id)
+
+      // 4. Initialize Signaling / Frame Channel
+      const channel = supabase.channel(`live-stream-${raceSession.id}`)
+      channelRef.current = channel
+      channel.subscribe()
+
+      // 5. Canvas capture interval (every 250ms -> ~4fps, extremely fast and light!)
+      const canvas = document.createElement('canvas')
+      canvas.width = 480
+      canvas.height = 270
+      const ctx = canvas.getContext('2d')
+
+      intervalRef.current = setInterval(() => {
+        if (videoRef.current && videoRef.current.readyState === 4) {
+          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
+          const base64Frame = canvas.toDataURL('image/jpeg', 0.5) // high compression for low payload!
+          
+          channel.send({
+            type: 'broadcast',
+            event: 'video-frame',
+            payload: { image: base64Frame }
+          })
+        }
+      }, 250)
+
+      setIsStreaming(true)
+    } catch (err) {
+      console.error(err)
+      setErrorMsg(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const stopStreaming = async () => {
+    // Clear capture loop
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+
+    // Stop camera track
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
+    }
+
+    // Clean channels
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
+
+    // Update DB
+    try {
+      await supabase.from('race_sessions').update({
+        live_stream_active: false,
+        live_stream_user_id: null
+      }).eq('id', raceSession.id)
+    } catch (err) {
+      console.error("Error clearing live lock:", err)
+    }
+
+    setIsStreaming(false)
+  }
+
+  return (
+    <div className="race-setup-stream glass" style={{ padding: '20px', borderRadius: '14px', border: '1px solid var(--border-subtle)', marginBottom: '20px', background: 'rgba(255, 85, 0, 0.02)' }}>
+      <h3 style={{ margin: '0 0 15px 0', fontSize: '1.1rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        🎥 Diffusion Vidéo en Direct
+      </h3>
+      
+      {errorMsg && (
+        <div style={{ padding: '12px', background: 'rgba(255,68,68,0.1)', border: '1px solid rgba(255,68,68,0.2)', color: '#ff4444', borderRadius: '8px', fontSize: '0.88rem', marginBottom: '15px', lineHeight: '1.4' }}>
+          {errorMsg}
+        </div>
+      )}
+
+      {isStreaming ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <div style={{ position: 'relative', width: '100%', maxWidth: '360px', aspectRatio: '16/9', borderRadius: '8px', overflow: 'hidden', background: '#000', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              muted 
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+            <span style={{ position: 'absolute', top: '10px', left: '10px', background: '#ff3b30', color: '#fff', fontSize: '0.75rem', padding: '3px 8px', borderRadius: '20px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px', zIndex: 10 }}>
+              <span style={{ width: '6px', height: '6px', background: '#fff', borderRadius: '50%', animation: 'pulse 1.5s infinite' }} />
+              DIFFUSION EN COURS
+            </span>
+          </div>
+          <button 
+            className="btn btn-outline" 
+            onClick={stopStreaming}
+            style={{ borderColor: '#ff4444', color: '#ff4444', width: 'fit-content' }}
+          >
+            🛑 Arrêter le Live Vidéo
+          </button>
+        </div>
+      ) : (
+        <div>
+          <p style={{ margin: '0 0 15px 0', fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+            Partagez la course en direct depuis le bord de la piste ! Les spectateurs verront votre caméra s'afficher instantanément sur la page live.
+          </p>
+          <button 
+            className="btn btn-primary" 
+            onClick={startStreaming}
+            disabled={loading}
+            style={{ background: 'linear-gradient(135deg, #ff5500 0%, #ff8c42 100%)', border: 'none' }}
+          >
+            {loading ? 'Initialisation...' : '🎥 Lancer le Live Vidéo'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+

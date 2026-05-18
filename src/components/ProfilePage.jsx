@@ -27,6 +27,14 @@ export default function ProfilePage({ session, profile, onLogout, orders = [], o
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState(null)
 
+  // Shipping Address States
+  const [shippingAddress, setShippingAddress] = useState(profile?.shipping_address || '')
+  const [shippingZip, setShippingZip] = useState(profile?.shipping_zip || '')
+  const [shippingCity, setShippingCity] = useState(profile?.shipping_city || '')
+  const [shippingCountry, setShippingCountry] = useState(profile?.shipping_country || 'France')
+  const [savingAddress, setSavingAddress] = useState(false)
+  const [addressMsg, setAddressMsg] = useState(null)
+
   if (!session || !profile) return null
 
   const roleConfig = ROLE_CONFIG[profile.role] || ROLE_CONFIG.user
@@ -34,21 +42,58 @@ export default function ProfilePage({ session, profile, onLogout, orders = [], o
   const myOrders = orders.filter(o => o.user_id === session.user.id)
 
   const handleSave = async () => {
+    if (!displayName.trim()) return
     setSaving(true)
     setSaveMsg(null)
     try {
       const { error } = await supabase.from('profiles').update({
-        display_name: displayName
+        pending_display_name: displayName.trim(),
+        display_name_status: 'pending'
       }).eq('id', session.user.id)
       
       if (error) throw error
-      setSaveMsg('✅ Profil mis à jour !')
+      setSaveMsg('⏳ Demande envoyée à l\'administrateur !')
       setEditing(false)
       if (onProfileUpdate) onProfileUpdate()
     } catch (err) {
       setSaveMsg('❌ ' + err.message)
     } finally {
       setSaving(false)
+    }
+  }
+
+  const handleAddressSave = async (e) => {
+    e.preventDefault()
+    setSavingAddress(true)
+    setAddressMsg(null)
+    try {
+      const { error } = await supabase.from('profiles').update({
+        shipping_address: shippingAddress,
+        shipping_zip: shippingZip,
+        shipping_city: shippingCity,
+        shipping_country: shippingCountry
+      }).eq('id', session.user.id)
+      
+      if (error) throw error
+      setAddressMsg('✅ Adresse sauvegardée avec succès !')
+      if (onProfileUpdate) onProfileUpdate()
+    } catch (err) {
+      setAddressMsg('❌ ' + err.message)
+    } finally {
+      setSavingAddress(false)
+    }
+  }
+
+  const handleResetPassword = async () => {
+    if (!window.confirm("Envoyer un e-mail de réinitialisation de mot de passe ?")) return
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(session.user.email, {
+        redirectTo: window.location.origin
+      })
+      if (error) throw error
+      alert("📧 Un e-mail de réinitialisation de mot de passe vous a été envoyé !")
+    } catch (err) {
+      alert("Erreur : " + err.message)
     }
   }
 
@@ -77,7 +122,17 @@ export default function ProfilePage({ session, profile, onLogout, orders = [], o
               </div>
 
               <div className="profile-info-main">
-                {editing ? (
+                {profile.display_name_changes >= 1 ? (
+                  <div className="profile-name-row">
+                    <h3 className="profile-display-name">{profile.display_name}</h3>
+                    <span className="profile-lock-badge" title="Changement autorisé une seule fois">🔒 Pseudo verrouillé</span>
+                  </div>
+                ) : profile.display_name_status === 'pending' ? (
+                  <div className="profile-name-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '4px' }}>
+                    <h3 className="profile-display-name">{profile.display_name || session.user.email.split('@')[0]}</h3>
+                    <span className="profile-pending-badge">⏳ En attente de validation : "{profile.pending_display_name}"</span>
+                  </div>
+                ) : editing ? (
                   <div className="profile-edit-row">
                     <input 
                       type="text"
@@ -90,14 +145,14 @@ export default function ProfilePage({ session, profile, onLogout, orders = [], o
                     <button className="btn btn-primary btn-sm" onClick={handleSave} disabled={saving}>
                       {saving ? '...' : '✓'}
                     </button>
-                    <button className="btn btn-ghost btn-sm" onClick={() => { setEditing(false); setDisplayName(profile.display_name) }}>
+                    <button className="btn btn-ghost btn-sm" onClick={() => { setEditing(false); setDisplayName(profile.display_name || '') }}>
                       ✕
                     </button>
                   </div>
                 ) : (
                   <div className="profile-name-row">
                     <h3 className="profile-display-name">{profile.display_name || session.user.email.split('@')[0]}</h3>
-                    <button className="profile-edit-btn" onClick={() => setEditing(true)} title="Modifier le pseudo">✏️</button>
+                    <button className="profile-edit-btn" onClick={() => setEditing(true)} title="Modifier le pseudo (1 fois max)">✏️</button>
                   </div>
                 )}
                 <p className="profile-email">{session.user.email}</p>
@@ -144,6 +199,69 @@ export default function ProfilePage({ session, profile, onLogout, orders = [], o
 
               <button className="btn btn-outline profile-logout-btn" onClick={onLogout}>
                 🚪 Déconnexion
+              </button>
+            </div>
+          </div>
+
+          {/* ─── Address & Security Row ─── */}
+          <div className="profile-split-row">
+            {/* Shipping Address */}
+            <div className="profile-split-card glass">
+              <h3 className="profile-section-title">🏠 Adresse de livraison</h3>
+              <form onSubmit={handleAddressSave} className="profile-address-form">
+                <div className="profile-form-group">
+                  <label>Rue & Numéro</label>
+                  <input
+                    type="text"
+                    value={shippingAddress}
+                    onChange={e => setShippingAddress(e.target.value)}
+                    placeholder="12 rue de la Paix"
+                  />
+                </div>
+                <div className="profile-form-row">
+                  <div className="profile-form-group" style={{ flex: 1 }}>
+                    <label>Code Postal</label>
+                    <input
+                      type="text"
+                      value={shippingZip}
+                      onChange={e => setShippingZip(e.target.value)}
+                      placeholder="75001"
+                    />
+                  </div>
+                  <div className="profile-form-group" style={{ flex: 2 }}>
+                    <label>Ville</label>
+                    <input
+                      type="text"
+                      value={shippingCity}
+                      onChange={e => setShippingCity(e.target.value)}
+                      placeholder="Paris"
+                    />
+                  </div>
+                </div>
+                <div className="profile-form-group">
+                  <label>Pays</label>
+                  <input
+                    type="text"
+                    value={shippingCountry}
+                    onChange={e => setShippingCountry(e.target.value)}
+                    placeholder="France"
+                  />
+                </div>
+                <button type="submit" className="btn btn-primary btn-sm" disabled={savingAddress} style={{ marginTop: '10px' }}>
+                  {savingAddress ? 'Enregistrement...' : '💾 Sauvegarder mon adresse'}
+                </button>
+                {addressMsg && <div className="profile-address-msg" style={{ marginTop: '10px', fontSize: '0.85rem' }}>{addressMsg}</div>}
+              </form>
+            </div>
+
+            {/* Security Card */}
+            <div className="profile-split-card glass">
+              <h3 className="profile-section-title">🔒 Sécurité & Connexion</h3>
+              <p className="profile-security-desc" style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                Vous pouvez réinitialiser ou modifier votre mot de passe à tout moment. Un lien de réinitialisation sécurisé vous sera instantanément envoyé par e-mail.
+              </p>
+              <button className="btn btn-outline" onClick={handleResetPassword} style={{ width: '100%', marginTop: '30px' }}>
+                📧 Envoyer un e-mail de réinitialisation
               </button>
             </div>
           </div>
