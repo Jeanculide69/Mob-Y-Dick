@@ -331,7 +331,7 @@ function App() {
   })
 
   // Load and refresh data
-  const refreshData = () => {
+  const refreshData = (forceAdmin = false) => {
     if (supabase) {
       supabase.from('events').select('*').order('date', { ascending: true })
         .then(({ data }) => { if (data) setDbEvents(data) })
@@ -353,7 +353,7 @@ function App() {
         })
 
       // Fetch Users (only if admin)
-      if (isAdmin) {
+      if (isAdmin || forceAdmin) {
         supabase.from('profiles').select('*').order('created_at', { ascending: false })
           .then(({ data }) => { if (data) setDbUsers(data) })
       }
@@ -388,32 +388,36 @@ function App() {
 
   // Check Supabase Auth session on mount and listen to changes
   useEffect(() => {
-    refreshData()
-    if (supabase) {
-      supabase.auth.getSession().then(({ data: { session } }) => {
-        setSession(session)
-        if (session) fetchProfile(session.user.id)
-      })
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session)
+      if (session) {
+        fetchProfile(session.user.id, session.user.email).then((adminStatus) => {
+          refreshData(adminStatus)
+        })
+      } else {
+        refreshData(false)
+      }
+    })
 
-      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-        setSession(session)
-        if (session) {
-          fetchProfile(session.user.id).then((adminStatus) => {
-            if (adminStatus) refreshData()
-          })
-        } else {
-          setProfile(null)
-          setIsAdmin(false)
-          setIsModerator(false)
-          setIsOrganisateur(false)
-        }
-      })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session)
+      if (session) {
+        fetchProfile(session.user.id, session.user.email).then((adminStatus) => {
+          refreshData(adminStatus)
+        })
+      } else {
+        setProfile(null)
+        setIsAdmin(false)
+        setIsModerator(false)
+        setIsOrganisateur(false)
+        refreshData(false)
+      }
+    })
 
-      return () => subscription.unsubscribe()
-    }
-  }, [isAdmin])
+    return () => subscription.unsubscribe()
+  }, [])
 
-  const fetchProfile = async (userId) => {
+  const fetchProfile = async (userId, userEmail) => {
     const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
     if (data) {
       setProfile(data)
@@ -422,6 +426,31 @@ function App() {
       setIsOrganisateur(data.role === 'organisateur')
       return data.role === 'admin'
     } else {
+      // If the profile is missing in the database, attempt to auto-provision it dynamically from the client!
+      const fallbackDisplayName = userEmail ? userEmail.split('@')[0] : 'Membre'
+      const fallbackAvatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${userEmail || userId}`
+      
+      const isSystemAdmin = userEmail === 'cartiercorentin@gmail.com'
+      const assignedRole = isSystemAdmin ? 'admin' : 'user'
+      const assignedPerms = isSystemAdmin ? ['manage_events', 'manage_products', 'manage_gallery', 'manage_team', 'manage_bikes', 'manage_settings', 'manage_races', 'manage_users', 'moderate_content'] : []
+
+      const { data: newProfile } = await supabase.from('profiles').insert([{
+        id: userId,
+        email: userEmail,
+        display_name: fallbackDisplayName,
+        avatar_url: fallbackAvatar,
+        role: assignedRole,
+        permissions: assignedPerms
+      }]).select().single()
+
+      if (newProfile) {
+        setProfile(newProfile)
+        setIsAdmin(newProfile.role === 'admin')
+        setIsModerator(newProfile.role === 'moderator')
+        setIsOrganisateur(newProfile.role === 'organisateur')
+        return newProfile.role === 'admin'
+      }
+
       // Temporary fallback for legacy admin until profile triggers are set up
       setIsAdmin(true)
       return true
@@ -437,7 +466,7 @@ function App() {
   }
 
   const handleProfileUpdate = () => {
-    if (session) fetchProfile(session.user.id)
+    if (session) fetchProfile(session.user.id, session.user.email)
   }
 
   // Automatically sync Leila to Supabase database if missing and admin is logged in
