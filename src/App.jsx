@@ -352,6 +352,20 @@ function App() {
           }
         })
 
+      // Fetch the active live session for everyone
+      supabase.from('race_sessions')
+        .select('*')
+        .eq('status', 'live')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .then(({ data }) => {
+          if (data && data.length > 0) {
+            setLiveSession(data[0])
+          } else {
+            setLiveSession(null)
+          }
+        })
+
       // Fetch Users (only if admin)
       if (isAdmin || forceAdmin) {
         supabase.from('profiles').select('*').order('created_at', { ascending: false })
@@ -999,6 +1013,33 @@ function App() {
         {/* ─── HOME ─── */}
         {activeTab === 'home' && (
           <>
+            {liveSession && liveSession.status === 'live' && (
+              <div className="live-race-banner fade-in" onClick={() => navigate('live')} style={{
+                background: 'linear-gradient(135deg, rgba(234, 18, 18, 0.95) 0%, rgba(186, 12, 12, 0.95) 100%)',
+                borderBottom: '2px solid #ff4444',
+                padding: '16px 20px',
+                textAlign: 'center',
+                cursor: 'pointer',
+                boxShadow: '0 8px 30px rgba(234, 18, 18, 0.4)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '14px',
+                position: 'relative',
+                zIndex: 10,
+                transition: 'all 0.3s ease',
+                margin: '10px 20px 0 20px',
+                borderRadius: '12px'
+              }}>
+                <span className="nav-live-dot" style={{ width: '12px', height: '12px', backgroundColor: '#fff', borderRadius: '50%', display: 'inline-block', boxShadow: '0 0 10px #fff' }} />
+                <span style={{ fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1.5px', fontSize: '1.1rem', color: '#fff' }}>
+                  🏁 COURSE EN DIRECT EN COURS !
+                </span>
+                <span style={{ background: '#fff', color: '#ea1212', padding: '6px 16px', borderRadius: '20px', fontSize: '0.95rem', fontWeight: 'bold', boxShadow: '0 2px 10px rgba(0,0,0,0.3)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  📺 REJOINDRE LE LIVE EN UN CLIC
+                </span>
+              </div>
+            )}
             <section className="hero">
               <div className="container hero-inner">
                 <img src="/logo.png" alt="Mob Y Dick" className="hero-logo fade-in" />

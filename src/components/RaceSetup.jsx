@@ -354,11 +354,15 @@ export default function RaceSetup({ event, session, onStartRace, onClose }) {
 
           {/* ─── Action Buttons ─── */}
           <div className="race-setup-actions glass">
-            {raceSession.status === 'setup' && (
+            {raceSession.status === 'setup' ? (
               <button className="btn btn-primary btn-lg race-start-btn" onClick={handleStartRace}>
                 ▶️ LANCER LA COURSE
               </button>
-            )}
+            ) : raceSession.status === 'live' ? (
+              <button className="btn btn-primary btn-lg race-start-btn" onClick={() => onStartRace(raceSession, teams)} style={{ background: 'linear-gradient(135deg, #00cc66 0%, #009944 100%)' }}>
+                ⏱️ ACCÉDER AU CHRONOMÉTRAGE
+              </button>
+            ) : null}
             <button className="btn btn-ghost race-delete-btn" onClick={handleDeleteSession}>
               🗑️ Supprimer la session
             </button>
