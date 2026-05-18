@@ -145,23 +145,66 @@ export default function LiveRace() {
   const getRankings = (cat) => {
     const catTeams = cat === 'all' ? teams : teams.filter(t => t.category === cat)
     const sorted = catTeams.map(team => {
-      const teamLaps = laps.filter(l => l.team_id === team.id)
-      const bestLap = teamLaps.length > 0 ? Math.min(...teamLaps.map(l => l.lap_time_ms)) : null
-      const avgLap = teamLaps.length > 0 ? Math.round(teamLaps.reduce((s, l) => s + l.lap_time_ms, 0) / teamLaps.length) : null
-      const lastLap = teamLaps.length > 0 ? teamLaps[0]?.lap_time_ms : null
-      return { ...team, bestLap, avgLap, lastLap, totalLaps: teamLaps.length, laps: teamLaps }
+      const teamLaps = laps.filter(l => l.team_id === team.id).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
+      const totalLaps = teamLaps.length
+      
+      let bestLap = null
+      let lastLap = null
+      let avgLap = null
+      
+      if (totalLaps > 0) {
+        const durations = teamLaps.map((lap, idx) => {
+          if (idx === 0) return lap.lap_time_ms
+          return lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms
+        })
+        bestLap = Math.min(...durations)
+        lastLap = durations[totalLaps - 1]
+        avgLap = Math.round(teamLaps[totalLaps - 1].lap_time_ms / totalLaps)
+      }
+
+      return { 
+        ...team, 
+        bestLap, 
+        avgLap, 
+        lastLap, 
+        totalLaps, 
+        laps: teamLaps,
+        lastPassageTime: totalLaps > 0 ? teamLaps[totalLaps - 1].lap_time_ms : Infinity
+      }
     }).filter(t => t.totalLaps > 0)
-      .sort((a, b) => (a.bestLap || Infinity) - (b.bestLap || Infinity))
+      .sort((a, b) => {
+        // 1. More laps completed = ahead
+        if (b.totalLaps !== a.totalLaps) {
+          return b.totalLaps - a.totalLaps
+        }
+        // 2. Same laps, whoever got there first = ahead
+        return a.lastPassageTime - b.lastPassageTime
+      })
 
     // Map over sorted to calculate F1 gaps and intervals
     return sorted.map((r, index) => {
       if (index === 0) {
         return { ...r, gapToLeader: 'LEADER', interval: '-' }
       }
-      const leaderBest = sorted[0].bestLap
-      const prevBest = sorted[index - 1].bestLap
-      const gapToLeader = `+${((r.bestLap - leaderBest) / 1000).toFixed(3)}s`
-      const interval = `+${((r.bestLap - prevBest) / 1000).toFixed(3)}s`
+      const leader = sorted[0]
+      const prev = sorted[index - 1]
+      
+      let gapToLeader = ''
+      if (r.totalLaps === leader.totalLaps) {
+        gapToLeader = `+${((r.lastPassageTime - leader.lastPassageTime) / 1000).toFixed(3)}s`
+      } else {
+        const lapsDown = leader.totalLaps - r.totalLaps
+        gapToLeader = `+${lapsDown} ${lapsDown === 1 ? 'Tour' : 'Tours'}`
+      }
+
+      let interval = ''
+      if (r.totalLaps === prev.totalLaps) {
+        interval = `+${((r.lastPassageTime - prev.lastPassageTime) / 1000).toFixed(3)}s`
+      } else {
+        const lapsDown = prev.totalLaps - r.totalLaps
+        interval = `+${lapsDown} ${lapsDown === 1 ? 'Tour' : 'Tours'}`
+      }
+
       return { ...r, gapToLeader, interval }
     })
   }
@@ -348,48 +391,95 @@ export default function LiveRace() {
             </div>
 
             {/* ─── Podiums per Category (when finished) ─── */}
-            {isFinished && selectedCategory === 'all' && (
+            {isFinished && (
               <div className="live-podiums-section">
-                <h2 className="live-podiums-title">🏆 Podiums par Catégorie</h2>
+                <h2 className="live-podiums-title">🏆 Podiums {selectedCategory !== 'all' ? `— ${selectedCategory}` : 'par Catégorie'}</h2>
                 <div className="live-podiums-grid">
-                  {categories.map(cat => {
-                    const catRankings = getRankings(cat)
-                    if (catRankings.length === 0) return null
-                    return (
-                      <div key={cat} className="live-podium-card glass">
-                        <h3 className="live-podium-cat">{cat}</h3>
-                        <div className="live-podium-visual">
-                          {/* 2nd place */}
-                          {catRankings[1] && (
-                            <div className="live-podium-step step-2">
-                              <div className="live-podium-avatar">🥈</div>
-                              <span className="live-podium-name">{catRankings[1].pilot_1_name}</span>
-                              <span className="live-podium-chrono">{formatTime(catRankings[1].bestLap)}</span>
-                              <div className="live-podium-block silver">2</div>
-                            </div>
-                          )}
-                          {/* 1st place */}
-                          {catRankings[0] && (
-                            <div className="live-podium-step step-1">
-                              <div className="live-podium-avatar">🥇</div>
-                              <span className="live-podium-name">{catRankings[0].pilot_1_name}</span>
-                              <span className="live-podium-chrono">{formatTime(catRankings[0].bestLap)}</span>
-                              <div className="live-podium-block gold">1</div>
-                            </div>
-                          )}
-                          {/* 3rd place */}
-                          {catRankings[2] && (
-                            <div className="live-podium-step step-3">
-                              <div className="live-podium-avatar">🥉</div>
-                              <span className="live-podium-name">{catRankings[2].pilot_1_name}</span>
-                              <span className="live-podium-chrono">{formatTime(catRankings[2].bestLap)}</span>
-                              <div className="live-podium-block bronze">3</div>
-                            </div>
-                          )}
+                  {selectedCategory === 'all' ? (
+                    categories.map(cat => {
+                      const catRankings = getRankings(cat)
+                      if (catRankings.length === 0) return null
+                      return (
+                        <div key={cat} className="live-podium-card glass">
+                          <h3 className="live-podium-cat">{cat}</h3>
+                          <div className="live-podium-visual">
+                            {/* 2nd place */}
+                            {catRankings[1] && (
+                              <div className="live-podium-step step-2">
+                                <div className="live-podium-avatar">🥈</div>
+                                <span className="live-podium-name">{catRankings[1].pilot_1_name}</span>
+                                <span className="live-podium-chrono">{catRankings[1].totalLaps} Tours</span>
+                                <span className="live-podium-best">Min: {formatTime(catRankings[1].bestLap)}</span>
+                                <div className="live-podium-block silver">2</div>
+                              </div>
+                            )}
+                            {/* 1st place */}
+                            {catRankings[0] && (
+                              <div className="live-podium-step step-1">
+                                <div className="live-podium-avatar">🥇</div>
+                                <span className="live-podium-name">{catRankings[0].pilot_1_name}</span>
+                                <span className="live-podium-chrono">{catRankings[0].totalLaps} Tours</span>
+                                <span className="live-podium-best">Min: {formatTime(catRankings[0].bestLap)}</span>
+                                <div className="live-podium-block gold">1</div>
+                              </div>
+                            )}
+                            {/* 3rd place */}
+                            {catRankings[2] && (
+                              <div className="live-podium-step step-3">
+                                <div className="live-podium-avatar">🥉</div>
+                                <span className="live-podium-name">{catRankings[2].pilot_1_name}</span>
+                                <span className="live-podium-chrono">{catRankings[2].totalLaps} Tours</span>
+                                <span className="live-podium-best">Min: {formatTime(catRankings[2].bestLap)}</span>
+                                <div className="live-podium-block bronze">3</div>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })}
+                      )
+                    })
+                  ) : (
+                    (() => {
+                      const catRankings = getRankings(selectedCategory)
+                      if (catRankings.length === 0) return <p className="live-rankings-empty">Aucun passage enregistré pour cette catégorie.</p>
+                      return (
+                        <div className="live-podium-card glass single-podium-card" style={{ maxWidth: '600px', margin: '0 auto', width: '100%' }}>
+                          <h3 className="live-podium-cat">{selectedCategory}</h3>
+                          <div className="live-podium-visual">
+                            {/* 2nd place */}
+                            {catRankings[1] && (
+                              <div className="live-podium-step step-2">
+                                <div className="live-podium-avatar">🥈</div>
+                                <span className="live-podium-name">{catRankings[1].pilot_1_name}</span>
+                                <span className="live-podium-chrono">{catRankings[1].totalLaps} Tours</span>
+                                <span className="live-podium-best">Min: {formatTime(catRankings[1].bestLap)}</span>
+                                <div className="live-podium-block silver">2</div>
+                              </div>
+                            )}
+                            {/* 1st place */}
+                            {catRankings[0] && (
+                              <div className="live-podium-step step-1">
+                                <div className="live-podium-avatar">🥇</div>
+                                <span className="live-podium-name">{catRankings[0].pilot_1_name}</span>
+                                <span className="live-podium-chrono">{catRankings[0].totalLaps} Tours</span>
+                                <span className="live-podium-best">Min: {formatTime(catRankings[0].bestLap)}</span>
+                                <div className="live-podium-block gold">1</div>
+                              </div>
+                            )}
+                            {/* 3rd place */}
+                            {catRankings[2] && (
+                              <div className="live-podium-step step-3">
+                                <div className="live-podium-avatar">🥉</div>
+                                <span className="live-podium-name">{catRankings[2].pilot_1_name}</span>
+                                <span className="live-podium-chrono">{catRankings[2].totalLaps} Tours</span>
+                                <span className="live-podium-best">Min: {formatTime(catRankings[2].bestLap)}</span>
+                                <div className="live-podium-block bronze">3</div>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })()
+                  )}
                 </div>
               </div>
             )}

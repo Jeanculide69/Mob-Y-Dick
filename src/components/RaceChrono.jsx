@@ -105,9 +105,7 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
     setLastLapFlash({ moto: num, time: lapTime, pilot: team.pilot_1_name })
     setTimeout(() => setLastLapFlash(null), 3000)
 
-    // Reset chrono and input for next lap
-    setStartTime(Date.now())
-    setChrono(0)
+    // Clear input for next lap - do not reset chrono
     setMotoInput('')
     
     if (inputRef.current) inputRef.current.focus()
@@ -144,14 +142,32 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
     catFilter.forEach(cat => {
       const catTeams = teams.filter(t => t.category === cat)
       const teamResults = catTeams.map(team => {
-        const teamLaps = laps.filter(l => l.team_id === team.id)
-        const bestLap = teamLaps.length > 0 
-          ? Math.min(...teamLaps.map(l => l.lap_time_ms))
-          : null
+        const teamLaps = laps.filter(l => l.team_id === team.id).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
         const totalLaps = teamLaps.length
-        return { ...team, bestLap, totalLaps, laps: teamLaps }
+        
+        let bestLap = null
+        if (totalLaps > 0) {
+          const durations = teamLaps.map((lap, idx) => {
+            if (idx === 0) return lap.lap_time_ms
+            return lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms
+          })
+          bestLap = Math.min(...durations)
+        }
+        
+        return { 
+          ...team, 
+          bestLap, 
+          totalLaps, 
+          laps: teamLaps,
+          lastPassageTime: totalLaps > 0 ? teamLaps[totalLaps - 1].lap_time_ms : Infinity
+        }
       }).filter(t => t.totalLaps > 0)
-        .sort((a, b) => (a.bestLap || Infinity) - (b.bestLap || Infinity))
+        .sort((a, b) => {
+          if (b.totalLaps !== a.totalLaps) {
+            return b.totalLaps - a.totalLaps
+          }
+          return a.lastPassageTime - b.lastPassageTime
+        })
       
       if (teamResults.length > 0) rankings[cat] = teamResults
     })
