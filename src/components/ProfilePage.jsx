@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
+import AvatarPicker from './AvatarPicker'
 import './ProfilePage.css'
 
 const PERMISSION_LABELS = {
@@ -201,6 +202,16 @@ export default function ProfilePage({ session, profile, onLogout, orders = [], o
                 🚪 Déconnexion
               </button>
             </div>
+          </div>
+
+          {/* ─── Avatar Picker ─── */}
+          <div className="profile-split-card glass">
+            <h3 className="profile-section-title">🎨 Mon avatar</h3>
+            <AvatarPicker
+              session={session}
+              profile={profile}
+              onUpdated={onProfileUpdate}
+            />
           </div>
 
           {/* ─── Address & Security Row ─── */}
