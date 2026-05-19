@@ -181,11 +181,11 @@ export default function ProfilePage({ session, profile, onLogout, orders = [], o
                 <div className="profile-role-badge" style={{ borderColor: roleConfig.color, color: roleConfig.color }}>
                   {roleConfig.icon} {roleConfig.label}
                 </div>
-              </div>
 
-              <button className="btn btn-outline profile-logout-btn" onClick={onLogout}>
-                🚪 Déconnexion
-              </button>
+                <button className="btn btn-outline profile-logout-btn" onClick={onLogout}>
+                  🚪 Déconnexion
+                </button>
+              </div>
             </div>
           </div>
 

@@ -30,22 +30,25 @@
   padding: 0 30px 30px;
   margin-top: -50px;
   position: relative;
+  display: flex;
+  align-items: flex-start;
+  gap: 28px;
 }
 
 .profile-avatar-wrapper {
   position: relative;
-  width: 100px;
-  height: 100px;
-  margin-bottom: 15px;
+  width: 150px;
+  height: 150px;
+  flex-shrink: 0;
 }
 
 .profile-avatar-large {
-  width: 100px;
-  height: 100px;
+  width: 150px;
+  height: 150px;
   border-radius: 50%;
   object-fit: cover;
   border: 4px solid var(--bg-secondary);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 6px 28px rgba(0, 0, 0, 0.5);
 }
 
 .profile-role-dot {
@@ -62,7 +65,10 @@
 .profile-info-main {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+  padding-top: 56px; /* aligns top of name with the middle of the avatar (avatar sits above the banner) */
 }
 
 .profile-name-row {
@@ -197,8 +203,8 @@
 }
 
 .profile-logout-btn {
-  margin-top: 20px;
-  width: fit-content;
+  margin-top: 8px;
+  align-self: flex-start;
 }
 
 /* ─── Orders Section ─── */
@@ -297,6 +303,30 @@
 @media (max-width: 768px) {
   .profile-card-body {
     padding: 0 20px 20px;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 16px;
+  }
+
+  .profile-avatar-wrapper,
+  .profile-avatar-large {
+    width: 130px;
+    height: 130px;
+  }
+
+  .profile-info-main {
+    padding-top: 0;
+    align-items: center;
+  }
+
+  .profile-name-row,
+  .profile-edit-row {
+    justify-content: center;
+  }
+
+  .profile-logout-btn {
+    align-self: center;
   }
 
   .profile-meta-grid {
