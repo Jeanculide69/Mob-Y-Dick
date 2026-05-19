@@ -575,7 +575,7 @@ function App() {
   // additionnelles stockees dans profile.permissions.
   const ROLE_BASELINE_PERMISSIONS = {
     organisateur: ['manage_races', 'manage_events'],
-    moderator: ['moderate_content'],
+    moderator: ['moderate_content', 'manage_products'],
   }
   const hasPermission = (perm) => {
     if (isAdmin) return true
@@ -1579,7 +1579,7 @@ function App() {
                 <span className="section-tag">Shop</span>
                 <h2>Boutique Officielle</h2>
                 <p className="section-sub">Toutes nos créations sont personnalisables à 100% avec ton propre pseudo graffiti.</p>
-                {isAdmin && (
+                {hasPermission('manage_products') && (
                   <button className="btn btn-primary btn-sm inline-add-btn" onClick={() => handleOpenForm('product')}>
                     ➕ Ajouter un Produit
                   </button>
@@ -1648,7 +1648,7 @@ function App() {
                         </div>
                       </div>
 
-                      {isAdmin && p.id && (
+                      {hasPermission('manage_products') && p.id && (
                         <div className="admin-inline-actions">
                           <button onClick={() => handleOpenForm('product', p)}>✏️</button>
                           <button onClick={() => handleDeleteItem('products', p.id, p)}>🗑️</button>

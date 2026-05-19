@@ -11,7 +11,7 @@ const ALL_PERMISSIONS = Object.keys(PERMISSION_LABELS)
 const DEFAULT_PERMISSIONS_BY_ROLE = {
   admin: ALL_PERMISSIONS,
   organisateur: ['manage_events', 'manage_races'],
-  moderator: ['moderate_content'],
+  moderator: ['moderate_content', 'manage_products'],
   user: [],
 }
 
