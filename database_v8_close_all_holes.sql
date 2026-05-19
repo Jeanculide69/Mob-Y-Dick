@@ -21,6 +21,47 @@
 
 
 -- ─────────────────────────────────────────
+-- 0. Helpers (auto-cree si absent — rend V8 autonome)
+-- ─────────────────────────────────────────
+-- is_user_admin() : doit deja exister (cree en database_setup.sql).
+-- is_user_race_manager() : doit deja exister (cree en V3).
+-- is_user_admin_or_moderator() : cree en V6 ; on le redefinit ici au
+-- cas ou V6 n'aurait pas ete applique.
+CREATE OR REPLACE FUNCTION public.is_user_admin_or_moderator()
+RETURNS boolean AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role IN ('admin', 'moderator')
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Filet de securite : meme chose pour is_user_race_manager() au cas ou
+-- V3 n'aurait pas tourne.
+CREATE OR REPLACE FUNCTION public.is_user_race_manager()
+RETURNS boolean AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role IN ('admin', 'organisateur')
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+-- Et pour is_user_admin() (database_setup.sql) pour etre vraiment sur
+CREATE OR REPLACE FUNCTION public.is_user_admin()
+RETURNS boolean AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE id = auth.uid() AND role = 'admin'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER STABLE;
+
+
+-- ─────────────────────────────────────────
 -- 1. GALLERY : admin + moderator
 -- ─────────────────────────────────────────
 ALTER TABLE public.gallery ENABLE ROW LEVEL SECURITY;
