@@ -1421,19 +1421,45 @@ function App() {
                         </div>
                       )}
 
-                      {/* Race button for organisateurs & admins */}
-                      {(hasPermission('manage_races')) && ev.id && (
-                        <button 
-                          className="btn btn-sm btn-outline event-race-btn"
-                          onClick={() => {
-                            setSelectedRaceEvent(ev)
-                            setActiveRaceView('setup')
-                            setActiveTab('race')
-                          }}
-                        >
-                          🏁 Gérer la course
-                        </button>
-                      )}
+                      {/* Race buttons for organisateurs & admins */}
+                      {(hasPermission('manage_races')) && ev.id && (() => {
+                        const eventSession = raceSessions?.find(s => s.event_id === ev.id)
+                        const isLive = eventSession?.status === 'live'
+                        return (
+                          <div className="event-admin-actions" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                            <button
+                              className="btn btn-sm btn-outline event-race-btn"
+                              onClick={() => {
+                                setSelectedRaceEvent(ev)
+                                setActiveRaceView('setup')
+                                setActiveTab('race')
+                              }}
+                            >
+                              🏁 Gérer la course
+                            </button>
+                            {isLive && (
+                              <button
+                                className="btn btn-sm btn-outline event-chrono-btn"
+                                style={{ borderColor: '#00cc66', color: '#00cc66', fontWeight: 'bold' }}
+                                onClick={async () => {
+                                  const { data: teamsData } = await supabase
+                                    .from('race_teams')
+                                    .select('*')
+                                    .eq('session_id', eventSession.id)
+                                    .order('moto_number', { ascending: true })
+                                  setActiveRaceSession(eventSession)
+                                  setActiveRaceTeams(teamsData || [])
+                                  setActiveRaceView('chrono')
+                                  setActiveTab('race')
+                                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                                }}
+                              >
+                                ⏱️ Chronométrage
+                              </button>
+                            )}
+                          </div>
+                        )
+                      })()}
 
                       {/* Public Live and Results buttons next to the event */}
                       {ev.id && (() => {
