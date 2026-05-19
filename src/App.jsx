@@ -569,9 +569,19 @@ function App() {
   }
 
   // ─── Granular Permission System ───
+  // Admins ont tout, sinon on combine les permissions de base liees au role
+  // (un organisateur a toujours acces aux courses + evenements, un moderateur
+  // a toujours acces a la moderation) ET les permissions granulaires
+  // additionnelles stockees dans profile.permissions.
+  const ROLE_BASELINE_PERMISSIONS = {
+    organisateur: ['manage_races', 'manage_events'],
+    moderator: ['moderate_content'],
+  }
   const hasPermission = (perm) => {
     if (isAdmin) return true
     if (!profile) return false
+    const baseline = ROLE_BASELINE_PERMISSIONS[profile.role] || []
+    if (baseline.includes(perm)) return true
     const perms = profile.permissions || []
     return perms.includes(perm)
   }
