@@ -27,7 +27,7 @@ const DEMO_TEAMS = [
   { moto_number: 74, category: '70cc', pilot_1_name: 'Cédric Roger', pilot_1_sex: 'M', pilot_2_name: 'Arnaud Leroy', pilot_2_sex: 'M' }
 ]
 
-export default function RaceSetup({ event, session, onStartRace, onClose }) {
+export default function RaceSetup({ event, session, profile, isAdmin, onStartRace, onClose }) {
   const [raceSession, setRaceSession] = useState(null)
   const [teams, setTeams] = useState([])
   const [loading, setLoading] = useState(true)
@@ -35,6 +35,10 @@ export default function RaceSetup({ event, session, onStartRace, onClose }) {
   const [newCategory, setNewCategory] = useState('')
   const [previousSessions, setPreviousSessions] = useState([])
   const [showImportModal, setShowImportModal] = useState(false)
+
+  const [laps, setLaps] = useState([])
+  const [activeReviewTab, setActiveReviewTab] = useState('results')
+  const [newLapForm, setNewLapForm] = useState({ moto_number: '', minutes: '', seconds: '', milliseconds: '' })
 
   // Team form
   const [teamForm, setTeamForm] = useState({
@@ -72,6 +76,15 @@ export default function RaceSetup({ event, session, onStartRace, onClose }) {
         .eq('session_id', s.id)
         .order('moto_number', { ascending: true })
       setTeams(teamsData || [])
+
+      if (s.status === 'finished' || s.status === 'published') {
+        const { data: lapsData } = await supabase
+          .from('race_laps')
+          .select('*')
+          .eq('session_id', s.id)
+          .order('recorded_at', { ascending: false })
+        setLaps(lapsData || [])
+      }
     }
     setLoading(false)
   }
@@ -235,7 +248,602 @@ export default function RaceSetup({ event, session, onStartRace, onClose }) {
     setTeams([])
   }
 
-  if (loading) return <div className="race-setup-loading">Chargement...</div>
+  const formatTime = (ms) => {
+    if (!ms && ms !== 0) return '--:--.---'
+    const minutes = Math.floor(ms / 60000)
+    const seconds = Math.floor((ms % 60000) / 1000)
+    const millis = ms % 1000
+    return `${minutes}:${seconds.toString().padStart(2, '0')}.${millis.toString().padStart(3, '0')}`
+  }
+
+  const getRankings = (cat) => {
+    const catTeams = cat === 'all' ? teams : teams.filter(t => t.category === cat)
+    const sorted = catTeams.map(team => {
+      const teamLaps = laps.filter(l => l.team_id === team.id).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
+      const totalLaps = teamLaps.length
+      
+      let bestLap = null
+      let lastLap = null
+      let avgLap = null
+      
+      if (totalLaps > 0) {
+        const durations = teamLaps.map((lap, idx) => {
+          if (idx === 0) return lap.lap_time_ms
+          return lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms
+        })
+        bestLap = Math.min(...durations)
+        lastLap = durations[totalLaps - 1]
+        avgLap = Math.round(teamLaps[totalLaps - 1].lap_time_ms / totalLaps)
+      }
+
+      return { 
+        ...team, 
+        bestLap, 
+        avgLap, 
+        lastLap, 
+        totalLaps, 
+        laps: teamLaps,
+        lastPassageTime: totalLaps > 0 ? teamLaps[totalLaps - 1].lap_time_ms : Infinity
+      }
+    }).filter(t => t.totalLaps > 0)
+      .sort((a, b) => {
+        if (b.totalLaps !== a.totalLaps) {
+          return b.totalLaps - a.totalLaps
+        }
+        return a.lastPassageTime - b.lastPassageTime
+      })
+
+    return sorted.map((r, index) => {
+      if (index === 0) {
+        return { ...r, gapToLeader: 'LEADER', interval: '-' }
+      }
+      const leader = sorted[0]
+      const prev = sorted[index - 1]
+      
+      let gapToLeader = ''
+      if (r.totalLaps === leader.totalLaps) {
+        gapToLeader = `+${((r.lastPassageTime - leader.lastPassageTime) / 1000).toFixed(3)}s`
+      } else {
+        const lapsDown = leader.totalLaps - r.totalLaps
+        gapToLeader = `+${lapsDown} ${lapsDown === 1 ? 'Tour' : 'Tours'}`
+      }
+
+      let interval = ''
+      if (r.totalLaps === prev.totalLaps) {
+        interval = `+${((r.lastPassageTime - prev.lastPassageTime) / 1000).toFixed(3)}s`
+      } else {
+        const lapsDown = prev.totalLaps - r.totalLaps
+        interval = `+${lapsDown} ${lapsDown === 1 ? 'Tour' : 'Tours'}`
+      }
+
+      return { ...r, gapToLeader, interval }
+    })
+  }
+
+  const getFemaleWinner = () => {
+    const femaleTeams = teams.filter(t => 
+      t.pilot_1_sex === 'F' || 
+      t.pilot_2_sex === 'F' || 
+      t.pilot_3_sex === 'F'
+    )
+    if (femaleTeams.length === 0) return null
+
+    const rankedFemale = femaleTeams.map(team => {
+      const teamLaps = laps.filter(l => l.team_id === team.id).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
+      const totalLaps = teamLaps.length
+      
+      let bestLap = null
+      if (totalLaps > 0) {
+        const durations = teamLaps.map((lap, idx) => {
+          if (idx === 0) return lap.lap_time_ms
+          return lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms
+        })
+        bestLap = Math.min(...durations)
+      }
+
+      return {
+        ...team,
+        totalLaps,
+        bestLap,
+        lastPassageTime: totalLaps > 0 ? teamLaps[totalLaps - 1].lap_time_ms : Infinity
+      }
+    }).filter(t => t.totalLaps > 0)
+      .sort((a, b) => {
+        if (b.totalLaps !== a.totalLaps) {
+          return b.totalLaps - a.totalLaps
+        }
+        return a.lastPassageTime - b.lastPassageTime
+      })
+
+    return rankedFemale[0] || null
+  }
+
+  const handleDeleteLap = async (lapId) => {
+    if (!confirm('Supprimer ce passage ?')) return
+    const { error } = await supabase.from('race_laps').delete().eq('id', lapId)
+    if (error) {
+      alert("Erreur lors de la suppression : " + error.message)
+      return
+    }
+    loadSession()
+  }
+
+  const handleAddManualLap = async (e) => {
+    e.preventDefault()
+    const motoNum = parseInt(newLapForm.moto_number)
+    if (!motoNum) return
+
+    const team = teams.find(t => t.moto_number === motoNum)
+    if (!team) {
+      alert(`Moto #${motoNum} non trouvée dans la liste des équipes !`)
+      return
+    }
+
+    const min = parseInt(newLapForm.minutes || 0)
+    const sec = parseInt(newLapForm.seconds || 0)
+    const ms = parseInt(newLapForm.milliseconds || 0)
+    const totalMs = (min * 60 + sec) * 1000 + ms
+    if (totalMs <= 0) {
+      alert("Le temps du tour doit être supérieur à 0 !")
+      return
+    }
+
+    const teamLaps = laps.filter(l => l.team_id === team.id)
+    const nextLapNum = teamLaps.length + 1
+
+    const { error } = await supabase.from('race_laps').insert([{
+      session_id: raceSession.id,
+      team_id: team.id,
+      moto_number: motoNum,
+      lap_time_ms: totalMs,
+      lap_number: nextLapNum,
+      recorded_by: session.user.id
+    }])
+
+    if (error) {
+      alert("Erreur lors de l'enregistrement du tour : " + error.message)
+      return
+    }
+
+    setNewLapForm({ moto_number: '', minutes: '', seconds: '', milliseconds: '' })
+    loadSession()
+  }
+
+  const handlePublishResults = async () => {
+    if (!confirm('🏆 Valider et publier les résultats officiels de cette course ?')) return
+    try {
+      const { data, error } = await supabase.from('race_sessions').update({
+        status: 'published'
+      }).eq('id', raceSession.id).select()
+
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error("La session n'a pas pu être mise à jour.")
+
+      alert("Résultats officiels publiés avec succès !")
+      setRaceSession(data[0])
+    } catch (err) {
+      alert("Erreur lors de la publication : " + err.message)
+    }
+  }
+
+  const handleUnpublishResults = async () => {
+    if (!confirm('🔓 Dépublier les résultats ? La session repassera en cours de modification.')) return
+    try {
+      const { data, error } = await supabase.from('race_sessions').update({
+        status: 'finished'
+      }).eq('id', raceSession.id).select()
+
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error("La session n'a pas pu être mise à jour.")
+
+      alert("Résultats dépubliés. La course est de nouveau modifiable.")
+      setRaceSession(data[0])
+    } catch (err) {
+      alert("Erreur lors de la dépublication : " + err.message)
+    }
+  }
+
+  const isPublished = raceSession?.status === 'published'
+  const canModify = raceSession && (raceSession.status !== 'published' || isAdmin)
+
+  if (raceSession && (raceSession.status === 'finished' || raceSession.status === 'published')) {
+    const femaleWinner = getFemaleWinner()
+    const femaleNames = []
+    if (femaleWinner) {
+      if (femaleWinner.pilot_1_sex === 'F') femaleNames.push(femaleWinner.pilot_1_name)
+      if (femaleWinner.pilot_2_sex === 'F') femaleNames.push(femaleWinner.pilot_2_name)
+      if (femaleWinner.pilot_3_sex === 'F') femaleNames.push(femaleWinner.pilot_3_name)
+    }
+
+    return (
+      <div className="race-setup">
+        <div className="race-setup-header">
+          <div>
+            <h2>🏆 Revue des Résultats</h2>
+            <p className="race-setup-event-name">{event.title} — {new Date(event.date).toLocaleDateString('fr-FR')}</p>
+          </div>
+          <button className="btn btn-ghost" onClick={onClose}>← Retour</button>
+        </div>
+
+        {/* Publication Status Banner */}
+        <div className={`race-status-bar glass status-${raceSession.status}`}>
+          <span className="race-status-indicator">
+            {isPublished ? '📢 Résultats Officiels Publiés' : '🏁 Course Terminée — En attente de validation'}
+          </span>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {!isPublished ? (
+              <button className="btn btn-primary btn-sm" onClick={handlePublishResults} style={{ background: 'linear-gradient(135deg, #00cc66 0%, #009944 100%)', border: 'none' }}>
+                🏆 Publier les Résultats
+              </button>
+            ) : (
+              isAdmin && (
+                <button className="btn btn-outline btn-sm" style={{ borderColor: '#ff4444', color: '#ff4444' }} onClick={handleUnpublishResults}>
+                  🔓 Dépublier (Admin)
+                </button>
+              )
+            )}
+          </div>
+        </div>
+
+        {/* Tab Navigation */}
+        <div className="review-tabs">
+          <button 
+            className={`review-tab-btn ${activeReviewTab === 'results' ? 'active' : ''}`}
+            onClick={() => setActiveReviewTab('results')}
+          >
+            🏆 Podiums & Classements
+          </button>
+          <button 
+            className={`review-tab-btn ${activeReviewTab === 'laps' ? 'active' : ''}`}
+            onClick={() => setActiveReviewTab('laps')}
+          >
+            ⏱️ Gestion des Passages ({laps.length})
+          </button>
+          <button 
+            className={`review-tab-btn ${activeReviewTab === 'teams' ? 'active' : ''}`}
+            onClick={() => setActiveReviewTab('teams')}
+          >
+            🏍️ Équipes ({teams.length})
+          </button>
+        </div>
+
+        {/* Tab Contents */}
+        {activeReviewTab === 'results' && (
+          <div className="review-tab-content fade-in">
+            {/* Gagnante Féminine Overall */}
+            {femaleWinner && (
+              <div className="female-winner-card glass">
+                <div className="female-winner-header">
+                  <span className="female-crown-badge">👑 Coupe Féminine</span>
+                  <h4>Gagnante Féminine Toute Catégorie</h4>
+                </div>
+                <div className="female-winner-body">
+                  <div className="female-winner-trophy">🏆</div>
+                  <div className="female-winner-details">
+                    <span className="female-pilot-name">{femaleNames.join(' & ')}</span>
+                    <span className="female-pilot-team">Moto #{femaleWinner.moto_number} — {femaleWinner.category}</span>
+                    <span className="female-pilot-stats">{femaleWinner.totalLaps} Tours complets — Meilleur tour : {formatTime(femaleWinner.bestLap)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Podiums by category */}
+            <div className="review-podiums-grid">
+              {categories.map(cat => {
+                const catRankings = getRankings(cat)
+                if (catRankings.length === 0) return null
+                return (
+                  <div key={cat} className="review-podium-card glass">
+                    <h3 className="review-podium-cat">{cat}</h3>
+                    <div className="review-podium-visual">
+                      {/* 2nd place */}
+                      {catRankings[1] && (
+                        <div className="review-podium-step step-2">
+                          <div className="review-podium-avatar">🥈</div>
+                          <span className="review-podium-name">{catRankings[1].pilot_1_name}</span>
+                          <span className="review-podium-chrono">{catRankings[1].totalLaps} Tours</span>
+                          <span className="review-podium-best">Min: {formatTime(catRankings[1].bestLap)}</span>
+                          <div className="review-podium-block silver">2</div>
+                        </div>
+                      )}
+                      {/* 1st place */}
+                      {catRankings[0] && (
+                        <div className="review-podium-step step-1">
+                          <div className="review-podium-avatar">🥇</div>
+                          <span className="review-podium-name">{catRankings[0].pilot_1_name}</span>
+                          <span className="review-podium-chrono">{catRankings[0].totalLaps} Tours</span>
+                          <span className="review-podium-best">Min: {formatTime(catRankings[0].bestLap)}</span>
+                          <div className="review-podium-block gold">1</div>
+                        </div>
+                      )}
+                      {/* 3rd place */}
+                      {catRankings[2] && (
+                        <div className="review-podium-step step-3">
+                          <div className="review-podium-avatar">🥉</div>
+                          <span className="review-podium-name">{catRankings[2].pilot_1_name}</span>
+                          <span className="review-podium-chrono">{catRankings[2].totalLaps} Tours</span>
+                          <span className="review-podium-best">Min: {formatTime(catRankings[2].bestLap)}</span>
+                          <div className="review-podium-block bronze">3</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Complete Rankings list */}
+            {categories.map(cat => {
+              const catRankings = getRankings(cat)
+              if (catRankings.length === 0) return null
+              return (
+                <div key={cat} className="review-cat-section glass" style={{ marginTop: '20px', padding: '20px' }}>
+                  <h3 style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '10px', marginBottom: '15px' }}>🏆 Classement {cat}</h3>
+                  <table className="chrono-rankings-table" style={{ width: '100%' }}>
+                    <thead>
+                      <tr>
+                        <th>Pos</th>
+                        <th>N°</th>
+                        <th>Pilote(s)</th>
+                        <th>Tours</th>
+                        <th>Meilleur Tour</th>
+                        <th>Écart Leader</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {catRankings.map((r, i) => (
+                        <tr key={r.id}>
+                          <td>{i + 1}</td>
+                          <td>#{r.moto_number}</td>
+                          <td>
+                            <div>{r.pilot_1_name}</div>
+                            {r.pilot_2_name && <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>{r.pilot_2_name}</div>}
+                          </td>
+                          <td>{r.totalLaps}</td>
+                          <td>{formatTime(r.bestLap)}</td>
+                          <td>{r.gapToLeader}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* Tab 2: Laps management */}
+        {activeReviewTab === 'laps' && (
+          <div className="review-tab-content fade-in">
+            {/* Add Lap manually if allowed */}
+            {canModify ? (
+              <form onSubmit={handleAddManualLap} className="manual-lap-form glass" style={{ marginBottom: '20px', padding: '20px' }}>
+                <h4 style={{ margin: '0 0 15px 0' }}>➕ Ajouter un passage manuellement</h4>
+                <div className="race-form-row">
+                  <div className="race-form-group" style={{ flex: 1 }}>
+                    <label>Moto #</label>
+                    <input 
+                      type="number"
+                      value={newLapForm.moto_number}
+                      onChange={e => setNewLapForm({ ...newLapForm, moto_number: e.target.value })}
+                      placeholder="N°"
+                      required
+                    />
+                  </div>
+                  <div className="race-form-group" style={{ flex: 1 }}>
+                    <label>Minutes</label>
+                    <input 
+                      type="number"
+                      value={newLapForm.minutes}
+                      onChange={e => setNewLapForm({ ...newLapForm, minutes: e.target.value })}
+                      placeholder="Min"
+                      min="0"
+                    />
+                  </div>
+                  <div className="race-form-group" style={{ flex: 1 }}>
+                    <label>Secondes</label>
+                    <input 
+                      type="number"
+                      value={newLapForm.seconds}
+                      onChange={e => setNewLapForm({ ...newLapForm, seconds: e.target.value })}
+                      placeholder="Sec"
+                      min="0"
+                      max="59"
+                    />
+                  </div>
+                  <div className="race-form-group" style={{ flex: 1 }}>
+                    <label>Millisecondes</label>
+                    <input 
+                      type="number"
+                      value={newLapForm.milliseconds}
+                      onChange={e => setNewLapForm({ ...newLapForm, milliseconds: e.target.value })}
+                      placeholder="Ms"
+                      min="0"
+                      max="999"
+                    />
+                  </div>
+                  <div className="race-form-group" style={{ flex: 1, justifyContent: 'flex-end' }}>
+                    <button type="submit" className="btn btn-primary" style={{ padding: '8px 16px' }}>Enregistrer</button>
+                  </div>
+                </div>
+              </form>
+            ) : (
+              <div className="shop-disclaimer glass" style={{ marginBottom: '20px', padding: '15px' }}>
+                🔒 Modification des passages verrouillée (résultats publiés).
+              </div>
+            )}
+
+            {/* List of Laps */}
+            <div className="laps-list-container glass" style={{ padding: '20px' }}>
+              <h4 style={{ margin: '0 0 15px 0' }}>⏱️ Historique de tous les passages ({laps.length})</h4>
+              <div style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                <table className="chrono-rankings-table" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th>Heure</th>
+                      <th>Moto</th>
+                      <th>Pilote</th>
+                      <th>N° Tour</th>
+                      <th>Temps Cumulé</th>
+                      {canModify && <th>Action</th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {laps.map(l => {
+                      const team = teams.find(t => t.id === l.team_id)
+                      return (
+                        <tr key={l.id}>
+                          <td>{new Date(l.recorded_at).toLocaleTimeString('fr-FR')}</td>
+                          <td>#{l.moto_number}</td>
+                          <td>{team?.pilot_1_name || '?'}</td>
+                          <td>Tour {l.lap_number}</td>
+                          <td>{formatTime(l.lap_time_ms)}</td>
+                          {canModify && (
+                            <td>
+                              <button 
+                                type="button"
+                                className="chrono-recent-delete" 
+                                onClick={() => handleDeleteLap(l.id)}
+                                style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', fontSize: '1.1rem' }}
+                              >
+                                ✕
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      )
+                    })}
+                    {laps.length === 0 && (
+                      <tr>
+                        <td colSpan={canModify ? 6 : 5} style={{ textAlign: 'center', padding: '20px' }}>Aucun passage enregistré.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Tab 3: Teams list */}
+        {activeReviewTab === 'teams' && (
+          <div className="review-tab-content fade-in">
+            {canModify ? (
+              <form className="race-team-form glass" onSubmit={handleTeamSubmit}>
+                <h3>{editingTeam ? '✏️ Modifier Équipe' : '➕ Ajouter une Équipe'}</h3>
+                
+                <div className="race-form-row">
+                  <div className="race-form-group">
+                    <label>N° Moto *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={teamForm.moto_number}
+                      onChange={e => setTeamForm({...teamForm, moto_number: e.target.value})}
+                      placeholder="N°"
+                      required
+                      className="race-input-number"
+                    />
+                  </div>
+                  <div className="race-form-group" style={{ flex: 2 }}>
+                    <label>Catégorie *</label>
+                    <select
+                      value={teamForm.category}
+                      onChange={e => setTeamForm({...teamForm, category: e.target.value})}
+                    >
+                      {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Pilots */}
+                {[1, 2, 3].map(n => (
+                  <div key={n} className="race-form-row race-pilot-row">
+                    <div className="race-form-group" style={{ flex: 3 }}>
+                      <label>Pilote {n} {n === 1 ? '*' : '(optionnel)'}</label>
+                      <input
+                        type="text"
+                        placeholder={`Nom du pilote ${n}`}
+                        value={teamForm[`pilot_${n}_name`]}
+                        onChange={e => setTeamForm({...teamForm, [`pilot_${n}_name`]: e.target.value})}
+                        required={n === 1}
+                      />
+                    </div>
+                    <div className="race-form-group" style={{ flex: 1 }}>
+                      <label>Sexe</label>
+                      <select
+                        value={teamForm[`pilot_${n}_sex`]}
+                        onChange={e => setTeamForm({...teamForm, [`pilot_${n}_sex`]: e.target.value})}
+                      >
+                        <option value="M">♂ Homme</option>
+                        <option value="F">♀ Femme</option>
+                      </select>
+                    </div>
+                  </div>
+                ))}
+
+                <div className="race-form-actions">
+                  <button type="submit" className="btn btn-primary">
+                    {editingTeam ? '💾 Enregistrer' : '➕ Ajouter'}
+                  </button>
+                  {editingTeam && (
+                    <button type="button" className="btn btn-ghost" onClick={() => {
+                      setEditingTeam(null)
+                      setTeamForm({ moto_number: '', category: categories[0] || DEFAULT_CATEGORIES[0], pilot_1_name: '', pilot_1_sex: 'M', pilot_2_name: '', pilot_2_sex: 'M', pilot_3_name: '', pilot_3_sex: 'M' })
+                    }}>Annuler</button>
+                  )}
+                </div>
+              </form>
+            ) : (
+              <div className="shop-disclaimer glass" style={{ marginBottom: '20px', padding: '15px' }}>
+                🔒 Modification des équipes verrouillée (résultats publiés).
+              </div>
+            )}
+
+            {/* Teams Grid */}
+            <div className="race-teams-list">
+              <h3>🏍️ Équipes Inscrites ({teams.length})</h3>
+              {teams.length === 0 ? (
+                <div className="race-empty">Aucune équipe inscrite.</div>
+              ) : (
+                <div className="race-teams-grid">
+                  {teams.map(t => (
+                    <div key={t.id} className="race-team-card glass">
+                      <div className="race-team-number">#{t.moto_number}</div>
+                      <div className="race-team-info">
+                        <span className="race-team-category">{t.category}</span>
+                        <div className="race-team-pilots">
+                          <span>{t.pilot_1_sex === 'F' ? '♀' : '♂'} {t.pilot_1_name}</span>
+                          {t.pilot_2_name && <span>{t.pilot_2_sex === 'F' ? '♀' : '♂'} {t.pilot_2_name}</span>}
+                          {t.pilot_3_name && <span>{t.pilot_3_sex === 'F' ? '♀' : '♂'} {t.pilot_3_name}</span>}
+                        </div>
+                      </div>
+                      {canModify && (
+                        <div className="race-team-actions">
+                          <button onClick={() => handleEditTeam(t)}>✏️</button>
+                          <button onClick={() => handleDeleteTeam(t.id)}>🗑️</button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Delete session button is only visible to admin once published */}
+        {(!isPublished || isAdmin) && (
+          <div className="race-setup-actions glass" style={{ marginTop: '20px' }}>
+            <button className="btn btn-ghost race-delete-btn" onClick={handleDeleteSession}>
+              🗑️ Supprimer la session
+            </button>
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="race-setup">

@@ -1661,7 +1661,13 @@ function App() {
 
       {/* ─── LIVE RACE (public) ─── */}
       {activeTab === 'live' && (
-        <LiveRace customSessionId={viewingSessionId} />
+        <LiveRace 
+          customSessionId={viewingSessionId} 
+          onClose={() => {
+            setViewingSessionId(null)
+            setActiveTab('events')
+          }}
+        />
       )}
 
       {/* ─── RACE SETUP (organisateur) ─── */}
@@ -1671,6 +1677,8 @@ function App() {
             <RaceSetup 
               event={selectedRaceEvent}
               session={session}
+              profile={profile}
+              isAdmin={isAdmin || forceAdmin}
               onStartRace={(rSession, rTeams) => {
                 setActiveRaceSession(rSession)
                 setActiveRaceTeams(rTeams)
@@ -1695,11 +1703,10 @@ function App() {
               raceSession={activeRaceSession}
               teams={activeRaceTeams}
               session={session}
+              profile={profile}
+              isAdmin={isAdmin || forceAdmin}
               onFinish={() => {
-                setActiveRaceView(null)
-                setActiveRaceSession(null)
-                setLiveSession(null)
-                setActiveTab('events')
+                setActiveRaceView('setup')
               }}
               onClose={() => {
                 setActiveRaceView('setup')

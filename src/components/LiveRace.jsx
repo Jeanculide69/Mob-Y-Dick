@@ -10,7 +10,7 @@ const formatTime = (ms) => {
   return `${minutes}:${seconds.toString().padStart(2, '0')}.${millis.toString().padStart(3, '0')}`
 }
 
-export default function LiveRace() {
+export default function LiveRace({ customSessionId, onClose }) {
   const [session, setSession] = useState(null)
   const [teams, setTeams] = useState([])
   const [laps, setLaps] = useState([])
@@ -64,7 +64,7 @@ export default function LiveRace() {
 
   useEffect(() => {
     loadLiveSession()
-  }, [])
+  }, [customSessionId])
 
   // Elapsed time counter
   useEffect(() => {
@@ -78,13 +78,25 @@ export default function LiveRace() {
 
   const loadLiveSession = async () => {
     setLoading(true)
-    // Find any live or recently finished session
-    const { data: sessions } = await supabase
-      .from('race_sessions')
-      .select('*')
-      .in('status', ['live', 'finished', 'published'])
-      .order('created_at', { ascending: false })
-      .limit(1)
+    let sessions = []
+    
+    if (customSessionId) {
+      const { data } = await supabase
+        .from('race_sessions')
+        .select('*')
+        .eq('id', customSessionId)
+        .limit(1)
+      sessions = data || []
+    } else {
+      // Find any live or recently finished session
+      const { data } = await supabase
+        .from('race_sessions')
+        .select('*')
+        .in('status', ['live', 'finished', 'published'])
+        .order('created_at', { ascending: false })
+        .limit(1)
+      sessions = data || []
+    }
 
     if (sessions && sessions.length > 0) {
       const s = sessions[0]
@@ -209,6 +221,44 @@ export default function LiveRace() {
     })
   }
 
+  const getFemaleWinner = () => {
+    const femaleTeams = teams.filter(t => 
+      t.pilot_1_sex === 'F' || 
+      t.pilot_2_sex === 'F' || 
+      t.pilot_3_sex === 'F'
+    )
+    if (femaleTeams.length === 0) return null
+
+    const rankedFemale = femaleTeams.map(team => {
+      const teamLaps = laps.filter(l => l.team_id === team.id).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
+      const totalLaps = teamLaps.length
+      
+      let bestLap = null
+      if (totalLaps > 0) {
+        const durations = teamLaps.map((lap, idx) => {
+          if (idx === 0) return lap.lap_time_ms
+          return lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms
+        })
+        bestLap = Math.min(...durations)
+      }
+
+      return {
+        ...team,
+        totalLaps,
+        bestLap,
+        lastPassageTime: totalLaps > 0 ? teamLaps[totalLaps - 1].lap_time_ms : Infinity
+      }
+    }).filter(t => t.totalLaps > 0)
+      .sort((a, b) => {
+        if (b.totalLaps !== a.totalLaps) {
+          return b.totalLaps - a.totalLaps
+        }
+        return a.lastPassageTime - b.lastPassageTime
+      })
+
+    return rankedFemale[0] || null
+  }
+
   const allRankings = getRankings(selectedCategory)
   const recentLaps = laps.slice(0, 8)
 
@@ -230,6 +280,16 @@ export default function LiveRace() {
   return (
     <section className="section page-top live-section">
       <div className="container">
+        {onClose && (
+          <button 
+            className="btn btn-ghost" 
+            onClick={onClose}
+            style={{ marginBottom: '15px', color: 'var(--accent)', fontWeight: 'bold' }}
+          >
+            ← Retour aux Événements
+          </button>
+        )}
+        
         {/* ─── Hero Banner ─── */}
         <div className="live-hero glass">
           <div className="live-hero-bg" />
@@ -284,6 +344,28 @@ export default function LiveRace() {
             </div>
           </div>
         )}
+
+        {/* ─── Gagnante Féminine Overall ─── */}
+        {(() => {
+          const femaleWinner = getFemaleWinner()
+          if (!femaleWinner) return null
+          const femaleNames = []
+          if (femaleWinner.pilot_1_sex === 'F') femaleNames.push(femaleWinner.pilot_1_name)
+          if (femaleWinner.pilot_2_sex === 'F') femaleNames.push(femaleWinner.pilot_2_name)
+          if (femaleWinner.pilot_3_sex === 'F') femaleNames.push(femaleWinner.pilot_3_name)
+
+          return (
+            <div className="live-best-overall glass" style={{ border: '1px solid rgba(255, 0, 128, 0.3)', background: 'linear-gradient(90deg, rgba(255, 0, 128, 0.08), rgba(0, 0, 0, 0.2))', marginTop: '10px' }}>
+              <span className="live-best-label" style={{ color: '#ff3399' }}>👑 Gagnante Féminine Toute Catégorie</span>
+              <div className="live-best-info">
+                <span className="live-best-moto" style={{ color: '#ff3399' }}>#{femaleWinner.moto_number}</span>
+                <span className="live-best-pilot">{femaleNames.join(' & ')}</span>
+                <span className="live-best-time" style={{ color: '#ff3399', textShadow: '0 0 10px rgba(255, 0, 128, 0.3)' }}>{femaleWinner.totalLaps} Tours</span>
+                <span className="live-best-cat">Min: {formatTime(femaleWinner.bestLap)}</span>
+              </div>
+            </div>
+          )
+        })()}
 
         {/* ─── Live Video Broadcast Container ─── */}
         {session.live_stream_active && (

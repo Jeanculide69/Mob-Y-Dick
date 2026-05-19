@@ -126,12 +126,19 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
 
   const handleFinishRace = async () => {
     if (!confirm('🏁 Terminer la course ? Les chronos ne pourront plus être saisis.')) return
-    await supabase.from('race_sessions').update({
-      status: 'finished',
-      finished_at: new Date().toISOString()
-    }).eq('id', raceSession.id)
-    
-    if (onFinish) onFinish()
+    try {
+      const { data, error } = await supabase.from('race_sessions').update({
+        status: 'finished',
+        finished_at: new Date().toISOString()
+      }).eq('id', raceSession.id).select()
+      
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error("La session n'a pas pu être mise à jour. Vérifiez vos permissions.")
+      
+      if (onFinish) onFinish()
+    } catch (err) {
+      alert("Erreur lors du changement de statut : " + err.message)
+    }
   }
 
   // Build rankings by category
