@@ -133,6 +133,11 @@ CREATE POLICY "settings_delete" ON public.settings FOR DELETE USING (public.is_u
 -- 5. ORDERS : INSERT anonyme (checkout sans compte) + lecture/gestion admin
 --    Les utilisateurs connectes peuvent aussi voir leurs propres commandes.
 -- ─────────────────────────────────────────
+-- S'assurer que la colonne user_id existe (le code App.jsx la set deja
+-- depuis longtemps, mais elle n'avait jamais ete ajoutee a la table).
+ALTER TABLE public.orders
+  ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES public.profiles(id) ON DELETE SET NULL;
+
 ALTER TABLE public.orders ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "orders_read" ON public.orders;
