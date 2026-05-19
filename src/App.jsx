@@ -1441,17 +1441,33 @@ function App() {
                         if (!eventSession) return null
                         if (eventSession.status === 'live') {
                           return (
-                            <button 
-                              className="btn btn-sm btn-primary event-live-btn pulse-live"
-                              style={{ border: 'none', fontWeight: 'bold' }}
-                              onClick={() => {
-                                setViewingSessionId(eventSession.id)
-                                setActiveTab('live')
-                                window.scrollTo({ top: 0, behavior: 'smooth' })
-                              }}
-                            >
-                              🔴 Suivre le Live
-                            </button>
+                            <div className="event-live-actions" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                              <button
+                                className="btn btn-sm btn-primary event-live-btn pulse-live"
+                                style={{ border: 'none', fontWeight: 'bold' }}
+                                onClick={() => {
+                                  setViewingSessionId(eventSession.id)
+                                  setActiveTab('live')
+                                  window.scrollTo({ top: 0, behavior: 'smooth' })
+                                }}
+                              >
+                                🔴 Suivre le Live
+                              </button>
+                              {hasPermission('manage_races') && (
+                                <button
+                                  className="btn btn-sm btn-outline event-broadcast-btn"
+                                  style={{ borderColor: '#ff3b30', color: '#ff3b30', fontWeight: 'bold' }}
+                                  onClick={() => {
+                                    setSelectedRaceEvent(ev)
+                                    setActiveRaceView('setup')
+                                    setActiveTab('race')
+                                    window.scrollTo({ top: 0, behavior: 'smooth' })
+                                  }}
+                                >
+                                  🎥 Diffusion vidéo
+                                </button>
+                              )}
+                            </div>
                           )
                         }
                         if (eventSession.status === 'finished' || eventSession.status === 'published') {
