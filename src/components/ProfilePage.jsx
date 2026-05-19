@@ -22,11 +22,20 @@ const ROLE_CONFIG = {
   user: { label: 'Membre', icon: '👤', color: '#888' },
 }
 
+const TABS = [
+  { id: 'profile', icon: '👤', label: 'Profil' },
+  { id: 'security', icon: '🔒', label: 'Sécurité' },
+  { id: 'address', icon: '🏠', label: 'Adresse' },
+  { id: 'orders', icon: '📦', label: 'Commandes' },
+]
+
 export default function ProfilePage({ session, profile, onLogout, orders = [], onProfileUpdate }) {
+  const [activeTab, setActiveTab] = useState('profile')
   const [editing, setEditing] = useState(false)
   const [displayName, setDisplayName] = useState(profile?.display_name || '')
   const [saving, setSaving] = useState(false)
   const [saveMsg, setSaveMsg] = useState(null)
+  const [showAvatarModal, setShowAvatarModal] = useState(false)
 
   // Shipping Address States
   const [shippingAddress, setShippingAddress] = useState(profile?.shipping_address || '')
@@ -51,7 +60,7 @@ export default function ProfilePage({ session, profile, onLogout, orders = [], o
         pending_display_name: displayName.trim(),
         display_name_status: 'pending'
       }).eq('id', session.user.id)
-      
+
       if (error) throw error
       setSaveMsg('⏳ Demande envoyée à l\'administrateur !')
       setEditing(false)
@@ -74,7 +83,7 @@ export default function ProfilePage({ session, profile, onLogout, orders = [], o
         shipping_city: shippingCity,
         shipping_country: shippingCountry
       }).eq('id', session.user.id)
-      
+
       if (error) throw error
       setAddressMsg('✅ Adresse sauvegardée avec succès !')
       if (onProfileUpdate) onProfileUpdate()
@@ -107,18 +116,27 @@ export default function ProfilePage({ session, profile, onLogout, orders = [], o
         </div>
 
         <div className="profile-page-container">
-          {/* ─── Profile Card ─── */}
+          {/* ─── Top Identity Card ─── */}
           <div className="profile-card glass">
             <div className="profile-card-banner">
               <div className="profile-card-banner-gradient" />
             </div>
             <div className="profile-card-body">
               <div className="profile-avatar-wrapper">
-                <img 
-                  src={profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${session.user.email}`} 
-                  alt="Avatar" 
+                <img
+                  src={profile.avatar_url || `https://api.dicebear.com/7.x/avataaars/svg?seed=${session.user.email}`}
+                  alt="Avatar"
                   className="profile-avatar-large"
                 />
+                <button
+                  type="button"
+                  className="profile-avatar-edit-btn"
+                  onClick={() => setShowAvatarModal(true)}
+                  aria-label="Modifier l'avatar"
+                  title="Modifier l'avatar"
+                >
+                  ✏️
+                </button>
                 <span className="profile-role-dot" style={{ backgroundColor: roleConfig.color }} />
               </div>
 
@@ -135,7 +153,7 @@ export default function ProfilePage({ session, profile, onLogout, orders = [], o
                   </div>
                 ) : editing ? (
                   <div className="profile-edit-row">
-                    <input 
+                    <input
                       type="text"
                       className="profile-edit-input"
                       value={displayName}
@@ -157,7 +175,7 @@ export default function ProfilePage({ session, profile, onLogout, orders = [], o
                   </div>
                 )}
                 <p className="profile-email">{session.user.email}</p>
-                
+
                 {saveMsg && <div className="profile-save-msg">{saveMsg}</div>}
 
                 <div className="profile-role-badge" style={{ borderColor: roleConfig.color, color: roleConfig.color }}>
@@ -165,150 +183,201 @@ export default function ProfilePage({ session, profile, onLogout, orders = [], o
                 </div>
               </div>
 
-              <div className="profile-meta-grid">
-                <div className="profile-meta-item">
-                  <span className="profile-meta-label">Inscrit le</span>
-                  <span className="profile-meta-value">
-                    {new Date(profile.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                  </span>
-                </div>
-                <div className="profile-meta-item">
-                  <span className="profile-meta-label">Commandes</span>
-                  <span className="profile-meta-value">{myOrders.length}</span>
-                </div>
-                <div className="profile-meta-item">
-                  <span className="profile-meta-label">Connexion</span>
-                  <span className="profile-meta-value">
-                    {session.user.app_metadata?.provider === 'google' ? '🔑 Google' : '📧 Email'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Permissions badges */}
-              {permissions.length > 0 && (
-                <div className="profile-permissions">
-                  <h4 className="profile-section-title">Mes Permissions</h4>
-                  <div className="profile-perm-grid">
-                    {permissions.map(perm => (
-                      <span key={perm} className="profile-perm-badge">
-                        {PERMISSION_LABELS[perm]?.icon || '🔧'} {PERMISSION_LABELS[perm]?.label || perm}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <button className="btn btn-outline profile-logout-btn" onClick={onLogout}>
                 🚪 Déconnexion
               </button>
             </div>
           </div>
 
-          {/* ─── Avatar Picker ─── */}
-          <div className="profile-split-card glass">
-            <h3 className="profile-section-title">🎨 Mon avatar</h3>
-            <AvatarPicker
-              session={session}
-              profile={profile}
-              onUpdated={onProfileUpdate}
-            />
-          </div>
-
-          {/* ─── Address & Security Row ─── */}
-          <div className="profile-split-row">
-            {/* Shipping Address */}
-            <div className="profile-split-card glass">
-              <h3 className="profile-section-title">🏠 Adresse de livraison</h3>
-              <form onSubmit={handleAddressSave} className="profile-address-form">
-                <div className="profile-form-group">
-                  <label>Rue & Numéro</label>
-                  <input
-                    type="text"
-                    value={shippingAddress}
-                    onChange={e => setShippingAddress(e.target.value)}
-                    placeholder="12 rue de la Paix"
-                  />
-                </div>
-                <div className="profile-form-row">
-                  <div className="profile-form-group" style={{ flex: 1 }}>
-                    <label>Code Postal</label>
-                    <input
-                      type="text"
-                      value={shippingZip}
-                      onChange={e => setShippingZip(e.target.value)}
-                      placeholder="75001"
-                    />
-                  </div>
-                  <div className="profile-form-group" style={{ flex: 2 }}>
-                    <label>Ville</label>
-                    <input
-                      type="text"
-                      value={shippingCity}
-                      onChange={e => setShippingCity(e.target.value)}
-                      placeholder="Paris"
-                    />
-                  </div>
-                </div>
-                <div className="profile-form-group">
-                  <label>Pays</label>
-                  <input
-                    type="text"
-                    value={shippingCountry}
-                    onChange={e => setShippingCountry(e.target.value)}
-                    placeholder="France"
-                  />
-                </div>
-                <button type="submit" className="btn btn-primary btn-sm" disabled={savingAddress} style={{ marginTop: '10px' }}>
-                  {savingAddress ? 'Enregistrement...' : '💾 Sauvegarder mon adresse'}
-                </button>
-                {addressMsg && <div className="profile-address-msg" style={{ marginTop: '10px', fontSize: '0.85rem' }}>{addressMsg}</div>}
-              </form>
-            </div>
-
-            {/* Security Card */}
-            <div className="profile-split-card glass">
-              <h3 className="profile-section-title">🔒 Sécurité & Connexion</h3>
-              <p className="profile-security-desc" style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5' }}>
-                Vous pouvez réinitialiser ou modifier votre mot de passe à tout moment. Un lien de réinitialisation sécurisé vous sera instantanément envoyé par e-mail.
-              </p>
-              <button className="btn btn-outline" onClick={handleResetPassword} style={{ width: '100%', marginTop: '30px' }}>
-                📧 Envoyer un e-mail de réinitialisation
+          {/* ─── Tabs Navigation ─── */}
+          <div className="profile-tabs">
+            {TABS.map(tab => (
+              <button
+                key={tab.id}
+                type="button"
+                className={`profile-tab ${activeTab === tab.id ? 'active' : ''}`}
+                onClick={() => setActiveTab(tab.id)}
+              >
+                <span className="profile-tab-icon">{tab.icon}</span>
+                <span className="profile-tab-label">{tab.label}</span>
+                {tab.id === 'orders' && myOrders.length > 0 && (
+                  <span className="profile-tab-count">{myOrders.length}</span>
+                )}
               </button>
-            </div>
+            ))}
           </div>
 
-          {/* ─── Orders History ─── */}
-          <div className="profile-orders-section">
-            <h3 className="profile-section-title">📦 Mon Historique de Commandes</h3>
-            
-            {myOrders.length === 0 ? (
-              <div className="profile-empty-state glass">
-                <span className="profile-empty-icon">🛒</span>
-                <p>Vous n'avez pas encore passé de commande.</p>
-                <span className="profile-empty-sub">Découvrez notre boutique pour vos premiers goodies MobCross !</span>
-              </div>
-            ) : (
-              <div className="profile-orders-list">
-                {myOrders.map(o => (
-                  <div key={o.id} className="profile-order-card glass">
-                    <div className="profile-order-header">
-                      <h4>{o.product_name}</h4>
-                      <span className={`profile-order-status status-${o.status?.toLowerCase().replace(/\s+/g, '-')}`}>
-                        {o.status}
-                      </span>
-                    </div>
-                    <div className="profile-order-details">
-                      <span><strong>Date :</strong> {new Date(o.created_at).toLocaleDateString('fr-FR')}</span>
-                      <span><strong>Montant :</strong> <span className="text-accent">{o.price}</span></span>
-                      {o.custom_text && <span><strong>Flocage :</strong> {o.custom_text}</span>}
-                      {o.size && <span><strong>Taille :</strong> {o.size}</span>}
+          {/* ─── Tab Content ─── */}
+          <div className="profile-tab-content">
+            {activeTab === 'profile' && (
+              <div className="profile-split-card glass">
+                <h3 className="profile-section-title">👤 Informations du compte</h3>
+
+                <div className="profile-meta-grid">
+                  <div className="profile-meta-item">
+                    <span className="profile-meta-label">Inscrit le</span>
+                    <span className="profile-meta-value">
+                      {new Date(profile.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                    </span>
+                  </div>
+                  <div className="profile-meta-item">
+                    <span className="profile-meta-label">Commandes</span>
+                    <span className="profile-meta-value">{myOrders.length}</span>
+                  </div>
+                  <div className="profile-meta-item">
+                    <span className="profile-meta-label">Connexion</span>
+                    <span className="profile-meta-value">
+                      {session.user.app_metadata?.provider === 'google' ? '🔑 Google' : '📧 Email'}
+                    </span>
+                  </div>
+                </div>
+
+                {permissions.length > 0 && (
+                  <div className="profile-permissions">
+                    <h4 className="profile-section-title">Mes Permissions</h4>
+                    <div className="profile-perm-grid">
+                      {permissions.map(perm => (
+                        <span key={perm} className="profile-perm-badge">
+                          {PERMISSION_LABELS[perm]?.icon || '🔧'} {PERMISSION_LABELS[perm]?.label || perm}
+                        </span>
+                      ))}
                     </div>
                   </div>
-                ))}
+                )}
+              </div>
+            )}
+
+            {activeTab === 'security' && (
+              <div className="profile-split-card glass">
+                <h3 className="profile-section-title">🔒 Sécurité & Connexion</h3>
+                <p className="profile-security-desc" style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', lineHeight: '1.5' }}>
+                  Vous pouvez réinitialiser ou modifier votre mot de passe à tout moment. Un lien de réinitialisation sécurisé vous sera instantanément envoyé par e-mail.
+                </p>
+                <button className="btn btn-outline" onClick={handleResetPassword} style={{ width: '100%', marginTop: '30px' }}>
+                  📧 Envoyer un e-mail de réinitialisation
+                </button>
+              </div>
+            )}
+
+            {activeTab === 'address' && (
+              <div className="profile-split-card glass">
+                <h3 className="profile-section-title">🏠 Adresse de livraison</h3>
+                <form onSubmit={handleAddressSave} className="profile-address-form">
+                  <div className="profile-form-group">
+                    <label>Rue & Numéro</label>
+                    <input
+                      type="text"
+                      value={shippingAddress}
+                      onChange={e => setShippingAddress(e.target.value)}
+                      placeholder="12 rue de la Paix"
+                    />
+                  </div>
+                  <div className="profile-form-row">
+                    <div className="profile-form-group" style={{ flex: 1 }}>
+                      <label>Code Postal</label>
+                      <input
+                        type="text"
+                        value={shippingZip}
+                        onChange={e => setShippingZip(e.target.value)}
+                        placeholder="75001"
+                      />
+                    </div>
+                    <div className="profile-form-group" style={{ flex: 2 }}>
+                      <label>Ville</label>
+                      <input
+                        type="text"
+                        value={shippingCity}
+                        onChange={e => setShippingCity(e.target.value)}
+                        placeholder="Paris"
+                      />
+                    </div>
+                  </div>
+                  <div className="profile-form-group">
+                    <label>Pays</label>
+                    <input
+                      type="text"
+                      value={shippingCountry}
+                      onChange={e => setShippingCountry(e.target.value)}
+                      placeholder="France"
+                    />
+                  </div>
+                  <button type="submit" className="btn btn-primary btn-sm" disabled={savingAddress} style={{ marginTop: '10px' }}>
+                    {savingAddress ? 'Enregistrement...' : '💾 Sauvegarder mon adresse'}
+                  </button>
+                  {addressMsg && <div className="profile-address-msg" style={{ marginTop: '10px', fontSize: '0.85rem' }}>{addressMsg}</div>}
+                </form>
+              </div>
+            )}
+
+            {activeTab === 'orders' && (
+              <div className="profile-orders-section">
+                <h3 className="profile-section-title">📦 Mon Historique de Commandes</h3>
+
+                {myOrders.length === 0 ? (
+                  <div className="profile-empty-state glass">
+                    <span className="profile-empty-icon">🛒</span>
+                    <p>Vous n'avez pas encore passé de commande.</p>
+                    <span className="profile-empty-sub">Découvrez notre boutique pour vos premiers goodies MobCross !</span>
+                  </div>
+                ) : (
+                  <div className="profile-orders-list">
+                    {myOrders.map(o => (
+                      <div key={o.id} className="profile-order-card glass">
+                        <div className="profile-order-header">
+                          <h4>{o.product_name}</h4>
+                          <span className={`profile-order-status status-${o.status?.toLowerCase().replace(/\s+/g, '-')}`}>
+                            {o.status}
+                          </span>
+                        </div>
+                        <div className="profile-order-details">
+                          <span><strong>Date :</strong> {new Date(o.created_at).toLocaleDateString('fr-FR')}</span>
+                          <span><strong>Montant :</strong> <span className="text-accent">{o.price}</span></span>
+                          {o.custom_text && <span><strong>Flocage :</strong> {o.custom_text}</span>}
+                          {o.size && <span><strong>Taille :</strong> {o.size}</span>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>
         </div>
+
+        {/* ─── Avatar Picker Modal ─── */}
+        {showAvatarModal && (
+          <div
+            className="profile-modal-overlay"
+            onClick={() => setShowAvatarModal(false)}
+          >
+            <div
+              className="profile-modal glass"
+              onClick={e => e.stopPropagation()}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="avatar-modal-title"
+            >
+              <div className="profile-modal-header">
+                <h3 id="avatar-modal-title">🎨 Choisir mon avatar</h3>
+                <button
+                  type="button"
+                  className="profile-modal-close"
+                  onClick={() => setShowAvatarModal(false)}
+                  aria-label="Fermer"
+                >
+                  ✕
+                </button>
+              </div>
+              <div className="profile-modal-body">
+                <AvatarPicker
+                  session={session}
+                  profile={profile}
+                  onUpdated={onProfileUpdate}
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </section>
   )
