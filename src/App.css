@@ -862,11 +862,51 @@
   background: transparent;
 }
 
+/* ─── Admin nav item (next to "Accueil") ─── */
+.nav-admin-wrap {
+  position: relative;
+  display: inline-flex;
+}
+
+.nav-admin-trigger {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent) !important;
+  font-weight: 700 !important;
+}
+
+.nav-admin-trigger.open {
+  background: rgba(255, 85, 0, 0.12) !important;
+  border-radius: 8px;
+}
+
+.nav-admin-badge {
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 800;
+  padding: 1px 6px;
+  border-radius: 10px;
+  margin-left: 4px;
+  box-shadow: 0 2px 5px rgba(255, 85, 0, 0.4);
+}
+
+.nav-admin-chevron {
+  font-size: 0.65rem;
+  opacity: 0.7;
+  transition: transform 0.2s ease;
+}
+
+.nav-admin-chevron.open {
+  transform: rotate(180deg);
+}
+
 /* Dropdown panel anchored under the trigger */
 .admin-menu-dropdown {
   position: absolute;
-  top: calc(100% + 8px);
-  right: 20px;
+  top: calc(100% + 12px);
+  left: 0;
   width: 280px;
   z-index: 2001;
   background: rgba(15, 15, 15, 0.96) !important;
@@ -975,17 +1015,15 @@
   background: linear-gradient(135deg, rgba(255, 85, 0, 0.28), rgba(255, 140, 66, 0.14));
 }
 
-/* Mobile : dropdown takes full width */
-@media (max-width: 600px) {
-  .admin-menu-trigger-label,
-  .admin-logout-label {
-    display: none;
-  }
-
+/* Mobile : dropdown takes full screen width below the navbar */
+@media (max-width: 900px) {
   .admin-menu-dropdown {
-    right: 10px;
+    position: fixed;
+    top: 72px;
     left: 10px;
+    right: 10px;
     width: auto;
+    max-width: none;
   }
 }
 
