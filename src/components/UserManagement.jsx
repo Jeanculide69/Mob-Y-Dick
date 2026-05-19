@@ -5,6 +5,16 @@ import './UserManagement.css'
 
 const ALL_PERMISSIONS = Object.keys(PERMISSION_LABELS)
 
+// Single source of truth for "what each role can do by default".
+// When you change someone's role from the dropdown, these perms get
+// applied automatically — keeping the matrix in sync with the UI.
+const DEFAULT_PERMISSIONS_BY_ROLE = {
+  admin: ALL_PERMISSIONS,
+  organisateur: ['manage_events', 'manage_races'],
+  moderator: ['moderate_content'],
+  user: [],
+}
+
 export default function UserManagement({ users, onRefresh }) {
   const [activeTab, setActiveTab] = useState('users') // 'users' or 'pseudos'
   const [search, setSearch] = useState('')
@@ -20,15 +30,23 @@ export default function UserManagement({ users, onRefresh }) {
   })
 
   const handleRoleChange = async (userId, newRole, userName) => {
-    if (!window.confirm(`Changer le rôle de ${userName} en "${ROLE_CONFIG[newRole]?.label || newRole}" ?`)) return
+    const defaultPerms = DEFAULT_PERMISSIONS_BY_ROLE[newRole] ?? []
+    const permLabels = defaultPerms.length
+      ? defaultPerms.map(p => PERMISSION_LABELS[p]?.label || p).join(', ')
+      : 'aucune'
+    const ok = window.confirm(
+      `Changer le rôle de ${userName} en "${ROLE_CONFIG[newRole]?.label || newRole}" ?\n\n` +
+      `Permissions appliquées automatiquement : ${permLabels}.\n` +
+      `(Tu pourras les ajuster ensuite via les cases à cocher.)`
+    )
+    if (!ok) return
     setSaving(userId)
     try {
-      // If setting to admin, grant all permissions automatically
-      const perms = newRole === 'admin' ? ALL_PERMISSIONS : undefined
-      const update = { role: newRole }
-      if (perms) update.permissions = perms
-      
-      const { data, error } = await supabase.from('profiles').update(update).eq('id', userId).select()
+      const { data, error } = await supabase
+        .from('profiles')
+        .update({ role: newRole, permissions: defaultPerms })
+        .eq('id', userId)
+        .select()
       if (error) throw error
       if (!data || data.length === 0) throw new Error("Mise à jour refusée par la base de données (RLS). Vérifiez vos droits d'administrateur.")
       onRefresh()
@@ -61,14 +79,11 @@ export default function UserManagement({ users, onRefresh }) {
   const handleGrantPreset = async (userId, preset) => {
     setSaving(userId)
     try {
-      let perms = []
-      if (preset === 'organisateur') {
-        perms = ['manage_events', 'manage_races']
-      } else if (preset === 'moderator') {
-        perms = ['moderate_content']
-      } else if (preset === 'editor') {
-        perms = ['manage_events', 'manage_products', 'manage_gallery', 'manage_team', 'manage_bikes']
-      }
+      // The "editor" preset isn't a DB role — it's a permission bundle
+      // for content managers (events/products/gallery/team/bikes).
+      const perms = preset === 'editor'
+        ? ['manage_events', 'manage_products', 'manage_gallery', 'manage_team', 'manage_bikes']
+        : (DEFAULT_PERMISSIONS_BY_ROLE[preset] ?? [])
       const { data, error } = await supabase.from('profiles').update({ permissions: perms }).eq('id', userId).select()
       if (error) throw error
       if (!data || data.length === 0) throw new Error("Mise à jour refusée par la base de données (RLS).")
