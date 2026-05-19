@@ -1439,7 +1439,7 @@ function App() {
                 <span className="section-tag">Agenda</span>
                 <h2>Événements à venir</h2>
                 <p className="section-sub">Nos prochains rassemblements et expos.</p>
-                {isAdmin && (
+                {hasPermission('manage_events') && (
                   <button className="btn btn-primary btn-sm inline-add-btn" onClick={() => handleOpenForm('event')}>
                     ➕ Ajouter un Événement
                   </button>
@@ -1464,7 +1464,7 @@ function App() {
                         <p>{ev.description || ev.desc}</p>
                       </div>
 
-                      {isAdmin && ev.id && (
+                      {hasPermission('manage_events') && ev.id && (
                         <div className="admin-inline-actions">
                           <button onClick={() => handleOpenForm('event', ev)}>✏️ Modifier</button>
                           <button onClick={() => handleDeleteItem('events', ev.id)}>🗑️ Supprimer</button>
