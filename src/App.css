@@ -791,33 +791,202 @@
   gap: 8px;
 }
 
-/* Beautiful Admin Buttons */
-.admin-banner-actions button {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 0.78rem;
+/* ─── Admin Menu Trigger (single button replacing the row of buttons) ─── */
+.admin-menu-trigger {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 0.82rem;
   font-weight: 600;
-  padding: 6px 14px;
+  padding: 7px 14px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.admin-menu-trigger:hover,
+.admin-menu-trigger.open {
+  background: rgba(255, 85, 0, 0.15);
+  border-color: rgba(255, 85, 0, 0.5);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(255, 85, 0, 0.25);
+}
+
+.admin-menu-trigger-icon {
+  font-size: 0.95rem;
+}
+
+.admin-menu-trigger-chevron {
+  font-size: 0.7rem;
+  transition: transform 0.2s ease;
+  opacity: 0.7;
+}
+
+.admin-menu-trigger-chevron.open {
+  transform: rotate(180deg);
+}
+
+/* Logout pill kept visible next to the menu */
+.admin-logout-pill {
+  background: rgba(255, 68, 68, 0.08);
+  border: 1px solid rgba(255, 68, 68, 0.3);
+  color: #ff8a8a;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 7px 14px;
   border-radius: 20px;
   display: flex;
   align-items: center;
   gap: 6px;
   cursor: pointer;
   transition: all 0.2s ease;
-  white-space: nowrap;
+  font-family: inherit;
 }
 
-.admin-banner-actions button:hover {
-  background: rgba(255, 85, 0, 0.12);
-  border-color: rgba(255, 85, 0, 0.45);
+.admin-logout-pill:hover {
+  background: rgba(255, 68, 68, 0.18);
+  border-color: rgba(255, 68, 68, 0.6);
   color: #fff;
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(255, 85, 0, 0.2);
 }
 
-.admin-banner-actions button:active {
-  transform: translateY(0);
+/* Overlay catches clicks outside the dropdown to close it */
+.admin-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1999;
+  background: transparent;
+}
+
+/* Dropdown panel anchored under the trigger */
+.admin-menu-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 20px;
+  width: 280px;
+  z-index: 2001;
+  background: rgba(15, 15, 15, 0.96) !important;
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  border: 1px solid rgba(255, 85, 0, 0.35);
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  overflow: hidden;
+  animation: adminMenuSlideDown 0.18s ease-out;
+}
+
+@keyframes adminMenuSlideDown {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.admin-menu-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.admin-menu-dropdown-close {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+}
+
+.admin-menu-dropdown-close:hover {
+  color: var(--accent);
+  background: rgba(255, 85, 0, 0.1);
+}
+
+.admin-menu-dropdown-list {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.admin-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  color: rgba(255, 255, 255, 0.88);
+  font-size: 0.92rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, transform 0.15s;
+  font-family: inherit;
+  text-align: left;
+  width: 100%;
+}
+
+.admin-menu-item:hover {
+  background: rgba(255, 85, 0, 0.14);
+  color: #fff;
+  transform: translateX(2px);
+}
+
+.admin-menu-item-icon {
+  font-size: 1.05rem;
+  width: 22px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.admin-menu-item-label {
+  flex: 1;
+}
+
+.admin-menu-item-badge {
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  min-width: 22px;
+  text-align: center;
+}
+
+.admin-menu-item.highlight {
+  background: linear-gradient(135deg, rgba(255, 85, 0, 0.18), rgba(255, 140, 66, 0.08));
+  border: 1px solid rgba(255, 85, 0, 0.35);
+}
+
+.admin-menu-item.highlight:hover {
+  background: linear-gradient(135deg, rgba(255, 85, 0, 0.28), rgba(255, 140, 66, 0.14));
+}
+
+/* Mobile : dropdown takes full width */
+@media (max-width: 600px) {
+  .admin-menu-trigger-label,
+  .admin-logout-label {
+    display: none;
+  }
+
+  .admin-menu-dropdown {
+    right: 10px;
+    left: 10px;
+    width: auto;
+  }
 }
 
 /* Special styling for critical fill db button */
@@ -965,12 +1134,23 @@ main.with-admin-banner {
   border-radius: 16px;
   padding: 30px;
   width: 100%;
-  max-width: 500px;
+  max-width: 560px;
   position: relative;
   box-sizing: border-box;
   margin: auto 0; /* Automatically centers when fits, aligns top and scrolls when overflows */
   animation: modal-appear 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   color: #fff;
+}
+
+/* Wider variant for list-heavy admin modals (orders, sponsors, users) */
+.admin-panel.wide {
+  max-width: 960px;
+}
+
+@media (max-width: 768px) {
+  .admin-login, .admin-panel, .admin-panel.wide {
+    padding: 20px;
+  }
 }
 
 .admin-close {

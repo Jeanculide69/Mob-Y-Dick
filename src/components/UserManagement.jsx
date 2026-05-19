@@ -121,8 +121,7 @@ export default function UserManagement({ users, onRefresh }) {
   return (
     <div className="user-mgmt">
       <div className="user-mgmt-header" style={{ marginBottom: '15px' }}>
-        <h3>👥 Gestion des Utilisateurs</h3>
-        <div className="user-mgmt-tabs" style={{ display: 'flex', gap: '10px', marginTop: '10px' }}>
+        <div className="user-mgmt-tabs" style={{ display: 'flex', gap: '10px' }}>
           <button 
             className={`btn ${activeTab === 'users' ? 'btn-primary' : 'btn-ghost'} btn-sm`}
             onClick={() => setActiveTab('users')}

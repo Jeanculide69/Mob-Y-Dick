@@ -332,6 +332,7 @@ function App() {
   const [selectedBikeImgIndex, setSelectedBikeImgIndex] = useState(0)
   const [showIntroSplash, setShowIntroSplash] = useState(false)
   const [fadeIntro, setFadeIntro] = useState(false)
+  const [adminMenuOpen, setAdminMenuOpen] = useState(false)
   const [introMuted, setIntroMuted] = useState(true)
   const [showTeaserModal, setShowTeaserModal] = useState(false)
   const [sponsorName, setSponsorName] = useState('')
@@ -1004,39 +1005,95 @@ function App() {
       </div>
 
       {/* ─── Sticky Admin Banner ─── */}
-      {isAdmin && (
-        <div className="admin-banner glass">
-          <div className="admin-banner-inner container">
-            <div className="admin-status-indicator">
-              <span className="admin-status-dot"></span>
-              <span>🛠️ <strong>MODE ADMIN ACTIF</strong></span>
-            </div>
-            <div className="admin-banner-actions">
-              {(!dbProducts || dbProducts.length === 0) && (
-                <button className="btn-db-init" onClick={handleInitializeDatabase}>
-                  🚀 Remplir la base
+      {isAdmin && (() => {
+        const pendingOrders = dbOrders.filter(o => o.status === 'En attente de paiement').length
+        const pendingSponsors = dbSponsors.filter(s => s.status === 'En attente').length
+        const totalNotifs = pendingOrders + pendingSponsors
+        const closeMenu = () => setAdminMenuOpen(false)
+        const adminMenuItems = [
+          ...((!dbProducts || dbProducts.length === 0) ? [{
+            id: 'init', icon: '🚀', label: 'Remplir la base',
+            onClick: () => { closeMenu(); handleInitializeDatabase() },
+            highlight: true,
+          }] : []),
+          {
+            id: 'orders', icon: '📦', label: 'Commandes', badge: pendingOrders,
+            onClick: () => { closeMenu(); handleOpenForm('orders') },
+          },
+          {
+            id: 'socials', icon: '🔗', label: 'Réseaux',
+            onClick: () => { closeMenu(); handleOpenForm('socials') },
+          },
+          {
+            id: 'bikes', icon: '🏍️', label: 'Motos',
+            onClick: () => { closeMenu(); handleOpenForm('bikes_admin') },
+          },
+          {
+            id: 'sponsors', icon: '🤝', label: 'Sponsors', badge: pendingSponsors,
+            onClick: () => { closeMenu(); handleOpenForm('sponsors_admin') },
+          },
+          {
+            id: 'users', icon: '👥', label: 'Utilisateurs',
+            onClick: () => { closeMenu(); handleOpenForm('users_admin') },
+          },
+        ]
+        return (
+          <div className="admin-banner glass">
+            <div className="admin-banner-inner container">
+              <div className="admin-status-indicator">
+                <span className="admin-status-dot"></span>
+                <span>🛠️ <strong>MODE ADMIN ACTIF</strong></span>
+              </div>
+              <div className="admin-banner-actions">
+                <button
+                  className={`admin-menu-trigger ${adminMenuOpen ? 'open' : ''}`}
+                  onClick={() => setAdminMenuOpen(o => !o)}
+                  aria-haspopup="menu"
+                  aria-expanded={adminMenuOpen}
+                >
+                  <span className="admin-menu-trigger-icon">⚙️</span>
+                  <span className="admin-menu-trigger-label">Menu admin</span>
+                  {totalNotifs > 0 && (
+                    <span className="admin-banner-badge">{totalNotifs}</span>
+                  )}
+                  <span className={`admin-menu-trigger-chevron ${adminMenuOpen ? 'open' : ''}`}>▾</span>
                 </button>
-              )}
-              <button onClick={() => handleOpenForm('orders')}>
-                📦 Commandes
-                {dbOrders.filter(o => o.status === 'En attente de paiement').length > 0 && (
-                  <span className="admin-banner-badge">{dbOrders.filter(o => o.status === 'En attente de paiement').length}</span>
-                )}
-              </button>
-              <button onClick={() => handleOpenForm('socials')}>🔗 Réseaux</button>
-              <button onClick={() => handleOpenForm('bikes_admin')}>🏍️ Motos</button>
-              <button onClick={() => handleOpenForm('sponsors_admin')}>
-                🤝 Sponsors
-                {dbSponsors.filter(s => s.status === 'En attente').length > 0 && (
-                  <span className="admin-banner-badge">{dbSponsors.filter(s => s.status === 'En attente').length}</span>
-                )}
-              </button>
-              <button onClick={() => handleOpenForm('users_admin')}>👥 Utilisateurs</button>
-              <button className="btn-logout" onClick={handleLogout}>🔑 Déconnexion</button>
+                <button className="admin-logout-pill" onClick={handleLogout} title="Déconnexion">
+                  🔑 <span className="admin-logout-label">Déconnexion</span>
+                </button>
+              </div>
             </div>
+
+            {adminMenuOpen && (
+              <>
+                <div className="admin-menu-overlay" onClick={closeMenu} />
+                <div className="admin-menu-dropdown glass" role="menu">
+                  <div className="admin-menu-dropdown-header">
+                    <span>🛠️ Espace admin</span>
+                    <button className="admin-menu-dropdown-close" onClick={closeMenu} aria-label="Fermer">✕</button>
+                  </div>
+                  <div className="admin-menu-dropdown-list">
+                    {adminMenuItems.map(item => (
+                      <button
+                        key={item.id}
+                        role="menuitem"
+                        className={`admin-menu-item ${item.highlight ? 'highlight' : ''}`}
+                        onClick={item.onClick}
+                      >
+                        <span className="admin-menu-item-icon">{item.icon}</span>
+                        <span className="admin-menu-item-label">{item.label}</span>
+                        {item.badge > 0 && (
+                          <span className="admin-menu-item-badge">{item.badge}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
-        </div>
-      )}
+        )
+      })()}
 
       {/* ─── Navbar ─── */}
       <header className={`navbar glass ${isAdmin ? 'with-admin-banner' : ''}`}>
@@ -2094,7 +2151,7 @@ function App() {
       {/* ─── Sleek Dynamic Forms and Lists Modal (Admin) ─── */}
       {activeForm && (
         <div className="admin-overlay">
-          <div className="admin-panel glass admin-visual-modal">
+          <div className={`admin-panel glass admin-visual-modal ${['orders','sponsors_admin','users_admin','bikes_admin'].includes(activeForm) ? 'wide' : ''}`}>
             <div className="admin-header">
               <h2>
                 {activeForm === 'event' && '📅 Gérer Événement'}
