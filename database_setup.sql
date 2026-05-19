@@ -23,11 +23,20 @@ CREATE POLICY "Les profils sont visibles par tout le monde." ON public.profiles
 CREATE POLICY "Les utilisateurs peuvent modifier leur profil." ON public.profiles
   FOR UPDATE USING (auth.uid() = id);
 
+-- Fonction pour vérifier si un utilisateur est admin sans récursion RLS
+CREATE OR REPLACE FUNCTION public.is_user_admin()
+RETURNS boolean AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.profiles 
+    WHERE id = auth.uid() AND role = 'admin'
+  );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
 -- Un administrateur peut modifier n'importe quel profil (pour changer les rôles)
 CREATE POLICY "Les admins peuvent modifier les profils." ON public.profiles
-  FOR UPDATE USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-  );
+  FOR UPDATE USING (public.is_user_admin());
 
 -- ==========================================
 -- 2. Trigger pour créer automatiquement un profil à l'inscription

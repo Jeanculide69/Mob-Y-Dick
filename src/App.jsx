@@ -279,6 +279,7 @@ function App() {
   // Race state
   const [liveSession, setLiveSession] = useState(null)
   const [raceSessions, setRaceSessions] = useState([])
+  const [viewingSessionId, setViewingSessionId] = useState(null)
   const [activeRaceView, setActiveRaceView] = useState(null) // 'setup' | 'chrono' | null
   const [selectedRaceEvent, setSelectedRaceEvent] = useState(null)
   const [activeRaceSession, setActiveRaceSession] = useState(null)
@@ -366,10 +367,24 @@ function App() {
           }
         })
 
+      // Fetch all race sessions to display Live / Results buttons in Agenda
+      supabase.from('race_sessions')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .then(({ data }) => {
+          if (data) setRaceSessions(data)
+        })
+
       // Fetch Users (only if admin)
       if (isAdmin || forceAdmin) {
         supabase.from('profiles').select('*').order('created_at', { ascending: false })
-          .then(({ data }) => { if (data) setDbUsers(data) })
+          .then(({ data, error }) => { 
+            if (error) {
+              console.error('Erreur chargement utilisateurs:', error.message)
+            } else if (data) {
+              setDbUsers(data)
+            }
+          })
       }
 
       // Only fetch orders and sponsors if logged in
@@ -404,50 +419,37 @@ function App() {
   useEffect(() => {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
     
-    if (isLocalhost) {
-      const mockUser = {
-        id: '00000000-0000-0000-0000-000000000000',
-        email: 'admin-local@mobcross.fr',
-      };
-      const mockSession = {
-        user: mockUser,
-        access_token: 'local-token',
-      };
-      const mockProfile = {
-        id: mockUser.id,
-        email: mockUser.email,
-        display_name: 'JEANCULIDE69 (Local)',
-        avatar_url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=local-admin',
-        role: 'admin',
-        permissions: ['manage_events', 'manage_products', 'manage_gallery', 'manage_team', 'manage_bikes', 'manage_settings', 'manage_races', 'manage_users', 'moderate_content']
-      };
+    const mockUser = {
+      id: '00000000-0000-0000-0000-000000000000',
+      email: 'admin-local@mobcross.fr',
+    };
+    const mockSession = {
+      user: mockUser,
+      access_token: 'local-token',
+    };
+    const mockProfile = {
+      id: mockUser.id,
+      email: mockUser.email,
+      display_name: 'JEANCULIDE69 (Local)',
+      avatar_url: 'https://api.dicebear.com/7.x/avataaars/svg?seed=local-admin',
+      role: 'admin',
+      permissions: ['manage_events', 'manage_products', 'manage_gallery', 'manage_team', 'manage_bikes', 'manage_settings', 'manage_races', 'manage_users', 'moderate_content']
+    };
 
-      setSession(mockSession);
-      setProfile(mockProfile);
-      setIsAdmin(true);
-      setIsModerator(true);
-      setIsOrganisateur(true);
-      refreshData(true);
-      return;
-    }
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    const handleSession = (session) => {
       setSession(session)
       if (session) {
         fetchProfile(session.user.id, session.user.email).then((adminStatus) => {
           refreshData(adminStatus)
         })
-      } else {
-        refreshData(false)
-      }
-    })
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-      if (session) {
-        fetchProfile(session.user.id, session.user.email).then((adminStatus) => {
-          refreshData(adminStatus)
-        })
+      } else if (isLocalhost) {
+        // Local dev default fallback mock admin
+        setSession(mockSession)
+        setProfile(mockProfile)
+        setIsAdmin(true)
+        setIsModerator(true)
+        setIsOrganisateur(true)
+        refreshData(true)
       } else {
         setProfile(null)
         setIsAdmin(false)
@@ -455,6 +457,14 @@ function App() {
         setIsOrganisateur(false)
         refreshData(false)
       }
+    }
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      handleSession(session)
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      handleSession(session)
     })
 
     return () => subscription.unsubscribe()
@@ -548,6 +558,9 @@ function App() {
     : displayProducts.filter(p => p.is_visible !== false)
 
   const navigate = (tab) => {
+    if (tab === 'live') {
+      setViewingSessionId(null)
+    }
     setActiveTab(tab)
     setMobileMenuOpen(false)
     window.scrollTo({ top: 0, behavior: 'smooth' })
@@ -1380,6 +1393,43 @@ function App() {
                           🏁 Gérer la course
                         </button>
                       )}
+
+                      {/* Public Live and Results buttons next to the event */}
+                      {ev.id && (() => {
+                        const eventSession = raceSessions?.find(s => s.event_id === ev.id)
+                        if (!eventSession) return null
+                        if (eventSession.status === 'live') {
+                          return (
+                            <button 
+                              className="btn btn-sm btn-primary event-live-btn pulse-live"
+                              style={{ border: 'none', fontWeight: 'bold' }}
+                              onClick={() => {
+                                setViewingSessionId(eventSession.id)
+                                setActiveTab('live')
+                                window.scrollTo({ top: 0, behavior: 'smooth' })
+                              }}
+                            >
+                              🔴 Suivre le Live
+                            </button>
+                          )
+                        }
+                        if (eventSession.status === 'finished' || eventSession.status === 'published') {
+                          return (
+                            <button 
+                              className="btn btn-sm btn-outline event-results-btn"
+                              style={{ borderColor: 'var(--accent)', color: '#fff', background: 'rgba(255, 85, 0, 0.05)', fontWeight: 'bold' }}
+                              onClick={() => {
+                                setViewingSessionId(eventSession.id)
+                                setActiveTab('live')
+                                window.scrollTo({ top: 0, behavior: 'smooth' })
+                              }}
+                            >
+                              🏆 Résultats
+                            </button>
+                          )
+                        }
+                        return null
+                      })()}
                     </div>
                   )
                 })}
@@ -1611,7 +1661,7 @@ function App() {
 
       {/* ─── LIVE RACE (public) ─── */}
       {activeTab === 'live' && (
-        <LiveRace />
+        <LiveRace customSessionId={viewingSessionId} />
       )}
 
       {/* ─── RACE SETUP (organisateur) ─── */}
@@ -2111,7 +2161,13 @@ function App() {
                 users={dbUsers}
                 onRefresh={() => {
                   supabase.from('profiles').select('*').order('created_at', { ascending: false })
-                    .then(({ data }) => { if (data) setDbUsers(data) })
+                    .then(({ data, error }) => { 
+                      if (error) {
+                        alert('Erreur lors du chargement des profils : ' + error.message)
+                      } else if (data) {
+                        setDbUsers(data) 
+                      }
+                    })
                 }}
               />
             ) : activeForm === 'bikes_admin' ? (

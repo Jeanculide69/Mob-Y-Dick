@@ -28,7 +28,9 @@ export default function UserManagement({ users, onRefresh }) {
       const update = { role: newRole }
       if (perms) update.permissions = perms
       
-      await supabase.from('profiles').update(update).eq('id', userId)
+      const { data, error } = await supabase.from('profiles').update(update).eq('id', userId).select()
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error("Mise à jour refusée par la base de données (RLS). Vérifiez vos droits d'administrateur.")
       onRefresh()
     } catch (err) {
       alert('Erreur: ' + err.message)
@@ -45,7 +47,9 @@ export default function UserManagement({ users, onRefresh }) {
         ? perms.filter(p => p !== perm)
         : [...perms, perm]
       
-      await supabase.from('profiles').update({ permissions: newPerms }).eq('id', userId)
+      const { data, error } = await supabase.from('profiles').update({ permissions: newPerms }).eq('id', userId).select()
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error("Mise à jour refusée par la base de données (RLS).")
       onRefresh()
     } catch (err) {
       alert('Erreur: ' + err.message)
@@ -65,7 +69,9 @@ export default function UserManagement({ users, onRefresh }) {
       } else if (preset === 'editor') {
         perms = ['manage_events', 'manage_products', 'manage_gallery', 'manage_team', 'manage_bikes']
       }
-      await supabase.from('profiles').update({ permissions: perms }).eq('id', userId)
+      const { data, error } = await supabase.from('profiles').update({ permissions: perms }).eq('id', userId).select()
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error("Mise à jour refusée par la base de données (RLS).")
       onRefresh()
     } catch (err) {
       alert('Erreur: ' + err.message)
@@ -78,12 +84,14 @@ export default function UserManagement({ users, onRefresh }) {
     if (!window.confirm(`Approuver le pseudo "${requestedName}" ?`)) return
     setSaving(userId)
     try {
-      await supabase.from('profiles').update({
+      const { data, error } = await supabase.from('profiles').update({
         display_name: requestedName,
         display_name_changes: (currentChanges || 0) + 1,
         pending_display_name: null,
         display_name_status: 'approved'
-      }).eq('id', userId)
+      }).eq('id', userId).select()
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error("Validation refusée par la base de données (RLS).")
       onRefresh()
     } catch (err) {
       alert('Erreur : ' + err.message)
@@ -96,10 +104,12 @@ export default function UserManagement({ users, onRefresh }) {
     if (!window.confirm("Refuser cette demande de pseudo ?")) return
     setSaving(userId)
     try {
-      await supabase.from('profiles').update({
+      const { data, error } = await supabase.from('profiles').update({
         pending_display_name: null,
         display_name_status: 'rejected'
-      }).eq('id', userId)
+      }).eq('id', userId).select()
+      if (error) throw error
+      if (!data || data.length === 0) throw new Error("Rejet refusé par la base de données (RLS).")
       onRefresh()
     } catch (err) {
       alert('Erreur : ' + err.message)
