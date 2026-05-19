@@ -234,10 +234,10 @@ export default function RaceSetup({ event, session, profile, isAdmin, onStartRac
     }
     await supabase.from('race_sessions').update({
       status: 'live',
-      started_at: new Date().toISOString()
+      started_at: null
     }).eq('id', raceSession.id)
     
-    if (onStartRace) onStartRace({ ...raceSession, status: 'live' }, teams)
+    if (onStartRace) onStartRace({ ...raceSession, status: 'live', started_at: null }, teams)
   }
 
   const handleDeleteSession = async () => {

@@ -267,7 +267,7 @@ const BIKES_LIST = {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState('home')
+  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('myd_activeTab') || 'home')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isModerator, setIsModerator] = useState(false)
@@ -279,11 +279,32 @@ function App() {
   // Race state
   const [liveSession, setLiveSession] = useState(null)
   const [raceSessions, setRaceSessions] = useState([])
-  const [viewingSessionId, setViewingSessionId] = useState(null)
-  const [activeRaceView, setActiveRaceView] = useState(null) // 'setup' | 'chrono' | null
-  const [selectedRaceEvent, setSelectedRaceEvent] = useState(null)
-  const [activeRaceSession, setActiveRaceSession] = useState(null)
-  const [activeRaceTeams, setActiveRaceTeams] = useState([])
+  const [viewingSessionId, setViewingSessionId] = useState(() => localStorage.getItem('myd_viewingSessionId') || null)
+  const [activeRaceView, setActiveRaceView] = useState(() => localStorage.getItem('myd_activeRaceView') || null) // 'setup' | 'chrono' | null
+  const [selectedRaceEvent, setSelectedRaceEvent] = useState(() => {
+    try {
+      const val = localStorage.getItem('myd_selectedRaceEvent')
+      return val ? JSON.parse(val) : null
+    } catch {
+      return null
+    }
+  })
+  const [activeRaceSession, setActiveRaceSession] = useState(() => {
+    try {
+      const val = localStorage.getItem('myd_activeRaceSession')
+      return val ? JSON.parse(val) : null
+    } catch {
+      return null
+    }
+  })
+  const [activeRaceTeams, setActiveRaceTeams] = useState(() => {
+    try {
+      const val = localStorage.getItem('myd_activeRaceTeams')
+      return val ? JSON.parse(val) : []
+    } catch {
+      return []
+    }
+  })
   const [showLegalModal, setShowLegalModal] = useState(false)
 
   // Database Data States
@@ -398,6 +419,36 @@ function App() {
       })
     }
   }
+
+  // Persist view state to localStorage
+  useEffect(() => {
+    localStorage.setItem('myd_activeTab', activeTab)
+  }, [activeTab])
+
+  useEffect(() => {
+    if (activeRaceView) localStorage.setItem('myd_activeRaceView', activeRaceView)
+    else localStorage.removeItem('myd_activeRaceView')
+  }, [activeRaceView])
+
+  useEffect(() => {
+    if (selectedRaceEvent) localStorage.setItem('myd_selectedRaceEvent', JSON.stringify(selectedRaceEvent))
+    else localStorage.removeItem('myd_selectedRaceEvent')
+  }, [selectedRaceEvent])
+
+  useEffect(() => {
+    if (activeRaceSession) localStorage.setItem('myd_activeRaceSession', JSON.stringify(activeRaceSession))
+    else localStorage.removeItem('myd_activeRaceSession')
+  }, [activeRaceSession])
+
+  useEffect(() => {
+    if (activeRaceTeams && activeRaceTeams.length > 0) localStorage.setItem('myd_activeRaceTeams', JSON.stringify(activeRaceTeams))
+    else localStorage.removeItem('myd_activeRaceTeams')
+  }, [activeRaceTeams])
+
+  useEffect(() => {
+    if (viewingSessionId) localStorage.setItem('myd_viewingSessionId', viewingSessionId)
+    else localStorage.removeItem('myd_viewingSessionId')
+  }, [viewingSessionId])
 
   // Trigger cinematic splash screen on first visit in the current session
   useEffect(() => {

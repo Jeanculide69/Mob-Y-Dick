@@ -14,14 +14,20 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
   const [laps, setLaps] = useState([])
   const [motoInput, setMotoInput] = useState('')
   const [chrono, setChrono] = useState(0)
-  const [isRunning, setIsRunning] = useState(false)
-  const [startTime, setStartTime] = useState(null)
+  const [sessionData, setSessionData] = useState(raceSession)
   const [lastLapFlash, setLastLapFlash] = useState(null)
   const [selectedCategory, setSelectedCategory] = useState('all')
   const inputRef = useRef(null)
   const intervalRef = useRef(null)
 
   const categories = raceSession?.categories || []
+  const isRunning = !!sessionData?.started_at && sessionData?.status === 'live'
+  const startTime = sessionData?.started_at ? new Date(sessionData.started_at).getTime() : null
+
+  // Sync prop changes
+  useEffect(() => {
+    setSessionData(raceSession)
+  }, [raceSession])
 
   useEffect(() => {
     loadLaps()
@@ -32,20 +38,38 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
       })
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    // Subscribe to realtime session started_at updates
+    const sessionChannel = supabase.channel(`race_session_sync_${raceSession.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'race_sessions', filter: `id=eq.${raceSession.id}` }, (payload) => {
+        if (payload.new) {
+          setSessionData(payload.new)
+        }
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+      supabase.removeChannel(sessionChannel)
+    }
   }, [raceSession.id])
 
   // Chrono timer
   useEffect(() => {
-    if (isRunning) {
+    if (isRunning && startTime) {
+      setChrono(Date.now() - startTime)
       intervalRef.current = setInterval(() => {
         setChrono(Date.now() - startTime)
       }, 10)
     } else {
       clearInterval(intervalRef.current)
+      if (sessionData?.started_at && sessionData?.finished_at) {
+        setChrono(new Date(sessionData.finished_at).getTime() - new Date(sessionData.started_at).getTime())
+      } else {
+        setChrono(0)
+      }
     }
     return () => clearInterval(intervalRef.current)
-  }, [isRunning, startTime])
+  }, [isRunning, startTime, sessionData?.started_at, sessionData?.finished_at])
 
   // Auto-focus the input
   useEffect(() => {
@@ -61,16 +85,28 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
     setLaps(data || [])
   }
 
-  const handleStartChrono = () => {
-    setStartTime(Date.now())
-    setChrono(0)
-    setIsRunning(true)
+  const handleStartChrono = async () => {
+    const nowStr = new Date().toISOString()
+    setSessionData(prev => ({ ...prev, started_at: nowStr }))
+    const { error } = await supabase
+      .from('race_sessions')
+      .update({ started_at: nowStr })
+      .eq('id', raceSession.id)
+    if (error) {
+      alert("Erreur de synchronisation du chrono: " + error.message)
+    }
   }
 
-  const handleResetChrono = () => {
-    setIsRunning(false)
-    setChrono(0)
-    setStartTime(null)
+  const handleResetChrono = async () => {
+    if (!confirm('⏹ Réinitialiser le chronomètre à 0 ?')) return
+    setSessionData(prev => ({ ...prev, started_at: null }))
+    const { error } = await supabase
+      .from('race_sessions')
+      .update({ started_at: null })
+      .eq('id', raceSession.id)
+    if (error) {
+      alert("Erreur de réinitialisation du chrono: " + error.message)
+    }
   }
 
   const handleRecordLap = useCallback(async () => {
