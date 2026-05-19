@@ -186,6 +186,25 @@ export default function ProfilePage({ session, profile, onLogout, orders = [], o
                   🚪 Déconnexion
                 </button>
               </div>
+
+              <div className="profile-meta-grid profile-meta-grid-top">
+                <div className="profile-meta-item">
+                  <span className="profile-meta-label">Inscrit le</span>
+                  <span className="profile-meta-value">
+                    {new Date(profile.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </span>
+                </div>
+                <div className="profile-meta-item">
+                  <span className="profile-meta-label">Commandes</span>
+                  <span className="profile-meta-value">{myOrders.length}</span>
+                </div>
+                <div className="profile-meta-item">
+                  <span className="profile-meta-label">Connexion</span>
+                  <span className="profile-meta-value">
+                    {session.user.app_metadata?.provider === 'google' ? '🔑 Google' : '📧 Email'}
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -211,38 +230,20 @@ export default function ProfilePage({ session, profile, onLogout, orders = [], o
           <div className="profile-tab-content">
             {activeTab === 'profile' && (
               <div className="profile-split-card glass">
-                <h3 className="profile-section-title">👤 Informations du compte</h3>
-
-                <div className="profile-meta-grid">
-                  <div className="profile-meta-item">
-                    <span className="profile-meta-label">Inscrit le</span>
-                    <span className="profile-meta-value">
-                      {new Date(profile.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                    </span>
+                <h3 className="profile-section-title">🔧 Mes permissions</h3>
+                {permissions.length > 0 ? (
+                  <div className="profile-perm-grid">
+                    {permissions.map(perm => (
+                      <span key={perm} className="profile-perm-badge">
+                        {PERMISSION_LABELS[perm]?.icon || '🔧'} {PERMISSION_LABELS[perm]?.label || perm}
+                      </span>
+                    ))}
                   </div>
-                  <div className="profile-meta-item">
-                    <span className="profile-meta-label">Commandes</span>
-                    <span className="profile-meta-value">{myOrders.length}</span>
-                  </div>
-                  <div className="profile-meta-item">
-                    <span className="profile-meta-label">Connexion</span>
-                    <span className="profile-meta-value">
-                      {session.user.app_metadata?.provider === 'google' ? '🔑 Google' : '📧 Email'}
-                    </span>
-                  </div>
-                </div>
-
-                {permissions.length > 0 && (
-                  <div className="profile-permissions">
-                    <h4 className="profile-section-title">Mes Permissions</h4>
-                    <div className="profile-perm-grid">
-                      {permissions.map(perm => (
-                        <span key={perm} className="profile-perm-badge">
-                          {PERMISSION_LABELS[perm]?.icon || '🔧'} {PERMISSION_LABELS[perm]?.label || perm}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
+                ) : (
+                  <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', margin: 0 }}>
+                    Tu n'as pas de permissions spéciales attribuées pour le moment.
+                    Si tu penses qu'il y a une erreur, contacte un administrateur.
+                  </p>
                 )}
               </div>
             )}

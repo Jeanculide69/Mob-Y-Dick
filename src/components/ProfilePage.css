@@ -207,6 +207,38 @@
   align-self: flex-start;
 }
 
+/* Stats column on the right of the top card (desktop) */
+.profile-meta-grid-top {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 56px 0 0 12px;
+  border-left: 1px solid var(--border-subtle);
+  padding-left: 28px;
+  min-width: 180px;
+}
+
+.profile-meta-grid-top .profile-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.profile-meta-grid-top .profile-meta-label {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.profile-meta-grid-top .profile-meta-value {
+  font-size: 1rem;
+  color: #fff;
+  font-weight: 600;
+}
+
 /* ─── Orders Section ─── */
 .profile-orders-section {
   padding: 0;
@@ -331,6 +363,21 @@
 
   .profile-meta-grid {
     grid-template-columns: 1fr 1fr;
+  }
+
+  .profile-meta-grid-top {
+    flex-direction: row;
+    justify-content: space-around;
+    width: 100%;
+    padding: 12px 0 0 0;
+    border-left: none;
+    border-top: 1px solid var(--border-subtle);
+    padding-top: 16px;
+    text-align: center;
+  }
+
+  .profile-meta-grid-top .profile-meta-item {
+    align-items: center;
   }
 
   .profile-edit-input {

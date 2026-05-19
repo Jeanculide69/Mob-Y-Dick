@@ -121,19 +121,20 @@ export default function UserManagement({ users, onRefresh }) {
   return (
     <div className="user-mgmt">
       <div className="user-mgmt-header" style={{ marginBottom: '15px' }}>
-        <div className="user-mgmt-tabs" style={{ display: 'flex', gap: '10px' }}>
-          <button 
+        <div className="user-mgmt-tabs" style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button
             className={`btn ${activeTab === 'users' ? 'btn-primary' : 'btn-ghost'} btn-sm`}
             onClick={() => setActiveTab('users')}
+            style={{ whiteSpace: 'nowrap' }}
           >
-            👥 Liste des Membres ({users.length})
+            👥 Membres ({users.length})
           </button>
-          <button 
+          <button
             className={`btn ${activeTab === 'pseudos' ? 'btn-primary' : 'btn-ghost'} btn-sm`}
             onClick={() => setActiveTab('pseudos')}
-            style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+            style={{ display: 'flex', alignItems: 'center', gap: '6px', whiteSpace: 'nowrap' }}
           >
-            ✏️ Demandes de Pseudos
+            ✏️ Pseudos
             {pendingRequests.length > 0 && (
               <span style={{ background: 'var(--accent)', color: '#fff', fontSize: '0.75rem', padding: '2px 6px', borderRadius: '10px', fontWeight: 'bold' }}>
                 {pendingRequests.length}
