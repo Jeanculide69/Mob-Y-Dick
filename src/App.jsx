@@ -468,7 +468,9 @@ function App() {
 
   // Check Supabase Auth session on mount and listen to changes
   useEffect(() => {
-    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+    // Mock admin fallback only in dev builds (vite dev server), NEVER in production bundles.
+    const isLocalhost = import.meta.env.DEV
+      && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
     
     const mockUser = {
       id: '00000000-0000-0000-0000-000000000000',
@@ -493,6 +495,16 @@ function App() {
         fetchProfile(session.user.id, session.user.email).then((adminStatus) => {
           refreshData(adminStatus)
         })
+        // Re-fetch fresh race session data from Supabase to replace stale localStorage state
+        const storedSessionId = localStorage.getItem('myd_activeRaceSession')
+          ? (() => { try { return JSON.parse(localStorage.getItem('myd_activeRaceSession'))?.id } catch { return null } })()
+          : null
+        if (storedSessionId) {
+          supabase.from('race_sessions').select('*').eq('id', storedSessionId).single()
+            .then(({ data }) => { if (data) setActiveRaceSession(data) })
+          supabase.from('race_teams').select('*').eq('session_id', storedSessionId).order('moto_number', { ascending: true })
+            .then(({ data }) => { if (data) setActiveRaceTeams(data) })
+        }
       } else if (isLocalhost) {
         // Local dev default fallback mock admin
         setSession(mockSession)
@@ -506,6 +518,9 @@ function App() {
         setIsAdmin(false)
         setIsModerator(false)
         setIsOrganisateur(false)
+        // Clear race chrono state if user is not authenticated
+        setActiveRaceView(null)
+        setActiveRaceSession(null)
         refreshData(false)
       }
     }
@@ -514,51 +529,42 @@ function App() {
       handleSession(session)
     })
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      handleSession(session)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // Only react to actual sign-in / sign-out / user updates. TOKEN_REFRESHED fires
+      // every hour and would otherwise re-trigger all data fetches needlessly.
+      if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+        handleSession(session)
+      }
     })
 
     return () => subscription.unsubscribe()
   }, [])
 
   const fetchProfile = async (userId, userEmail) => {
-    const { data } = await supabase.from('profiles').select('*').eq('id', userId).single()
+    // Profile creation is handled exclusively by the Postgres trigger handle_new_user.
+    // The trigger runs AFTER INSERT on auth.users, so on first signup the profile may
+    // arrive a few hundred ms later than this fetch — we retry once after a short delay.
+    let { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
+    if (!data) {
+      await new Promise(r => setTimeout(r, 600))
+      const retry = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
+      data = retry.data
+    }
     if (data) {
       setProfile(data)
       setIsAdmin(data.role === 'admin')
       setIsModerator(data.role === 'moderator')
       setIsOrganisateur(data.role === 'organisateur')
       return data.role === 'admin'
-    } else {
-      // If the profile is missing in the database, attempt to auto-provision it dynamically from the client!
-      const fallbackDisplayName = userEmail ? userEmail.split('@')[0] : 'Membre'
-      const fallbackAvatar = `https://api.dicebear.com/7.x/avataaars/svg?seed=${userEmail || userId}`
-      
-      const isSystemAdmin = userEmail === 'cartiercorentin@gmail.com'
-      const assignedRole = isSystemAdmin ? 'admin' : 'user'
-      const assignedPerms = isSystemAdmin ? ['manage_events', 'manage_products', 'manage_gallery', 'manage_team', 'manage_bikes', 'manage_settings', 'manage_races', 'manage_users', 'moderate_content'] : []
-
-      const { data: newProfile } = await supabase.from('profiles').insert([{
-        id: userId,
-        email: userEmail,
-        display_name: fallbackDisplayName,
-        avatar_url: fallbackAvatar,
-        role: assignedRole,
-        permissions: assignedPerms
-      }]).select().single()
-
-      if (newProfile) {
-        setProfile(newProfile)
-        setIsAdmin(newProfile.role === 'admin')
-        setIsModerator(newProfile.role === 'moderator')
-        setIsOrganisateur(newProfile.role === 'organisateur')
-        return newProfile.role === 'admin'
-      }
-
-      // Temporary fallback for legacy admin until profile triggers are set up
-      setIsAdmin(true)
-      return true
     }
+    // No profile after retry: stay non-admin. Trigger likely failed — surface the issue
+    // in console rather than silently granting privileges.
+    console.error('Profile not found for user', userId, userEmail, '— check handle_new_user trigger')
+    setProfile(null)
+    setIsAdmin(false)
+    setIsModerator(false)
+    setIsOrganisateur(false)
+    return false
   }
 
   // ─── Granular Permission System ───
@@ -618,22 +624,6 @@ function App() {
   }
 
   // ─── Authentication Handlers ───
-  const handleLoginSubmit = async (e) => {
-    e.preventDefault()
-    setLoginError('')
-    if (!supabase) { setLoginError('Supabase non configuré.'); return }
-    const { error } = await supabase.auth.signInWithPassword({ email: adminEmail, password: adminPassword })
-    if (error) {
-      setLoginError('Email ou mot de passe incorrect.')
-    } else {
-      setIsAdmin(true)
-      setShowLoginModal(false)
-      setAdminEmail('')
-      setAdminPassword('')
-      refreshData()
-    }
-  }
-
   const handleLogout = async () => {
     if (supabase) await supabase.auth.signOut()
     setDbOrders([])
@@ -1729,7 +1719,7 @@ function App() {
               event={selectedRaceEvent}
               session={session}
               profile={profile}
-              isAdmin={isAdmin || forceAdmin}
+              isAdmin={isAdmin}
               onStartRace={(rSession, rTeams) => {
                 setActiveRaceSession(rSession)
                 setActiveRaceTeams(rTeams)
@@ -1747,7 +1737,7 @@ function App() {
       )}
 
       {/* ─── RACE CHRONO (organisateur live) ─── */}
-      {activeTab === 'race' && activeRaceView === 'chrono' && activeRaceSession && (
+      {activeTab === 'race' && activeRaceView === 'chrono' && activeRaceSession && session && (
         <section className="section page-top">
           <div className="container">
             <RaceChrono 
@@ -1755,7 +1745,7 @@ function App() {
               teams={activeRaceTeams}
               session={session}
               profile={profile}
-              isAdmin={isAdmin || forceAdmin}
+              isAdmin={isAdmin}
               onFinish={() => {
                 setActiveRaceView('setup')
               }}
