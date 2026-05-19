@@ -878,6 +878,29 @@ export default function RaceSetup({ event, session, profile, isAdmin, onStartRac
             <span className="race-status-teams">{teams.length} équipe{teams.length > 1 ? 's' : ''} inscrite{teams.length > 1 ? 's' : ''}</span>
           </div>
 
+          {/* ─── Primary Actions (top, near event header) ─── */}
+          {raceSession.status === 'setup' && (
+            <div className="race-primary-actions">
+              <button className="btn btn-primary race-start-btn race-action-cta" onClick={handleStartRace}>
+                ▶️ LANCER LA COURSE
+              </button>
+            </div>
+          )}
+          {raceSession.status === 'live' && (
+            <div className="race-primary-actions race-primary-actions-live">
+              <button
+                className="btn btn-primary race-action-cta race-action-chrono"
+                onClick={() => onStartRace(raceSession, teams)}
+              >
+                ⏱️ ACCÉDER AU CHRONOMÉTRAGE
+              </button>
+              <LiveVideoBroadcaster
+                session={session}
+                raceSession={raceSession}
+              />
+            </div>
+          )}
+
           {/* ─── Categories Manager ─── */}
           <div className="race-categories glass">
             <h3>📋 Catégories</h3>
@@ -1020,25 +1043,16 @@ export default function RaceSetup({ event, session, profile, isAdmin, onStartRac
             )}
           </div>
 
-          {/* ─── Live Video Broadcasting (Organiser) ─── */}
-          {raceSession.status === 'live' && (
-            <LiveVideoBroadcaster 
-              session={session} 
-              raceSession={raceSession} 
-            />
-          )}
-
-          {/* ─── Action Buttons ─── */}
+          {/* ─── Bottom Action Buttons (secondary access + destructive) ─── */}
           <div className="race-setup-actions glass">
-            {raceSession.status === 'setup' ? (
-              <button className="btn btn-primary btn-lg race-start-btn" onClick={handleStartRace}>
-                ▶️ LANCER LA COURSE
+            {raceSession.status === 'live' && (
+              <button
+                className="btn btn-outline race-action-chrono-secondary"
+                onClick={() => onStartRace(raceSession, teams)}
+              >
+                ⏱️ Chronométrage
               </button>
-            ) : raceSession.status === 'live' ? (
-              <button className="btn btn-primary btn-lg race-start-btn" onClick={() => onStartRace(raceSession, teams)} style={{ background: 'linear-gradient(135deg, #00cc66 0%, #009944 100%)' }}>
-                ⏱️ ACCÉDER AU CHRONOMÉTRAGE
-              </button>
-            ) : null}
+            )}
             <button className="btn btn-ghost race-delete-btn" onClick={handleDeleteSession}>
               🗑️ Supprimer la session
             </button>

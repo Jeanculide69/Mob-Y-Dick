@@ -324,7 +324,40 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
-/* ─── Action Buttons ─── */
+/* ─── Primary Actions (top, near event header) ─── */
+.race-primary-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin: 0 0 24px;
+}
+
+.race-primary-actions-live {
+  gap: 16px;
+}
+
+.race-action-cta {
+  width: 100%;
+  min-height: 56px;
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 1px;
+  padding: 16px 24px !important;
+  border-radius: 14px !important;
+}
+
+.race-action-chrono {
+  background: linear-gradient(135deg, #00cc66 0%, #009944 100%) !important;
+  border: none !important;
+  box-shadow: 0 6px 20px rgba(0, 204, 102, 0.25);
+}
+
+.race-action-chrono:hover {
+  box-shadow: 0 8px 28px rgba(0, 204, 102, 0.4);
+  transform: translateY(-1px);
+}
+
+/* ─── Action Buttons (bottom secondary row) ─── */
 .race-setup-actions {
   display: flex;
   align-items: center;
@@ -333,6 +366,13 @@
   padding: 20px;
   border-radius: 14px;
   border: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+}
+
+.race-action-chrono-secondary {
+  min-height: 44px;
+  border-color: #00cc66 !important;
+  color: #00cc66 !important;
 }
 
 .race-start-btn {
@@ -350,6 +390,7 @@
 .race-delete-btn {
   color: #ff4444 !important;
   font-size: 0.85rem;
+  min-height: 44px;
 }
 
 /* ─── Import Modal ─── */
@@ -426,8 +467,12 @@
   font-weight: 600;
 }
 
-/* ─── Responsive ─── */
+/* ─── Responsive — Tablet ─── */
 @media (max-width: 768px) {
+  .race-setup {
+    padding: 0 4px;
+  }
+
   .race-form-row {
     flex-direction: column;
     gap: 8px;
@@ -439,15 +484,104 @@
 
   .race-setup-header {
     flex-direction: column;
-    gap: 10px;
+    align-items: stretch;
+    gap: 12px;
+  }
+
+  .race-setup-header h2 {
+    font-size: 1.4rem;
+  }
+
+  .race-setup-header .btn {
+    min-height: 44px;
+    width: 100%;
+  }
+
+  .race-status-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 14px 16px;
   }
 
   .race-setup-actions {
     flex-direction: column;
+    align-items: stretch;
+    padding: 16px;
+  }
+
+  .race-setup-actions .btn {
+    width: 100%;
   }
 
   .race-team-card {
     flex-wrap: wrap;
+  }
+
+  .race-categories,
+  .race-team-form,
+  .race-teams-list {
+    padding: 16px;
+  }
+
+  .race-cat-add input,
+  .race-team-form input,
+  .race-team-form select {
+    font-size: 16px; /* prevent iOS auto-zoom on focus */
+    min-height: 44px;
+  }
+
+  .race-team-form .btn,
+  .race-cat-add .btn {
+    min-height: 44px;
+  }
+
+  .race-teams-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .race-team-card {
+    padding: 14px;
+  }
+
+  .race-team-actions button {
+    min-width: 40px;
+    min-height: 40px;
+    font-size: 1.1rem;
+  }
+
+  /* Compact the live-video panel on mobile */
+  .race-setup-stream {
+    padding: 14px !important;
+  }
+  .race-setup-stream video {
+    max-width: 100% !important;
+  }
+}
+
+/* ─── Responsive — Phone ─── */
+@media (max-width: 480px) {
+  .race-action-cta {
+    font-size: 0.95rem !important;
+    padding: 14px 16px !important;
+    min-height: 52px;
+    letter-spacing: 0.5px;
+  }
+
+  .race-primary-actions {
+    margin-bottom: 18px;
+  }
+
+  .race-status-bar {
+    font-size: 0.88rem;
+  }
+
+  .race-setup-header h2 {
+    font-size: 1.2rem;
+  }
+
+  .race-setup-event-name {
+    font-size: 0.85rem;
   }
 }
 
