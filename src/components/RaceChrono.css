@@ -154,11 +154,13 @@
 .chrono-input-row {
   display: flex;
   gap: 10px;
+  align-items: center;
 }
 
 .chrono-moto-input {
-  flex: 1;
-  padding: 14px 16px;
+  width: 120px;
+  min-width: 120px;
+  padding: 14px 10px;
   background: rgba(0, 0, 0, 0.5);
   border: 2px solid var(--border-subtle);
   border-radius: 12px;
@@ -181,7 +183,8 @@
 }
 
 .chrono-record-btn {
-  padding: 14px 20px !important;
+  flex: 1;
+  padding: 14px 16px !important;
   font-size: 0.95rem !important;
   font-weight: 700 !important;
   white-space: nowrap;
