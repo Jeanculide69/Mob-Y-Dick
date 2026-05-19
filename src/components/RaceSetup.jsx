@@ -1112,9 +1112,14 @@ function LiveVideoBroadcaster({ session, raceSession }) {
         throw new Error("⚠️ Un live est déjà en cours de diffusion sur cette course par un autre organisateur.")
       }
 
-      // 2. Request camera stream
+      // 2. Request camera stream — HD with high framerate at capture; downscale at encode time.
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 360 } },
+        video: {
+          facingMode: 'environment',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
+        },
         audio: false
       })
 
@@ -1137,24 +1142,43 @@ function LiveVideoBroadcaster({ session, raceSession }) {
       channelRef.current = channel
       channel.subscribe()
 
-      // 5. Canvas capture interval (every 250ms -> ~4fps, extremely fast and light!)
+      // 5. Canvas capture: 960x540 (qHD) @ ~6 fps, WebP if supported else JPEG.
+      // WebP is typically 25-40% smaller than JPEG for the same visual quality,
+      // letting us push higher resolution under Supabase Realtime payload limits.
       const canvas = document.createElement('canvas')
-      canvas.width = 480
-      canvas.height = 270
-      const ctx = canvas.getContext('2d')
+      canvas.width = 960
+      canvas.height = 540
+      const ctx = canvas.getContext('2d', { alpha: false })
 
+      // Feature-detect WebP support once at start.
+      const webpSupported = canvas.toDataURL('image/webp', 0.5).indexOf('data:image/webp') === 0
+      const mimeType = webpSupported ? 'image/webp' : 'image/jpeg'
+      const quality = 0.75
+
+      let lastWarnTs = 0
       intervalRef.current = setInterval(() => {
         if (videoRef.current && videoRef.current.readyState === 4) {
-          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
-          const base64Frame = canvas.toDataURL('image/jpeg', 0.5) // high compression for low payload!
-          
-          channel.send({
-            type: 'broadcast',
-            event: 'video-frame',
-            payload: { image: base64Frame }
-          })
+          try {
+            ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
+            const base64Frame = canvas.toDataURL(mimeType, quality)
+
+            channel.send({
+              type: 'broadcast',
+              event: 'video-frame',
+              payload: { image: base64Frame }
+            }).catch(err => {
+              // Don't spam the console if the channel hiccups; warn at most once per 5s.
+              const now = Date.now()
+              if (now - lastWarnTs > 5000) {
+                console.warn('Live frame send failed:', err)
+                lastWarnTs = now
+              }
+            })
+          } catch (e) {
+            console.warn('Frame capture failed:', e)
+          }
         }
-      }, 250)
+      }, 167)
 
       setIsStreaming(true)
     } catch (err) {

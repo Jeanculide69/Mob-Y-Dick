@@ -374,12 +374,12 @@ export default function LiveRace({ customSessionId, onClose }) {
               <span style={{ display: 'inline-block', width: '10px', height: '10px', background: '#ff3b30', borderRadius: '50%', animation: 'pulse 1.5s infinite' }} />
               <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#fff', fontWeight: 'bold' }}>🎥 EN DIRECT DE LA PISTE</h3>
             </div>
-            <div style={{ position: 'relative', width: '100%', maxWidth: '640px', margin: '0 auto', aspectRatio: '16/9', borderRadius: '12px', overflow: 'hidden', background: '#000', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <div style={{ position: 'relative', width: '100%', maxWidth: '960px', margin: '0 auto', aspectRatio: '16/9', borderRadius: '12px', overflow: 'hidden', background: '#000', border: '1px solid rgba(255,255,255,0.1)' }}>
               {streamFrame ? (
-                <img 
-                  src={streamFrame} 
-                  alt="Live video stream" 
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                <img
+                  src={streamFrame}
+                  alt="Live video stream"
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', imageRendering: 'auto' }}
                 />
               ) : (
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px', color: 'var(--text-secondary)' }}>
