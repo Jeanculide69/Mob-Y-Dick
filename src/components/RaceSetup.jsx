@@ -1113,20 +1113,7 @@ function LiveVideoBroadcaster({ session, raceSession }) {
     setLoading(true)
     setErrorMsg(null)
     try {
-      // 1. Concurrency Check: Check if someone else is already streaming
-      const { data: latestSession, error: checkError } = await supabase
-        .from('race_sessions')
-        .select('live_stream_active, live_stream_user_id')
-        .eq('id', raceSession.id)
-        .single()
-
-      if (checkError) throw checkError
-
-      if (latestSession.live_stream_active && latestSession.live_stream_user_id !== session.user.id) {
-        throw new Error("⚠️ Un live est déjà en cours de diffusion sur cette course par un autre organisateur.")
-      }
-
-      // 2. Request camera stream — HD with high framerate at capture; downscale at encode time.
+      // 1. Request camera stream first (MUST be immediately after user click for iOS Safari)
       const stream = await navigator.mediaDevices.getUserMedia({
         video: {
           facingMode: 'environment',
@@ -1136,6 +1123,23 @@ function LiveVideoBroadcaster({ session, raceSession }) {
         },
         audio: false
       })
+
+      // 2. Concurrency Check: Check if someone else is already streaming
+      const { data: latestSession, error: checkError } = await supabase
+        .from('race_sessions')
+        .select('live_stream_active, live_stream_user_id')
+        .eq('id', raceSession.id)
+        .single()
+
+      if (checkError) {
+        stream.getTracks().forEach(t => t.stop())
+        throw checkError
+      }
+
+      if (latestSession.live_stream_active && latestSession.live_stream_user_id !== session.user.id) {
+        stream.getTracks().forEach(t => t.stop())
+        throw new Error("⚠️ Un live est déjà en cours de diffusion sur cette course par un autre organisateur.")
+      }
 
       streamRef.current = stream
       // Small timeout to allow video tag to mount and be ready
