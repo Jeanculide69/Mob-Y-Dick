@@ -1,0 +1,232 @@
+/* ═══════════════════════════════════════════
+   MOTO CHARTS — Graphiques de performance
+   SVG pur, aucune dépendance externe
+   ═══════════════════════════════════════════ */
+
+.moto-charts-wrap {
+  margin-top: 28px;
+}
+
+/* ─── Header + contrôles ─── */
+.moto-charts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+
+.moto-charts-title {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.moto-charts-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Metric toggles */
+.moto-charts-toggles {
+  display: flex;
+  gap: 6px;
+}
+
+.moto-chart-tab {
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s, border-color 0.18s, color 0.18s;
+  white-space: nowrap;
+}
+
+.moto-chart-tab:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+}
+
+.moto-chart-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 12px rgba(255, 85, 0, 0.35);
+}
+
+/* Period buttons */
+.moto-charts-periods {
+  display: flex;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 3px;
+}
+
+.moto-period-btn {
+  padding: 4px 10px;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.moto-period-btn:hover:not(.active) {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.moto-period-btn.active {
+  background: rgba(255, 85, 0, 0.18);
+  color: var(--accent);
+}
+
+/* ─── Zone de graphique ─── */
+.moto-chart-stage {
+  position: relative;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 18px;
+  padding: 4px 8px 0;
+  overflow: visible;
+  user-select: none;
+}
+
+.moto-chart-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  font-family: var(--font-body, system-ui, sans-serif);
+  overflow: visible;
+}
+
+/* ─── Tooltip ─── */
+.moto-chart-tooltip {
+  position: absolute;
+  background: rgba(6, 6, 8, 0.96);
+  border: 1px solid rgba(255, 85, 0, 0.45);
+  border-radius: 12px;
+  padding: 10px 16px;
+  pointer-events: none;
+  z-index: 50;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 85, 0, 0.1);
+  animation: ttFadeIn 0.1s ease both;
+  white-space: nowrap;
+  min-width: 160px;
+}
+
+@keyframes ttFadeIn {
+  from { opacity: 0; transform: translate(-50%, -105%) scale(0.95); }
+  to   { opacity: 1; transform: translate(-50%, -115%) scale(1); }
+}
+
+.moto-chart-tt-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+.moto-chart-tt-date {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.moto-chart-tt-val {
+  font-size: 1.05rem;
+  color: #ff5500;
+  margin-bottom: 4px;
+}
+
+.moto-chart-tt-val strong {
+  font-weight: 900;
+  letter-spacing: -0.5px;
+}
+
+.moto-chart-tt-pilots {
+  font-size: 0.74rem;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+/* ─── Légende ─── */
+.moto-chart-legend {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 4px 0;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.moto-chart-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff5500;
+  flex-shrink: 0;
+  box-shadow: 0 0 6px rgba(255, 85, 0, 0.5);
+}
+
+.moto-chart-legend-n {
+  margin-left: auto;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+/* ─── Empty state ─── */
+.moto-charts-empty {
+  text-align: center;
+  padding: 32px 20px;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 600px) {
+  .moto-charts-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .moto-charts-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .moto-chart-tab {
+    padding: 5px 10px;
+    font-size: 0.76rem;
+  }
+
+  .moto-period-btn {
+    padding: 3px 8px;
+    font-size: 0.72rem;
+  }
+}

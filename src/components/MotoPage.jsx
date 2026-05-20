@@ -48,6 +48,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../supabaseClient'
 import MotoCropper from './MotoCropper'
+import MotoCharts from './MotoCharts'
 import './MotoPage.css'
 
 const MAX_RAW_FILE_SIZE = 20 * 1024 * 1024 // 20 Mo (le cropper compresse à <200 Ko)
@@ -486,6 +487,11 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
                 </div>
               )}
             </div>
+
+            {/* ── Graphiques de performance ── */}
+            {teamHistory.length >= 1 && (
+              <MotoCharts teamHistory={teamHistory} />
+            )}
 
             {/* ── Historique des manches ── */}
             {teamHistory.length > 0 && (
