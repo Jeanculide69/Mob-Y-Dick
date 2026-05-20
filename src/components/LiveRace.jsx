@@ -92,16 +92,47 @@ export default function LiveRace({ customSessionId, onClose }) {
   const extrasChannelRef    = useRef(null)
 
   // ── Video stream ──
+  const [isLiveStreamActive, setIsLiveStreamActive] = useState(session?.live_stream_active || false)
+  const streamTimeoutRef = useRef(null)
+
+  // Listen for live_stream_active changes in real-time
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!session?.live_stream_active) { setStreamFrame(null); return }
-    const ch = supabase.channel(`live-stream-${session.id}`)
-      .on('broadcast', { event: 'video-frame' }, ({ payload }) => {
-        if (payload?.image) setStreamFrame(payload.image)
+    if (!session?.id) return
+    setIsLiveStreamActive(session.live_stream_active || false)
+
+    const ch = supabase.channel(`live-status-viewer-${session.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'race_sessions', filter: `id=eq.${session.id}` }, ({ new: row }) => {
+        const active = row.live_stream_active || false
+        setIsLiveStreamActive(active)
+        if (!active) setStreamFrame(null)
       })
       .subscribe()
+
     return () => supabase.removeChannel(ch)
-  }, [session])
+  }, [session?.id])
+
+  // Subscribe to video frames
+  useEffect(() => {
+    if (!isLiveStreamActive || !session?.id) { setStreamFrame(null); return }
+
+    const ch = supabase.channel(`live-stream-${session.id}`)
+      .on('broadcast', { event: 'video-frame' }, ({ payload }) => {
+        if (payload?.image) {
+          setStreamFrame(payload.image)
+          // Reset timeout — if no frame in 5s, assume stream died
+          if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current)
+          streamTimeoutRef.current = setTimeout(() => {
+            setStreamFrame(null)
+          }, 5000)
+        }
+      })
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(ch)
+      if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current)
+    }
+  }, [isLiveStreamActive, session?.id])
 
   // ── Premium Shop & Alert Refs ──
   const shopItemsRef = useRef([])
@@ -658,7 +689,7 @@ export default function LiveRace({ customSessionId, onClose }) {
         })()}
 
         {/* ── Video stream ── */}
-        {session.live_stream_active && (
+        {isLiveStreamActive && (
           <div className="live-video-container glass" style={{ marginBottom: '30px', padding: '20px', borderRadius: '16px', border: '1px solid var(--accent)', background: 'rgba(255,85,0,0.03)', textAlign: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px' }}>
               <span style={{ width: '10px', height: '10px', background: '#ff3b30', borderRadius: '50%', animation: 'pulse 1.5s infinite', display: 'inline-block' }} />
