@@ -40,6 +40,10 @@ export default function LiveRace({ customSessionId, onClose }) {
   const [selectedTeamId, setSelectedTeamId] = useState(null) // drawer latéral
   const [copied, setCopied]                 = useState(false)
   const [teamStatuses, setTeamStatuses]     = useState({}) // teamId → 'DNF' | 'DNS'
+  
+  // ── Tabs State ──
+  const [activeViewTab, setActiveViewTab]   = useState('classement') // 'classement' | 'podiums' | 'activite'
+  const [announcementsHistory, setAnnouncementsHistory] = useState([])
 
   const elapsedRef          = useRef(null)
   const prevRankingsRef     = useRef({})
@@ -47,6 +51,7 @@ export default function LiveRace({ customSessionId, onClose }) {
 
   // ── Video stream ──
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!session?.live_stream_active) { setStreamFrame(null); return }
     const ch = supabase.channel(`live-stream-${session.id}`)
       .on('broadcast', { event: 'video-frame' }, ({ payload }) => {
@@ -68,6 +73,9 @@ export default function LiveRace({ customSessionId, onClose }) {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'race_sessions', filter: `id=eq.${session.id}` }, ({ new: row }) => {
         setSession(row)
       })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'race_announcements', filter: `session_id=eq.${session.id}` }, ({ new: row }) => {
+        setAnnouncementsHistory(prev => [row, ...prev])
+      })
       .subscribe()
     return () => supabase.removeChannel(ch)
   }, [session?.id])
@@ -86,6 +94,21 @@ export default function LiveRace({ customSessionId, onClose }) {
     })
     return () => supabase.removeChannel(ch)
   }, [session?.id])
+
+  // ── Helpers ──
+  const addFloatingEmoji = (emoji) => {
+    // eslint-disable-next-line react-hooks/purity
+    const id = Date.now() + Math.random()
+    // eslint-disable-next-line react-hooks/purity
+    const x = 5 + Math.random() * 88
+    setFloatingEmojis(prev => [...prev, { id, emoji, x }])
+    setTimeout(() => setFloatingEmojis(prev => prev.filter(e => e.id !== id)), 3200)
+  }
+
+  const sendReaction = (emoji) => {
+    addFloatingEmoji(emoji)
+    extrasChannelRef.current?.send({ type: 'broadcast', event: 'reaction', payload: { emoji } })
+  }
 
   // ── Broadcast — emoji reactions + announcements orga ──
   useEffect(() => {
@@ -117,11 +140,9 @@ export default function LiveRace({ customSessionId, onClose }) {
   }, [session])
 
   // ── Initial load ──
-  useEffect(() => { loadLiveSession() }, [customSessionId])
-
   const loadLiveSession = async () => {
     setLoading(true)
-    let sessions = []
+    let sessions;
     if (customSessionId) {
       const { data } = await supabase.from('race_sessions').select('*').eq('id', customSessionId).limit(1)
       sessions = data || []
@@ -140,9 +161,14 @@ export default function LiveRace({ customSessionId, onClose }) {
       setTeams(teamsData || [])
       const { data: lapsData } = await supabase.from('race_laps').select('*').eq('session_id', s.id).order('recorded_at', { ascending: false })
       setLaps(lapsData || [])
+      const { data: annData } = await supabase.from('race_announcements').select('*').eq('session_id', s.id).order('created_at', { ascending: false })
+      setAnnouncementsHistory(annData || [])
     }
     setLoading(false)
   }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
+  useEffect(() => { loadLiveSession() }, [customSessionId])
 
   // ── Track position changes when laps update ──
   const getRankingsForAll = useCallback(() => {
@@ -178,20 +204,7 @@ export default function LiveRace({ customSessionId, onClose }) {
     const newPrev = {}
     current.forEach((r, idx) => { newPrev[r.id] = idx })
     prevRankingsRef.current = newPrev
-  }, [laps, getRankingsForAll])
-
-  // ── Helpers ──
-  const addFloatingEmoji = (emoji) => {
-    const id = Date.now() + Math.random()
-    const x = 5 + Math.random() * 88
-    setFloatingEmojis(prev => [...prev, { id, emoji, x }])
-    setTimeout(() => setFloatingEmojis(prev => prev.filter(e => e.id !== id)), 3200)
-  }
-
-  const sendReaction = (emoji) => {
-    addFloatingEmoji(emoji)
-    extrasChannelRef.current?.send({ type: 'broadcast', event: 'reaction', payload: { emoji } })
-  }
+  }, [laps, teams, getRankingsForAll])
 
   const handleShare = () => {
     const url = `${window.location.origin}?live=${session.id}`
@@ -421,19 +434,39 @@ export default function LiveRace({ customSessionId, onClose }) {
           </div>
         )}
 
-        {/* ── Category tabs ── */}
-        <div className="live-cat-tabs">
-          {['all', ...categories].map(c => (
-            <button key={c} className={`live-cat-tab ${selectedCategory === c ? 'active' : ''}`} onClick={() => setSelectedCategory(c)}>
-              {c === 'all' ? 'Toutes' : c}
+
+
+        {/* ── Main View Tabs ── */}
+        <div className="live-main-tabs" style={{ display: 'flex', gap: '10px', overflowX: 'auto', paddingBottom: '10px', marginBottom: '20px' }}>
+          <button className={`live-cat-tab ${activeViewTab === 'classement' ? 'active' : ''}`} onClick={() => setActiveViewTab('classement')}>
+            🏁 Classement
+          </button>
+          {(isFinished || allRankings.length > 0) && (
+            <button className={`live-cat-tab ${activeViewTab === 'podiums' ? 'active' : ''}`} onClick={() => setActiveViewTab('podiums')}>
+              🏆 Podiums
             </button>
-          ))}
+          )}
+          <button className={`live-cat-tab ${activeViewTab === 'activite' ? 'active' : ''}`} onClick={() => setActiveViewTab('activite')}>
+            ⚡ Activité & Historique
+          </button>
         </div>
 
-        <div className="live-content-grid">
-          {/* ── Rankings table ── */}
-          <div className="live-rankings-panel">
-            <div className="live-rankings-card glass">
+        {/* ── Category tabs (used by both Classement and Podiums) ── */}
+        {(activeViewTab === 'classement' || activeViewTab === 'podiums') && (
+          <div className="live-cat-tabs">
+            {['all', ...categories].map(c => (
+              <button key={c} className={`live-cat-tab ${selectedCategory === c ? 'active' : ''}`} onClick={() => setSelectedCategory(c)}>
+                {c === 'all' ? 'Toutes' : c}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="live-content-container">
+          {/* ── Onglet Classement ── */}
+          {activeViewTab === 'classement' && (
+            <div className="live-rankings-panel" style={{ width: '100%' }}>
+              <div className="live-rankings-card glass">
               <h2 className="live-rankings-title">🏆 Classement {selectedCategory !== 'all' ? `— ${selectedCategory}` : 'Général'}</h2>
 
               {allRankings.length === 0 ? (
@@ -536,10 +569,11 @@ export default function LiveRace({ customSessionId, onClose }) {
                 </div>
               )}
             </div>
-
-            {/* ── Podiums per category (finished) ── */}
-            {isFinished && (
-              <div className="live-podiums-section">
+          </div>
+        )}
+          {/* ── Onglet Podiums ── */}
+          {activeViewTab === 'podiums' && (
+            <div className="live-podiums-section" style={{ width: '100%' }}>
                 <h2 className="live-podiums-title">🏆 Podiums {selectedCategory !== 'all' ? `— ${selectedCategory}` : 'par Catégorie'}</h2>
                 <div className="live-podiums-grid">
                   {(selectedCategory === 'all' ? categories : [selectedCategory]).map(cat => {
@@ -583,12 +617,34 @@ export default function LiveRace({ customSessionId, onClose }) {
                 </div>
               </div>
             )}
-          </div>
 
-          {/* ── Sidebar ── */}
-          <div className="live-sidebar">
-            {/* Recent laps feed */}
-            <div className="live-feed glass">
+          {/* ── Onglet Activité & Historique ── */}
+          {activeViewTab === 'activite' && (
+            <div className="live-sidebar" style={{ width: '100%', maxWidth: '800px', margin: '0 auto' }}>
+              
+              {/* Historique des Annonces */}
+              <div className="live-feed glass" style={{ marginBottom: '20px' }}>
+                <h3 className="live-feed-title">📢 Historique des Événements</h3>
+                <div className="live-feed-list" style={{ maxHeight: '300px' }}>
+                  {announcementsHistory.length === 0 ? (
+                    <div className="live-feed-empty">Aucun événement enregistré</div>
+                  ) : (
+                    announcementsHistory.map((ann) => (
+                      <div key={ann.id} className="live-feed-item" style={{ padding: '12px', borderLeft: '4px solid var(--accent)' }}>
+                        <div className="live-feed-time" style={{ fontSize: '0.85rem', marginBottom: '4px' }}>
+                          {new Date(ann.created_at).toLocaleTimeString('fr-FR')}
+                        </div>
+                        <div className="live-feed-name" style={{ fontSize: '1.05rem', color: '#fff', whiteSpace: 'pre-wrap' }}>
+                          {ann.message}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              {/* Recent laps feed */}
+              <div className="live-feed glass">
               <h3 className="live-feed-title">⚡ Derniers Passages</h3>
               <div className="live-feed-list">
                 {recentLaps.map(l => {
@@ -632,7 +688,8 @@ export default function LiveRace({ customSessionId, onClose }) {
                 </div>
               </div>
             )}
-          </div>
+            </div>
+          )}
         </div>
       </div>
 
