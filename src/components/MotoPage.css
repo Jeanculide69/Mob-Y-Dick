@@ -797,7 +797,14 @@
     border-radius: 0;
     max-width: 100%;
     width: 100%;
-    min-height: 100dvh;
+    height: 100dvh;
+    max-height: 100dvh;
+    min-height: 0;
+    /* La shell devient le conteneur scrollable (l'overlay ne peut pas car
+       sa flex-child remplit la hauteur, et la shell avait overflow:hidden) */
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
     animation-name: motoShellMobile;
     display: flex;
     flex-direction: column;
