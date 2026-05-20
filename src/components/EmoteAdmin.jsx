@@ -94,7 +94,25 @@ export default function EmoteAdmin({ onClose }) {
       const { error: upErr } = await supabase.storage
         .from('emote-assets')
         .upload(path, file, { upsert: true, cacheControl: '3600' })
-      if (upErr) throw upErr
+      if (upErr) {
+        const msg = (upErr.message || '').toLowerCase()
+        if (msg.includes('bucket not found') || msg.includes('bucket') && msg.includes('not')) {
+          throw new Error(
+            "Le bucket 'emote-assets' n'existe pas encore sur Supabase Storage.\n\n" +
+            "▶ Va dans le Dashboard Supabase → SQL Editor, puis exécute le contenu\n" +
+            "du fichier database_v15_emote_management.sql (à la racine du repo).\n\n" +
+            "Le fichier crée le bucket et configure les permissions admin."
+          )
+        }
+        if (msg.includes('row-level security') || msg.includes('rls') || msg.includes('policy')) {
+          throw new Error(
+            "Upload refusé par les policies RLS du bucket.\n\n" +
+            "Vérifie que ton compte a bien le rôle 'admin' ou 'organisateur' dans\n" +
+            "la table profiles, puis ré-exécute database_v15_emote_management.sql."
+          )
+        }
+        throw upErr
+      }
 
       const { data: { publicUrl } } = supabase.storage
         .from('emote-assets')
