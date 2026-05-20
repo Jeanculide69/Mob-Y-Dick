@@ -1338,7 +1338,12 @@ export default function LiveRace({ customSessionId, onClose }) {
       {isLive && !shopOpen && createPortal(
         <div className="live-fab-container">
           {fabOpen && (
-            <div className="live-fab-menu glass fade-in">
+            <div
+              className="live-fab-menu glass fade-in"
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+            >
               <div className="live-fab-menu-title">💬 Réactions rapides</div>
               <div className="live-fab-emoji-row">
                 {EMOJIS.map(emoji => (
@@ -1383,8 +1388,16 @@ export default function LiveRace({ customSessionId, onClose }) {
             </div>
           )}
           <button
+            type="button"
             className={`live-fab-btn ${fabOpen ? 'active' : ''}`}
-            onClick={() => setFabOpen(!fabOpen)}
+            onClick={(e) => {
+              // Garde-fou : empêche tout double-déclenchement éventuel
+              // (touch + click sur certains Android, ou bubbling vers
+              // un parent qui aurait un handler) en stoppant la
+              // propagation et en togglant explicitement
+              e.stopPropagation()
+              setFabOpen(o => !o)
+            }}
             aria-label={fabOpen ? 'Fermer le menu' : 'Emotes et Dons'}
           >
             <span className="live-fab-icon">{fabOpen ? '✕' : '🎉'}</span>
