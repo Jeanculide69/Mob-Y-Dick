@@ -82,6 +82,27 @@ export default function LiveTeamDrawer({ team, allLaps, position, onClose }) {
     return () => { document.body.style.overflow = prev }
   }, [])
 
+  // Le bouton "retour" du téléphone ferme le drawer au lieu de quitter le site.
+  // On empile un état dans l'historique à l'ouverture, on écoute popstate pour
+  // appeler onClose, et on resynchronise l'historique si la fermeture vient
+  // de la croix (et pas du back natif).
+  useEffect(() => {
+    let closedByBack = false
+    window.history.pushState({ mydDrawer: true }, '')
+    const onPop = () => {
+      closedByBack = true
+      onClose()
+    }
+    window.addEventListener('popstate', onPop)
+    return () => {
+      window.removeEventListener('popstate', onPop)
+      if (!closedByBack) {
+        // Fermeture via X ou clic backdrop → on pop l'état qu'on avait empilé
+        window.history.back()
+      }
+    }
+  }, [onClose])
+
   return (
     <>
       <div className="ltd-backdrop" onClick={onClose} />

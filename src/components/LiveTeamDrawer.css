@@ -9,7 +9,7 @@
 .ltd-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 700;
+  z-index: 1500;
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
@@ -31,7 +31,7 @@
   max-height: 90dvh;
   overflow-y: auto;
   overscroll-behavior: contain;
-  z-index: 701;
+  z-index: 1501;
   padding: 24px 22px 48px;
   border-radius: 22px;
   display: flex;

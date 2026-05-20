@@ -256,6 +256,23 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
     return () => { document.body.style.overflow = prev }
   }, [])
 
+  // Le bouton "retour" du téléphone ferme la page moto au lieu de quitter le site.
+  useEffect(() => {
+    let closedByBack = false
+    window.history.pushState({ mydMotoPage: true }, '')
+    const onPop = () => {
+      closedByBack = true
+      onClose()
+    }
+    window.addEventListener('popstate', onPop)
+    return () => {
+      window.removeEventListener('popstate', onPop)
+      if (!closedByBack) {
+        window.history.back()
+      }
+    }
+  }, [onClose])
+
   const handleReviewAffiliation = async (id, newStatus) => {
     setReviewingId(id)
     const { data: { user } } = await supabase.auth.getUser()
