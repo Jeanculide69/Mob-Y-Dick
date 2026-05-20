@@ -11,10 +11,10 @@
   background: var(--bg-color);
 }
 
-.video-bg video {
+.video-bg .video-canvas {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  display: block;
   opacity: 0.5;
   filter: brightness(0.6) contrast(1.1) saturate(0.8);
 }

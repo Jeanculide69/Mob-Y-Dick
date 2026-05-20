@@ -1169,62 +1169,164 @@ function App() {
 
   return (
     <>
-      {/* ─── Video Background — ping-pong (forward → reverse → forward) ───
-         Au lieu de loop classique qui produisait une saccade à la couture,
-         on lit la vidéo en sens normal, puis dès qu'elle finit on la
-         joue à l'envers via requestAnimationFrame (les navigateurs ne
-         supportent pas playbackRate négatif), puis on repart à l'endroit.
-         Effet boucle propre sans seam visible. */}
+      {/* ─── Video Background — ping-pong via Canvas ───
+         Boucle "palindrome" fluide : la vidéo joue en avant (lecture native),
+         puis en arrière (seeks piloté par requestAnimationFrame + rendu canvas).
+         Le canvas visible masque totalement les artefacts de seek, donnant
+         un reverse parfaitement lisse visuellement.
+         
+         Architecture :
+         - <video> caché (opacity:0, pointer-events:none) = source de données
+         - <canvas> visible = ce que l'utilisateur voit
+         - Forward : video.play() + rAF copie chaque frame sur le canvas
+         - Reverse : video pausée, on seek en arrière par pas de ~33ms (30fps),
+           à chaque `seeked` on dessine le frame sur le canvas, puis on
+           programme le seek suivant. Le canvas buffer fait que c'est fluide. */}
       <div className="video-bg">
-        <video
-          autoPlay
-          muted
-          playsInline
-          ref={(videoEl) => {
-            if (!videoEl || videoEl.__mydPingPongBound) return
-            videoEl.__mydPingPongBound = true
+        <canvas
+          className="video-canvas"
+          ref={(canvasEl) => {
+            if (!canvasEl || canvasEl.__mydBound) return
+            canvasEl.__mydBound = true
 
-            // 'forward' : lecture native (autoPlay)
-            // 'reverse' : on pilote currentTime via rAF, video.paused = true
+            const videoEl = document.createElement('video')
+            videoEl.src = '/video_background.mp4'
+            videoEl.muted = true
+            videoEl.playsInline = true
+            videoEl.preload = 'auto'
+            videoEl.style.display = 'none'
+            document.body.appendChild(videoEl)
+
+            const ctx = canvasEl.getContext('2d')
             let direction = 'forward'
             let rafId = null
+            const NEAR_END_THRESHOLD = 0.15
+            const REVERSE_STEP = 1 / 25  // ~40ms pas arrière (25fps reverse)
 
-            const REVERSE_SPEED = 0.04 // secondes décrémentées par frame (~30fps perçus à 60Hz)
+            // Resize canvas to match video
+            const resizeCanvas = () => {
+              const dpr = window.devicePixelRatio || 1
+              const rect = canvasEl.getBoundingClientRect()
+              canvasEl.width = rect.width * dpr
+              canvasEl.height = rect.height * dpr
+              ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+            }
 
-            const stepReverse = () => {
-              if (direction !== 'reverse') return
-              const next = videoEl.currentTime - REVERSE_SPEED
-              if (next <= 0) {
-                videoEl.currentTime = 0
-                direction = 'forward'
-                videoEl.play().catch(() => {})
+            // Draw current video frame to canvas, covering the whole area
+            const drawFrame = () => {
+              if (!videoEl.videoWidth) return
+              const cw = canvasEl.getBoundingClientRect().width
+              const ch = canvasEl.getBoundingClientRect().height
+              const vw = videoEl.videoWidth
+              const vh = videoEl.videoHeight
+
+              // object-fit: cover logic
+              const canvasRatio = cw / ch
+              const videoRatio = vw / vh
+              let sw, sh, sx, sy
+              if (videoRatio > canvasRatio) {
+                sh = vh
+                sw = vh * canvasRatio
+                sx = (vw - sw) / 2
+                sy = 0
+              } else {
+                sw = vw
+                sh = vw / canvasRatio
+                sx = 0
+                sy = (vh - sh) / 2
+              }
+              ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, cw, ch)
+            }
+
+            // Forward: rAF loop drawing video frames
+            const forwardLoop = () => {
+              if (direction !== 'forward') return
+              drawFrame()
+              // Check near-end
+              if (videoEl.duration && !isNaN(videoEl.duration) &&
+                  videoEl.currentTime >= videoEl.duration - NEAR_END_THRESHOLD) {
+                direction = 'reverse'
+                videoEl.pause()
+                startReverse()
                 return
               }
-              videoEl.currentTime = next
-              rafId = requestAnimationFrame(stepReverse)
+              rafId = requestAnimationFrame(forwardLoop)
             }
 
-            const onEnded = () => {
-              direction = 'reverse'
-              videoEl.pause()
-              // On peut être un peu après duration, on cap.
-              if (videoEl.duration && videoEl.currentTime > videoEl.duration) {
-                videoEl.currentTime = videoEl.duration
+            // Reverse: seek backward step by step, draw on seeked
+            const startReverse = () => {
+              const doStep = () => {
+                if (direction !== 'reverse') return
+                const next = videoEl.currentTime - REVERSE_STEP
+                if (next <= 0.05) {
+                  // Reached beginning — restart forward
+                  videoEl.currentTime = 0
+                  direction = 'forward'
+                  videoEl.play().catch(() => {})
+                  rafId = requestAnimationFrame(forwardLoop)
+                  return
+                }
+                videoEl.currentTime = next
               }
-              rafId = requestAnimationFrame(stepReverse)
+
+              // On each seeked event during reverse, draw frame then schedule next step
+              const onSeeked = () => {
+                if (direction !== 'reverse') {
+                  videoEl.removeEventListener('seeked', onSeeked)
+                  return
+                }
+                drawFrame()
+                // Small delay via rAF to let the browser breathe
+                requestAnimationFrame(() => {
+                  doStep()
+                })
+              }
+
+              videoEl.addEventListener('seeked', onSeeked)
+              doStep()
             }
 
-            videoEl.addEventListener('ended', onEnded)
+            // Init
+            const onLoadedData = () => {
+              resizeCanvas()
+              drawFrame()
+              direction = 'forward'
+              videoEl.play().catch(() => {})
+              rafId = requestAnimationFrame(forwardLoop)
+            }
 
-            // Clean-up si la ref est démontée (rare en SPA)
-            videoEl.__mydPingPongCleanup = () => {
+            // Also handle ended as safety
+            videoEl.addEventListener('ended', () => {
+              if (direction === 'forward') {
+                direction = 'reverse'
+                videoEl.pause()
+                startReverse()
+              }
+            })
+
+            videoEl.addEventListener('loadeddata', onLoadedData)
+
+            // Handle resize
+            let resizeTimer
+            const onResize = () => {
+              clearTimeout(resizeTimer)
+              resizeTimer = setTimeout(() => {
+                resizeCanvas()
+                drawFrame()
+              }, 100)
+            }
+            window.addEventListener('resize', onResize)
+            resizeCanvas()
+
+            // Cleanup ref
+            canvasEl.__mydCleanup = () => {
               if (rafId) cancelAnimationFrame(rafId)
-              videoEl.removeEventListener('ended', onEnded)
+              window.removeEventListener('resize', onResize)
+              videoEl.pause()
+              videoEl.remove()
             }
           }}
-        >
-          <source src="/video_background.mp4" type="video/mp4" />
-        </video>
+        />
         <div className="video-overlay" />
       </div>
 
