@@ -20,7 +20,9 @@ import { useEffect, useRef, useState } from 'react'
 import './VideoTrimmer.css'
 
 const TARGET_SIZE = 480           // Canvas carré 480×480
-const TARGET_DURATION = 5         // Secondes max
+const DEFAULT_DURATION = 5        // Secondes par défaut
+const MIN_DURATION = 1            // Plancher
+const MAX_DURATION = 10           // Plafond (au-delà, ça pèse trop)
 const FPS = 30
 const VIDEO_BITRATE = 1_000_000   // 1 Mbps
 const AUDIO_BITRATE = 96_000      // 96 kbps
@@ -53,6 +55,8 @@ export default function VideoTrimmer({ file, onConfirm, onCancel }) {
 
   const [duration, setDuration] = useState(0)
   const [startTime, setStartTime] = useState(0)
+  const [targetDuration, setTargetDuration] = useState(DEFAULT_DURATION) // durée à capturer
+  const [includeAudio, setIncludeAudio] = useState(true)
   const [previewTime, setPreviewTime] = useState(0)
   const [processing, setProcessing] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -93,8 +97,24 @@ export default function VideoTrimmer({ file, onConfirm, onCancel }) {
     if (videoRef.current) setPreviewTime(videoRef.current.currentTime)
   }
 
-  const captureDuration = Math.min(TARGET_DURATION, Math.max(0, duration - startTime))
-  const maxStart = Math.max(0, duration - 0.5) // on autorise jusqu'à 0.5s avant la fin
+  // Plafond effectif de la durée cible : ce qui est dispo après le startTime,
+  // mais aussi borné par MAX_DURATION. Borne basse à MIN_DURATION.
+  const effectiveMaxDuration = Math.max(
+    MIN_DURATION,
+    Math.min(MAX_DURATION, duration - startTime)
+  )
+  const clampedTarget = Math.max(
+    MIN_DURATION,
+    Math.min(targetDuration, effectiveMaxDuration)
+  )
+  const captureDuration = clampedTarget
+
+  // Taille de sortie estimée (approximation : bitrate × durée / 8)
+  const estimatedKB = Math.round(
+    (VIDEO_BITRATE + (includeAudio ? AUDIO_BITRATE : 0)) * captureDuration / 8 / 1024
+  )
+
+  const maxStart = Math.max(0, duration - MIN_DURATION) // au moins 1s avant la fin
 
   const handleConfirm = async () => {
     if (!videoRef.current || !canvasRef.current) return
@@ -123,26 +143,28 @@ export default function VideoTrimmer({ file, onConfirm, onCancel }) {
         video.addEventListener('seeked', onSeeked)
       })
 
-      // ── Construire le stream final (canvas vidéo + audio source) ──
+      // ── Construire le stream final (canvas vidéo + audio source si demandé) ──
       const canvasStream = canvas.captureStream(FPS)
       const finalStream = new MediaStream()
       canvasStream.getVideoTracks().forEach(t => finalStream.addTrack(t))
 
-      try {
-        const srcStream = typeof video.captureStream === 'function'
-          ? video.captureStream()
-          : (typeof video.mozCaptureStream === 'function' ? video.mozCaptureStream() : null)
-        if (srcStream) {
-          srcStream.getAudioTracks().forEach(t => finalStream.addTrack(t))
+      if (includeAudio) {
+        try {
+          const srcStream = typeof video.captureStream === 'function'
+            ? video.captureStream()
+            : (typeof video.mozCaptureStream === 'function' ? video.mozCaptureStream() : null)
+          if (srcStream) {
+            srcStream.getAudioTracks().forEach(t => finalStream.addTrack(t))
+          }
+        } catch {
+          // Pas d'audio capturable : on continue avec la vidéo seule
         }
-      } catch {
-        // Pas d'audio capturable : on continue avec la vidéo seule
       }
 
       const recorderOpts = {
         mimeType,
         videoBitsPerSecond: VIDEO_BITRATE,
-        audioBitsPerSecond: AUDIO_BITRATE,
+        ...(includeAudio ? { audioBitsPerSecond: AUDIO_BITRATE } : {}),
       }
       const recorder = new MediaRecorder(finalStream, recorderOpts)
       const chunks = []
@@ -204,7 +226,11 @@ export default function VideoTrimmer({ file, onConfirm, onCancel }) {
 
       setProgress(100)
       setProcessing(false)
-      onConfirm(outFile)
+      // hasAudio indique si la vidéo de sortie contient une piste audio.
+      // L'appelant (EmoteAdmin) l'utilise pour décider s'il efface ou non
+      // le sound_url séparé : vidéo silencieuse → on garde la possibilité
+      // d'ajouter un MP3 plus tard.
+      onConfirm(outFile, { hasAudio: includeAudio })
     } catch (err) {
       console.error(err)
       setError(`Compression échouée : ${err.message || err}`)
@@ -222,9 +248,9 @@ export default function VideoTrimmer({ file, onConfirm, onCancel }) {
 
         <div className="video-trimmer-body">
           <p className="video-trimmer-hint">
-            Choisis le passage de <strong>5 secondes max</strong> à utiliser.
-            Le fichier sera resizé en <strong>480×480</strong>, compressé en WebM
-            (~700 Ko) pour rester homogène avec les autres animations.
+            Choisis le passage et la durée. Le fichier sera resizé en
+            <strong> 480×480</strong>, compressé en WebM pour rester homogène
+            avec les autres animations.
           </p>
 
           <div className="video-trimmer-preview">
@@ -245,21 +271,65 @@ export default function VideoTrimmer({ file, onConfirm, onCancel }) {
               <div className="video-trimmer-times">
                 <span>Début : <strong>{fmtTime(startTime)}</strong></span>
                 <span>Durée capture : <strong>{captureDuration.toFixed(1)}s</strong></span>
-                <span>Total source : {fmtTime(duration)}</span>
+                <span>Source : {fmtTime(duration)}</span>
+                <span>~ <strong>{estimatedKB} Ko</strong></span>
               </div>
 
-              {duration > TARGET_DURATION && (
+              {/* Slider du début (si la source est plus longue que le min) */}
+              {duration > MIN_DURATION && (
+                <div className="video-trimmer-slider-block">
+                  <label className="video-trimmer-slider-label">Début</label>
+                  <input
+                    type="range"
+                    min={0}
+                    max={maxStart}
+                    step={0.1}
+                    value={startTime}
+                    onChange={handleScrub}
+                    disabled={processing}
+                    className="video-trimmer-slider"
+                  />
+                </div>
+              )}
+
+              {/* Slider de la durée à capturer (1s → 10s, plafonné au disponible) */}
+              <div className="video-trimmer-slider-block">
+                <label className="video-trimmer-slider-label">
+                  Durée capture : <strong>{clampedTarget.toFixed(1)}s</strong>
+                </label>
                 <input
                   type="range"
-                  min={0}
-                  max={maxStart}
-                  step={0.1}
-                  value={startTime}
-                  onChange={handleScrub}
+                  min={MIN_DURATION}
+                  max={effectiveMaxDuration}
+                  step={0.5}
+                  value={clampedTarget}
+                  onChange={(e) => setTargetDuration(parseFloat(e.target.value))}
                   disabled={processing}
                   className="video-trimmer-slider"
                 />
-              )}
+                <div className="video-trimmer-slider-ticks">
+                  <span>{MIN_DURATION}s</span>
+                  <span>{Math.min(MAX_DURATION, Math.max(MIN_DURATION, Math.round(effectiveMaxDuration)))}s</span>
+                </div>
+              </div>
+
+              {/* Toggle audio */}
+              <label className="video-trimmer-toggle">
+                <input
+                  type="checkbox"
+                  checked={includeAudio}
+                  onChange={(e) => setIncludeAudio(e.target.checked)}
+                  disabled={processing}
+                />
+                <span className="video-trimmer-toggle-text">
+                  🔊 Garder l'audio de la vidéo
+                  {!includeAudio && (
+                    <em className="video-trimmer-toggle-hint">
+                      — silencieux. Tu pourras ajouter un MP3 séparé après.
+                    </em>
+                  )}
+                </span>
+              </label>
             </div>
           )}
 

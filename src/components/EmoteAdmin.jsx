@@ -77,7 +77,7 @@ export default function EmoteAdmin({ onClose }) {
     return Object.keys(d).some(k => d[k] !== item[k])
   }
 
-  const handleUpload = async (item, file, kind) => {
+  const handleUpload = async (item, file, kind, opts = {}) => {
     if (!file) return
     const maxSize = kind === 'media' ? MAX_MEDIA_SIZE : MAX_SOUND_SIZE
     if (file.size > maxSize) {
@@ -106,12 +106,15 @@ export default function EmoteAdmin({ onClose }) {
       let patch
       if (kind === 'media') {
         const mediaType = inferMediaType(file.name)
+        // Si la vidéo contient son propre son (hasAudio !== false), on efface
+        // le sound_url séparé. Sinon on garde l'éventuel MP3 existant : la
+        // vidéo silencieuse pourra être accompagnée d'un son uploadé à part.
+        const videoHasAudio = mediaType === 'mp4' && opts.hasAudio !== false
         patch = {
           media_url: finalUrl,
           media_type: mediaType,
           animation_url: finalUrl, // on garde l'ancien champ synchro pour rétro-compat
-          // MP4 : on efface le son séparé car la vidéo a son propre audio
-          ...(mediaType === 'mp4' ? { sound_url: null } : {}),
+          ...(videoHasAudio ? { sound_url: null } : {}),
         }
       } else {
         patch = { sound_url: finalUrl }
@@ -416,10 +419,10 @@ export default function EmoteAdmin({ onClose }) {
       {trimmer && (
         <VideoTrimmer
           file={trimmer.file}
-          onConfirm={(compressedFile) => {
+          onConfirm={(compressedFile, trimmerOpts) => {
             const ctx = trimmer
             setTrimmer(null)
-            handleUpload(ctx.item, compressedFile, 'media')
+            handleUpload(ctx.item, compressedFile, 'media', trimmerOpts)
           }}
           onCancel={() => setTrimmer(null)}
         />

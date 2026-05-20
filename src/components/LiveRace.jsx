@@ -187,23 +187,24 @@ export default function LiveRace({ customSessionId, onClose }) {
     }])
 
     // ── Stratégie de son ──
-    // 1. Si MP4 : le <video> joue son propre son → on ne déclenche rien d'autre
-    // 2. Sinon si sound_url (mp3 uploadé) : on joue ce fichier
-    // 3. Sinon : fallback sur le synthé Web Audio API
+    // - Si un sound_url est présent : il a la priorité (cas vidéo
+    //   silencieuse uploadée + MP3 séparé, OU GIF + MP3)
+    //   → la <video> sera mutée à l'affichage pour éviter le double son
+    // - Sinon si MP4 : la <video> joue son propre son intégré
+    // - Sinon : fallback sur le synthé Web Audio API
     const isVideo = item.media_type === 'mp4' || /\.(mp4|webm)($|\?)/i.test(item.media_url || item.animation_url || '')
-    if (!isVideo) {
-      if (item.sound_url) {
-        try {
-          const audio = new Audio(item.sound_url)
-          audio.volume = 0.7
-          audio.play().catch(() => playPremiumSound(slug))
-        } catch {
-          playPremiumSound(slug)
-        }
-      } else {
-        playPremiumSound(slug)
+    if (item.sound_url) {
+      try {
+        const audio = new Audio(item.sound_url)
+        audio.volume = 0.7
+        audio.play().catch(() => { if (!isVideo) playPremiumSound(slug) })
+      } catch {
+        if (!isVideo) playPremiumSound(slug)
       }
+    } else if (!isVideo) {
+      playPremiumSound(slug)
     }
+    // Cas vidéo sans sound_url : le <video> en jsx joue son audio intégré.
 
     // Auto-remove after 4.5 seconds
     setTimeout(() => {
@@ -611,7 +612,10 @@ export default function LiveRace({ customSessionId, onClose }) {
                         className="live-premium-emote-img"
                         autoPlay
                         playsInline
-                        /* Le MP4 porte son propre son ; pas de muted volontairement */
+                        /* Mute la vidéo SI un sound_url séparé est défini :
+                           dans ce cas c'est le MP3 qui joue (cf. triggerPremiumReaction).
+                           Sinon, le MP4 joue son propre son intégré. */
+                        muted={!!a.item.sound_url}
                         onEnded={(e) => { try { e.currentTarget.pause() } catch { /* ignore */ } }}
                       />
                     ) : (
