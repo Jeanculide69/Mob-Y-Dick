@@ -1344,21 +1344,41 @@ function LiveVideoBroadcaster({ session, raceSession }) {
               <p style={{ margin: '0 0 10px 0', fontSize: '0.95rem', color: '#ffaa00', fontWeight: 'bold' }}>
                 🔒 Caméra bloquée par le navigateur
               </p>
-              <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: '#ccc' }}>
-                Tu as refusé l'accès caméra précédemment. Pour débloquer :
+              <p style={{ margin: '0 0 6px 0', fontSize: '0.85rem', color: '#fff', fontWeight: 'bold' }}>
+                ⚡ Solution rapide :
               </p>
-              <ol style={{ margin: '0 0 12px 0', paddingLeft: '20px', fontSize: '0.85rem', color: '#ccc' }}>
-                <li>Appuie sur le <strong>cadenas 🔒</strong> (ou l'icône ⓘ) dans la barre d'adresse</li>
-                <li>Appuie sur <strong>"Autorisations"</strong> ou <strong>"Paramètres du site"</strong></li>
-                <li>Mets <strong>Caméra → Autoriser</strong></li>
-                <li><strong>Recharge la page</strong> (tire vers le bas ou appuie sur ↻)</li>
+              <p style={{ margin: '0 0 12px 0', fontSize: '0.85rem', color: '#ccc' }}>
+                Ouvre cette page en <strong>navigation privée</strong> (onglet incognito) — le navigateur redemandera l'accès caméra automatiquement.
+              </p>
+              <button 
+                className="btn btn-primary"
+                onClick={() => {
+                  // Copy current URL to clipboard for easy paste in incognito
+                  navigator.clipboard?.writeText(window.location.href)
+                  alert("📋 Lien copié !\n\nMaintenant :\n1. Ouvre un onglet Incognito (menu ⋮ → Nouvel onglet de navigation privée)\n2. Colle le lien et va dessus\n3. Accepte la caméra quand le navigateur le demande ✅")
+                }}
+                style={{ background: '#ffaa00', color: '#000', border: 'none', fontSize: '0.85rem', padding: '8px 16px', marginBottom: '14px' }}
+              >
+                📋 Copier le lien de cette page
+              </button>
+
+              <hr style={{ border: 'none', borderTop: '1px solid rgba(255,255,255,0.1)', margin: '12px 0' }} />
+
+              <p style={{ margin: '0 0 6px 0', fontSize: '0.85rem', color: '#fff', fontWeight: 'bold' }}>
+                🔧 Ou débloquer définitivement (Chrome Android) :
+              </p>
+              <ol style={{ margin: '0 0 12px 0', paddingLeft: '20px', fontSize: '0.82rem', color: '#aaa' }}>
+                <li>Appuie sur les <strong>3 points ⋮</strong> en haut à droite de Chrome</li>
+                <li>Va dans <strong>Paramètres → Paramètres des sites → Appareil photo</strong></li>
+                <li>Trouve <strong>mob-y-dick</strong> dans la liste et mets sur <strong>Autoriser</strong></li>
+                <li>Reviens ici et recharge la page</li>
               </ol>
               <button 
                 className="btn btn-primary"
                 onClick={() => window.location.reload()}
-                style={{ background: '#ffaa00', color: '#000', border: 'none', fontSize: '0.85rem', padding: '8px 16px' }}
+                style={{ background: 'transparent', color: '#ffaa00', border: '1px solid #ffaa00', fontSize: '0.82rem', padding: '6px 14px' }}
               >
-                🔄 J'ai autorisé — Recharger la page
+                🔄 J'ai autorisé — Recharger
               </button>
             </div>
           )}
@@ -1368,10 +1388,10 @@ function LiveVideoBroadcaster({ session, raceSession }) {
           <button 
             className="btn btn-primary" 
             onClick={startStreaming}
-            disabled={loading || permissionBlocked}
-            style={{ background: permissionBlocked ? 'rgba(150,150,150,0.3)' : 'linear-gradient(135deg, #ff5500 0%, #ff8c42 100%)', border: 'none', opacity: permissionBlocked ? 0.6 : 1 }}
+            disabled={loading}
+            style={{ background: 'linear-gradient(135deg, #ff5500 0%, #ff8c42 100%)', border: 'none' }}
           >
-            {loading ? 'Initialisation...' : permissionBlocked ? '🔒 Caméra bloquée — voir ci-dessus' : '🎥 Lancer le Live Vidéo'}
+            {loading ? 'Initialisation...' : '🎥 Lancer le Live Vidéo'}
           </button>
         </div>
       )}
