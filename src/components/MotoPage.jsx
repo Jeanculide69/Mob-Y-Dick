@@ -257,11 +257,17 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
   }, [])
 
   // Le bouton "retour" du téléphone ferme la page moto au lieu de quitter le site.
-  // Deps vide volontaire (cf. LiveTeamDrawer) — sinon le cleanup ré-appelle
-  // history.back() à chaque re-render du parent et ferme la page tout seul.
+  // Résilient à StrictMode — cf. LiveTeamDrawer.
   useEffect(() => {
+    if (window.__mydMotoPageBackTimer) {
+      clearTimeout(window.__mydMotoPageBackTimer)
+      window.__mydMotoPageBackTimer = null
+    }
+
     let closedByBack = false
-    window.history.pushState({ mydMotoPage: true }, '')
+    if (!window.history.state?.mydMotoPage) {
+      window.history.pushState({ mydMotoPage: true }, '')
+    }
     const onPop = () => {
       closedByBack = true
       onClose()
@@ -269,9 +275,13 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
     window.addEventListener('popstate', onPop)
     return () => {
       window.removeEventListener('popstate', onPop)
-      if (!closedByBack) {
-        window.history.back()
-      }
+      if (closedByBack) return
+      window.__mydMotoPageBackTimer = setTimeout(() => {
+        window.__mydMotoPageBackTimer = null
+        if (window.history.state?.mydMotoPage) {
+          window.history.back()
+        }
+      }, 50)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

@@ -83,16 +83,21 @@ export default function LiveTeamDrawer({ team, allLaps, position, onClose }) {
   }, [])
 
   // Le bouton "retour" du téléphone ferme le drawer au lieu de quitter le site.
-  // On empile un état dans l'historique à l'ouverture, on écoute popstate pour
-  // appeler onClose, et on resynchronise l'historique si la fermeture vient
-  // de la croix (et pas du back natif).
   //
-  // ⚠️ Deps vide volontaire : si on dépend de onClose (qui change à chaque
-  // render du parent), le cleanup tire history.back() en boucle et le drawer
-  // se referme aussitôt après son ouverture.
+  // Résilient à StrictMode : si l'effet est ré-exécuté (mount → cleanup →
+  // remount), le nouveau mount annule le history.back() différé du cleanup
+  // précédent, et ne re-push pas d'état si déjà présent.
   useEffect(() => {
+    // Annule le history.back() différé d'un éventuel cleanup précédent
+    if (window.__mydDrawerBackTimer) {
+      clearTimeout(window.__mydDrawerBackTimer)
+      window.__mydDrawerBackTimer = null
+    }
+
     let closedByBack = false
-    window.history.pushState({ mydDrawer: true }, '')
+    if (!window.history.state?.mydDrawer) {
+      window.history.pushState({ mydDrawer: true }, '')
+    }
     const onPop = () => {
       closedByBack = true
       onClose()
@@ -100,9 +105,13 @@ export default function LiveTeamDrawer({ team, allLaps, position, onClose }) {
     window.addEventListener('popstate', onPop)
     return () => {
       window.removeEventListener('popstate', onPop)
-      if (!closedByBack) {
-        window.history.back()
-      }
+      if (closedByBack) return
+      window.__mydDrawerBackTimer = setTimeout(() => {
+        window.__mydDrawerBackTimer = null
+        if (window.history.state?.mydDrawer) {
+          window.history.back()
+        }
+      }, 50)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
