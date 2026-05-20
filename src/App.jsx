@@ -266,6 +266,70 @@ const BIKES_LIST = {
   }
 }
 
+// ─── Social embed helpers ───
+const detectEmbedSource = (url) => {
+  if (/instagram\.com\/(p|reel|tv)\//.test(url)) return 'instagram'
+  if (/facebook\.com|fb\.com/.test(url)) return 'facebook'
+  return 'embed'
+}
+
+const getSocialEmbedUrl = (url) => {
+  const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}`
+  const ig = url.match(/instagram\.com\/(p|reel|tv)\/([a-zA-Z0-9_-]+)/)
+  if (ig) return `https://www.instagram.com/${ig[1]}/${ig[2]}/embed/`
+  if (/facebook\.com|fb\.com/.test(url)) {
+    return `https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(url)}&show_text=true&width=500`
+  }
+  return url
+}
+
+const renderGalleryMedia = (item) => {
+  const src = item.url
+  if (item.source === 'instagram') {
+    return (
+      <iframe
+        src={getSocialEmbedUrl(src)}
+        className="gallery-media gallery-iframe"
+        frameBorder="0"
+        scrolling="no"
+        allowTransparency="true"
+        allow="encrypted-media"
+        title={item.title}
+      />
+    )
+  }
+  if (item.source === 'facebook') {
+    return (
+      <iframe
+        src={getSocialEmbedUrl(src)}
+        className="gallery-media gallery-iframe gallery-iframe-fb"
+        frameBorder="0"
+        scrolling="no"
+        allowFullScreen
+        allow="encrypted-media"
+        title={item.title}
+      />
+    )
+  }
+  if (item.source === 'embed') {
+    return (
+      <iframe
+        src={getSocialEmbedUrl(src)}
+        className="gallery-media gallery-iframe"
+        frameBorder="0"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowFullScreen
+        title={item.title}
+      />
+    )
+  }
+  if (item.type === 'video') {
+    return <video src={src} controls className="gallery-media" />
+  }
+  return <img src={src} alt={item.title} className="gallery-media" loading="lazy" />
+}
+
 function App() {
   const [activeTab, setActiveTab] = useState(() => localStorage.getItem('myd_activeTab') || 'home')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
@@ -420,6 +484,12 @@ function App() {
       })
     }
   }
+
+  // Lock body scroll when mobile menu is open (iOS fix)
+  useEffect(() => {
+    document.body.style.overflow = mobileMenuOpen ? 'hidden' : ''
+    return () => { document.body.style.overflow = '' }
+  }, [mobileMenuOpen])
 
   // Persist view state to localStorage
   useEffect(() => {
@@ -789,13 +859,18 @@ function App() {
         }
       } else if (activeForm === 'gallery') {
         if (formData.source === 'embed') {
+          const detectedSource = detectEmbedSource(formData.embed_url)
           await supabase.from('gallery').insert([{
             title: formData.title, type: formData.type,
-            url: formData.embed_url, file_name: '', source: 'embed'
+            url: formData.embed_url, file_name: '', source: detectedSource
           }])
         } else {
           if (!formData.file) { alert('Veuillez sélectionner un fichier.'); setUploading(false); return }
           const file = formData.file
+          if (file.size > 10 * 1024 * 1024) {
+            alert(`Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). Maximum : 10 Mo.`)
+            setUploading(false); return
+          }
           const fileName = `${Date.now()}.${file.name.split('.').pop()}`
           const { error } = await supabase.storage.from('Gallery').upload(fileName, file)
           if (error) throw error
@@ -811,6 +886,9 @@ function App() {
         // Upload any new files selected to Supabase Storage
         if (formData.files && formData.files.length > 0) {
           for (const file of formData.files) {
+            if (file.size > 10 * 1024 * 1024) {
+              throw new Error(`"${file.name}" dépasse 10 Mo. Veuillez compresser l'image.`)
+            }
             const fileName = `products/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${file.name.split('.').pop()}`
             const { error } = await supabase.storage.from('Gallery').upload(fileName, file)
             if (error) throw error
@@ -858,6 +936,9 @@ function App() {
         const uploadedUrls = []
         if (formData.files && formData.files.length > 0) {
           for (const file of formData.files) {
+            if (file.size > 10 * 1024 * 1024) {
+              throw new Error(`"${file.name}" dépasse 10 Mo. Veuillez compresser l'image.`)
+            }
             const fileName = `motos/${Date.now()}_${Math.random().toString(36).substring(2, 9)}.${file.name.split('.').pop()}`
             const { error } = await supabase.storage.from('Gallery').upload(fileName, file)
             if (error) throw error
@@ -957,6 +1038,17 @@ function App() {
       return
     }
     
+    // Validate email before step 3
+    if (checkoutStep === 2) {
+      const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(checkoutData.customerEmail)
+      if (!emailOk) {
+        alert('Veuillez entrer une adresse e-mail valide.')
+        return
+      }
+      setCheckoutStep(3)
+      return
+    }
+
     // Save to Database (Step 3 to 4)
     try {
       const orderPayload = {
@@ -1224,7 +1316,7 @@ function App() {
                   <div key={m.id || m.name} className={`team-card fade-in fade-in-delay-${i % 4 + 1} admin-card-parent`}>
                     <div className="team-img-wrap">
                       {m.image_url || m.img ? (
-                        <img src={m.image_url || m.img} alt={m.name} className="team-img" />
+                        <img src={m.image_url || m.img} alt={m.name} className="team-img" loading="lazy" />
                       ) : (
                         <div className="team-placeholder-icon">👤</div>
                       )}
@@ -1369,10 +1461,10 @@ function App() {
                           <button className="btn btn-primary" style={{ flex: 1 }} onClick={() => navigate('shop')}>
                             🛒 La Boutique
                           </button>
-                          {isAdmin && (
-                            <button 
-                              className="btn btn-outline" 
-                              style={{ width: '100%', borderColor: 'var(--accent)', color: 'var(--accent)', fontWeight: 'bold', marginTop: '10px' }} 
+                          {hasPermission('manage_bikes') && (
+                            <button
+                              className="btn btn-outline"
+                              style={{ width: '100%', borderColor: 'var(--accent)', color: 'var(--accent)', fontWeight: 'bold', marginTop: '10px' }}
                               onClick={() => handleOpenForm('bike_edit', selectedBike)}
                             >
                               ✏️ Modifier cette Moto
@@ -1403,15 +1495,22 @@ function App() {
                 )}
               </div>
               <div className="gallery-grid">
-                {displayGallery && displayGallery.length > 0 ? (
+                {displayGallery === null ? (
+                  Array.from({ length: 6 }).map((_, i) => (
+                    <div key={i} className="gallery-item skeleton skeleton-gallery" />
+                  ))
+                ) : displayGallery.length > 0 ? (
                   displayGallery.map((item, i) => (
                     <div key={item.id} className={`gallery-item glass fade-in fade-in-delay-${i % 4 + 1} admin-card-parent`}>
-                      {item.type === 'video' ? (
-                        <video src={item.url} controls className="gallery-media" />
-                      ) : (
-                        <img src={item.url} alt={item.title} className="gallery-media" />
-                      )}
-                      <p>{item.title} <span className="gallery-media-source-tag">{item.source === 'embed' ? '🔗 Lien' : '📁 Upload'}</span></p>
+                      {renderGalleryMedia(item)}
+                      <p>
+                        {item.title}{' '}
+                        <span className="gallery-media-source-tag">
+                          {item.source === 'instagram' ? '📸 Instagram' :
+                           item.source === 'facebook'  ? '📘 Facebook'  :
+                           item.source === 'embed'     ? '▶️ Vidéo'     : '📁 Upload'}
+                        </span>
+                      </p>
 
                       {(isAdmin || isModerator) && (
                         <div className="admin-inline-actions">
@@ -2385,13 +2484,29 @@ function App() {
                       </select>
                       <select value={formData.source} onChange={e => setFormData({...formData, source: e.target.value})}>
                         <option value="upload">📁 Importer un fichier</option>
-                        <option value="embed">🔗 Lien externe (YouTube, Insta...)</option>
+                        <option value="embed">🔗 Lien Instagram / Facebook / YouTube</option>
                       </select>
                     </div>
                     {formData.source === 'upload' ? (
                       <input type="file" accept="image/*,video/*" onChange={e => setFormData({...formData, file: e.target.files[0]})} required />
                     ) : (
-                      <input type="url" placeholder="https://youtube.com/... ou https://instagram.com/..." value={formData.embed_url} onChange={e => setFormData({...formData, embed_url: e.target.value})} required />
+                      <>
+                        <input
+                          type="url"
+                          placeholder="Colle ton lien Instagram, Facebook ou YouTube…"
+                          value={formData.embed_url}
+                          onChange={e => setFormData({...formData, embed_url: e.target.value})}
+                          required
+                        />
+                        {formData.embed_url && (
+                          <div style={{ fontSize: '0.8rem', color: 'var(--accent)', marginTop: '-6px', padding: '4px 0' }}>
+                            {/instagram\.com/.test(formData.embed_url) && '📸 Instagram détecté — sera intégré directement'}
+                            {/facebook\.com|fb\.com/.test(formData.embed_url) && '📘 Facebook détecté — sera intégré directement'}
+                            {/youtube\.com|youtu\.be/.test(formData.embed_url) && '▶️ YouTube détecté — sera intégré directement'}
+                            {!/instagram\.com|facebook\.com|fb\.com|youtube\.com|youtu\.be/.test(formData.embed_url) && '🔗 Lien externe détecté'}
+                          </div>
+                        )}
+                      </>
                     )}
                   </>
                 )}

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
 import './Admin.css'
 
-const SITE_VERSION = 'v1.0.0'
+const SITE_VERSION = 'v2.0.0'
 
 export { SITE_VERSION }
 

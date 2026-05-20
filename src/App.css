@@ -132,6 +132,8 @@
 /* ─── Hero ─── */
 .hero {
   min-height: 100vh;
+  /* iOS Safari URL bar fix: svh unit shrinks with the bar */
+  min-height: 100svh;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2193,4 +2195,181 @@ select option {
   background: rgba(0, 200, 100, 0.1) !important;
   box-shadow: 0 0 12px rgba(0, 200, 100, 0.2);
 }
+
+/* ═══════════════════════════════════════════════
+   Skeleton Loaders
+   ═══════════════════════════════════════════════ */
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0.04) 25%,
+    rgba(255,255,255,0.09) 50%,
+    rgba(255,255,255,0.04) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.6s infinite;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+}
+
+.skeleton-gallery {
+  aspect-ratio: 16 / 10;
+  min-height: 180px;
+}
+
+/* ═══════════════════════════════════════════════
+   Gallery — Iframe embeds (Instagram / Facebook / YouTube)
+   ═══════════════════════════════════════════════ */
+.gallery-iframe {
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  border: none;
+  display: block;
+  background: rgba(0,0,0,0.3);
+}
+
+/* Instagram posts are usually square or portrait */
+.gallery-item .gallery-iframe[src*="instagram"] {
+  aspect-ratio: 4 / 5;
+  max-height: 600px;
+}
+
+/* Facebook posts are taller */
+.gallery-iframe-fb {
+  aspect-ratio: 3 / 4;
+  min-height: 300px;
+}
+
+/* ═══════════════════════════════════════════════
+   Page / Section entrance animation
+   ═══════════════════════════════════════════════ */
+@keyframes pageEnter {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.section {
+  animation: pageEnter 0.3s var(--ease-out) both;
+}
+
+/* ═══════════════════════════════════════════════
+   Mobile iOS — Ergonomie complète
+   ═══════════════════════════════════════════════ */
+
+/* Prevent iOS double-tap zoom on interactive elements */
+button, a, input, select, textarea {
+  touch-action: manipulation;
+}
+
+/* Safe area for content above footer (iPhone home bar) */
+footer {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@media (max-width: 768px) {
+  /* ── Prevent iOS input zoom (font-size must be ≥ 16px) ── */
+  input,
+  textarea,
+  select {
+    font-size: 16px !important;
+  }
+
+  /* ── Minimum 44×44px touch targets (Apple HIG) ── */
+  .btn,
+  .nav-link,
+  .hamburger,
+  .chat-toggle-btn,
+  .admin-close,
+  .chat-close {
+    min-height: 44px;
+  }
+
+  /* ── Mobile nav menu — safe-area bottom padding ── */
+  .nav-links {
+    padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* ── Hero height fix: use svh so Safari URL bar doesn't eat content ── */
+  .hero {
+    min-height: 100svh;
+    min-height: 100vh; /* fallback */
+  }
+
+  /* ── Prevent horizontal overflow on mobile ── */
+  .bike-showcase,
+  .sponsors-container {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Bigger tap zones on admin inline actions (hover → visible on touch) ── */
+  .admin-card-parent .admin-inline-actions {
+    opacity: 1;
+  }
+
+  .admin-inline-actions button {
+    width: 40px;
+    height: 40px;
+    font-size: 1rem;
+  }
+
+  /* ── Footer grid on mobile ── */
+  .footer-bottom {
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+  }
+
+  /* ── Team grid: 2 columns minimum on small screens ── */
+  .team-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* ── Gallery grid: single column on very small screens ── */
+  .gallery-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* ── Admin row stacks on mobile ── */
+  .admin-row {
+    flex-direction: column;
+  }
+
+  /* ── Chat bottom offset to avoid the toggle button ── */
+  main {
+    padding-bottom: 80px;
+  }
+}
+
+/* Very small screens (iPhone SE, etc.) */
+@media (max-width: 380px) {
+  .nav-link {
+    font-size: 1rem !important;
+    padding: 14px 20px !important;
+  }
+
+  .hero-logo {
+    width: 160px;
+  }
+
+  .team-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+}
+
+/* Momentum scrolling in all overflow containers */
+.chat-messages,
+.admin-overlay,
+.gallery-grid,
+.events-list {
+  -webkit-overflow-scrolling: touch;
+}
+
 
