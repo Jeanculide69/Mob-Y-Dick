@@ -1159,9 +1159,25 @@ function App() {
 
   return (
     <>
-      {/* ─── Video Background ─── */}
+      {/* ─── Video Background ───
+         playbackRate=0.3 : on ralentit la lecture pour espacer le "seam"
+         de loop (et donc la micro-saccade qui se voyait souvent). */}
       <div className="video-bg">
-        <video autoPlay loop muted playsInline>
+        <video
+          autoPlay
+          loop
+          muted
+          playsInline
+          ref={(el) => {
+            if (el && el.playbackRate !== 0.3) {
+              el.playbackRate = 0.3
+              el.defaultPlaybackRate = 0.3
+            }
+          }}
+          onLoadedMetadata={(e) => {
+            e.currentTarget.playbackRate = 0.3
+          }}
+        >
           <source src="/video_background.mp4" type="video/mp4" />
         </video>
         <div className="video-overlay" />
