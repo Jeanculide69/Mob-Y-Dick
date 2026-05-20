@@ -261,6 +261,48 @@
   font-weight: 700;
 }
 
+/* Photo du pseudo (style graff) — remplace le h1 en mode display */
+.rider-page-nickname-display {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  max-height: 90px;
+  filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.5));
+  margin-bottom: 6px;
+  object-fit: contain;
+}
+
+/* Édition : zone d'upload du nickname */
+.rider-page-nickname-edit {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.rider-page-nickname-preview {
+  height: 38px;
+  max-width: 140px;
+  object-fit: contain;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 3px 6px;
+}
+
+.rider-page-nickname-empty {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.rider-page-nickname-upload {
+  font-size: 0.78rem !important;
+  padding: 6px 12px !important;
+  min-height: 32px;
+}
+
 /* ─── Tabs ─── */
 .rider-page-tabs {
   display: flex;

@@ -781,6 +781,14 @@
   line-height: 1.4;
 }
 
+.avatar-cropper-output-info {
+  margin: 4px 0 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  opacity: 0.7;
+  font-family: ui-monospace, monospace;
+}
+
 .avatar-cropper-error {
   margin: 0 20px 8px;
   padding: 10px 14px;

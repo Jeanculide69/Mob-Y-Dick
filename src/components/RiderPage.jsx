@@ -23,14 +23,47 @@ import './RiderPage.css'
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024
 
+// Profils de crop par type de média ; on choisit aspect + dimensions
+// pour chaque image pour qu'elle prenne juste la place qu'il lui faut.
+const CROP_PROFILES = {
+  image_url: {
+    aspect: 1,
+    outputWidth: 512,
+    outputHeight: 512,
+    cropShape: 'round',
+    title: '✂️ Recadrer l\'avatar',
+    hint: 'Centre le visage du rider. L\'avatar s\'affiche en rond, ~80 Ko de sortie.',
+    backgroundFill: '#1a1a2e',
+  },
+  nickname_url: {
+    aspect: 3,
+    outputWidth: 720,
+    outputHeight: 240,
+    cropShape: 'rect',
+    title: '✂️ Recadrer la photo du pseudo',
+    hint: 'Format bandeau (3:1) pour un nom style graffiti. Le fond transparent est préservé.',
+    backgroundFill: null, // PNG/WebP transparent → on garde l'alpha
+  },
+  hero_photo_url: {
+    aspect: 16 / 9,
+    outputWidth: 1600,
+    outputHeight: 900,
+    cropShape: 'rect',
+    title: '✂️ Recadrer la bannière',
+    hint: 'Format 16:9 pour le bandeau d\'en-tête de la fiche. Cadre les éléments importants au centre.',
+    backgroundFill: '#0a0a0a',
+  },
+}
+
 export default function RiderPage({ rider, canEdit, onClose, onSaved }) {
   const [activeTab, setActiveTab] = useState('profil')
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState({})
   const [cropperSrc, setCropperSrc] = useState(null)
-  const [cropperTarget, setCropperTarget] = useState(null) // 'image_url' | 'hero_photo_url'
+  const [cropperTarget, setCropperTarget] = useState(null) // 'image_url' | 'nickname_url' | 'hero_photo_url'
   const [saving, setSaving] = useState(false)
   const avatarInputRef = useRef(null)
+  const nicknameInputRef = useRef(null)
   const heroInputRef = useRef(null)
 
   // ── Verrouillage scroll + back button ──
@@ -238,10 +271,51 @@ export default function RiderPage({ rider, canEdit, onClose, onSaved }) {
                   placeholder="Rôle (ex: Mécanicien chef)"
                   onChange={(e) => setDraft(d => ({ ...d, role: e.target.value }))}
                 />
+                {/* Mini-aperçu du nickname uploadé en édition */}
+                <div className="rider-page-nickname-edit">
+                  {getValue('nickname_url') ? (
+                    <img
+                      src={getValue('nickname_url')}
+                      alt="Pseudo graphique"
+                      className="rider-page-nickname-preview"
+                    />
+                  ) : (
+                    <span className="rider-page-nickname-empty">
+                      Pas de photo de pseudo
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className="btn btn-ghost rider-page-nickname-upload"
+                    onClick={() => nicknameInputRef.current?.click()}
+                  >
+                    🖼️ {getValue('nickname_url') ? 'Changer' : 'Ajouter'} la photo du pseudo
+                  </button>
+                  <input
+                    ref={nicknameInputRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      pickFile('nickname_url', e.target.files?.[0])
+                      e.target.value = ''
+                    }}
+                  />
+                </div>
               </>
             ) : (
               <>
-                <h1 className="rider-page-name">{name || 'Rider'}</h1>
+                {/* Si une image de pseudo est uploadée, on l'affiche en
+                    grand à la place du h1 — c'est plus stylé (style graff). */}
+                {getValue('nickname_url') ? (
+                  <img
+                    src={getValue('nickname_url')}
+                    alt={name}
+                    className="rider-page-nickname-display"
+                  />
+                ) : (
+                  <h1 className="rider-page-name">{name || 'Rider'}</h1>
+                )}
                 {role && <p className="rider-page-role">{role}</p>}
               </>
             )}
@@ -306,12 +380,13 @@ export default function RiderPage({ rider, canEdit, onClose, onSaved }) {
         </div>
       </div>
 
-      {/* ── Cropper modal ── */}
-      {cropperSrc && (
+      {/* ── Cropper modal (dimensions selon la cible) ── */}
+      {cropperSrc && cropperTarget && (
         <AvatarCropper
           imageSrc={cropperSrc}
           onCancel={() => { setCropperSrc(null); setCropperTarget(null) }}
           onConfirm={handleCropConfirm}
+          {...(CROP_PROFILES[cropperTarget] || {})}
         />
       )}
     </div>,

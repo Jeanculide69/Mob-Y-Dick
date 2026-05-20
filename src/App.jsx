@@ -1408,17 +1408,25 @@ function App() {
                         <div className="team-placeholder-icon">👤</div>
                       )}
                     </div>
-                    {NICKNAMES[m.name.toLowerCase()] && m.name.toLowerCase() !== 'bob' && m.name.toLowerCase() !== 'fumax' && m.name.toLowerCase() !== 'gauthier' ? (
-                      <div className="team-nickname-wrap">
-                        <img 
-                          src={NICKNAMES[m.name.toLowerCase()]} 
-                          alt={m.name} 
-                          className="team-nickname-img" 
-                        />
-                      </div>
-                    ) : (
-                      <h3 className="team-name">{m.name}</h3>
-                    )}
+                    {(() => {
+                      // Priorité : nickname uploadé via admin > NICKNAMES const > nom texte.
+                      // Pour bob/fumax/gauthier on garde le nom texte par défaut (pas de graff).
+                      const uploadedNick = m.nickname_url
+                      const fallbackNick = NICKNAMES[m.name.toLowerCase()]
+                      const excluded = ['bob', 'fumax', 'gauthier'].includes(m.name.toLowerCase())
+                      const nickSrc = uploadedNick || (!excluded ? fallbackNick : null)
+                      return nickSrc ? (
+                        <div className="team-nickname-wrap">
+                          <img
+                            src={nickSrc}
+                            alt={m.name}
+                            className="team-nickname-img"
+                          />
+                        </div>
+                      ) : (
+                        <h3 className="team-name">{m.name}</h3>
+                      )
+                    })()}
 
                     {isAdmin && m.id && (
                       <div className="admin-inline-actions">

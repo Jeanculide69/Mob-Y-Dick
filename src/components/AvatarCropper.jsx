@@ -1,11 +1,19 @@
 import { useState, useCallback } from 'react'
 import Cropper from 'react-easy-crop'
 
-// Renders the user-selected file inside a square crop area with drag + zoom
+// Renders the user-selected file inside a crop area with drag + zoom
 // controls. On confirm, runs the crop in a canvas and returns a WebP/JPEG Blob
-// downscaled to AVATAR_OUTPUT_SIZE — that's what eventually goes to Supabase
-// Storage, never the original file.
-const AVATAR_OUTPUT_SIZE = 512 // pixels (square)
+// downscaled to outputWidth × outputHeight — that's what eventually goes to
+// Supabase Storage, never the original file.
+//
+// Props (toutes optionnelles, défauts = avatar carré 512px) :
+//  - aspect       : ratio largeur/hauteur de la zone de crop (1 = carré)
+//  - outputWidth  : largeur en px du blob de sortie
+//  - outputHeight : hauteur en px du blob de sortie
+//  - cropShape    : 'round' | 'rect'
+//  - title        : titre de la modale
+//  - hint         : phrase d'aide affichée
+const DEFAULT_OUTPUT_SIZE = 512
 const OUTPUT_QUALITY = 0.85
 
 // Load an image from a data URL into an <img> for canvas drawing.
@@ -27,12 +35,27 @@ const canvasSupportsWebp = (() => {
   }
 })()
 
-export default function AvatarCropper({ imageSrc, onCancel, onConfirm }) {
+export default function AvatarCropper({
+  imageSrc,
+  onCancel,
+  onConfirm,
+  aspect = 1,
+  outputWidth,
+  outputHeight,
+  cropShape = 'round',
+  title = '✂️ Recadrer ton avatar',
+  hint = 'Pince ou utilise la molette pour zoomer, glisse pour positionner ton visage au centre.',
+  backgroundFill = '#1a1a2e',
+}) {
   const [crop, setCrop] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null)
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState(null)
+
+  // Calcule la taille de sortie depuis aspect + outputWidth/Height
+  const finalW = outputWidth || DEFAULT_OUTPUT_SIZE
+  const finalH = outputHeight || (outputWidth ? Math.round(outputWidth / aspect) : DEFAULT_OUTPUT_SIZE)
 
   const onCropComplete = useCallback((_croppedArea, croppedAreaPixels) => {
     setCroppedAreaPixels(croppedAreaPixels)
@@ -45,13 +68,17 @@ export default function AvatarCropper({ imageSrc, onCancel, onConfirm }) {
     try {
       const image = await loadImage(imageSrc)
       const canvas = document.createElement('canvas')
-      canvas.width = AVATAR_OUTPUT_SIZE
-      canvas.height = AVATAR_OUTPUT_SIZE
-      const ctx = canvas.getContext('2d', { alpha: false })
+      canvas.width = finalW
+      canvas.height = finalH
+      const transparent = !backgroundFill || backgroundFill === 'transparent'
+      const ctx = canvas.getContext('2d', { alpha: transparent })
 
-      // Fill bg so transparent PNGs don't end up with black corners when re-encoded as JPEG
-      ctx.fillStyle = '#1a1a2e'
-      ctx.fillRect(0, 0, AVATAR_OUTPUT_SIZE, AVATAR_OUTPUT_SIZE)
+      if (!transparent) {
+        // Fill bg pour éviter les coins noirs en JPEG quand on re-encode un PNG
+        ctx.fillStyle = backgroundFill
+        ctx.fillRect(0, 0, finalW, finalH)
+      }
+      // Si transparent, on garde l'alpha (PNG transparent → WebP transparent)
 
       // Draw the cropped region scaled to the output size
       ctx.drawImage(
@@ -62,8 +89,8 @@ export default function AvatarCropper({ imageSrc, onCancel, onConfirm }) {
         croppedAreaPixels.height,
         0,
         0,
-        AVATAR_OUTPUT_SIZE,
-        AVATAR_OUTPUT_SIZE
+        finalW,
+        finalH
       )
 
       const mimeType = canvasSupportsWebp ? 'image/webp' : 'image/jpeg'
@@ -95,7 +122,7 @@ export default function AvatarCropper({ imageSrc, onCancel, onConfirm }) {
         aria-labelledby="cropper-title"
       >
         <div className="avatar-cropper-header">
-          <h3 id="cropper-title">✂️ Recadrer ton avatar</h3>
+          <h3 id="cropper-title">{title}</h3>
           <button
             type="button"
             className="avatar-cropper-close"
@@ -111,8 +138,8 @@ export default function AvatarCropper({ imageSrc, onCancel, onConfirm }) {
             image={imageSrc}
             crop={crop}
             zoom={zoom}
-            aspect={1}
-            cropShape="round"
+            aspect={aspect}
+            cropShape={cropShape}
             showGrid={false}
             onCropChange={setCrop}
             onZoomChange={setZoom}
@@ -135,8 +162,9 @@ export default function AvatarCropper({ imageSrc, onCancel, onConfirm }) {
               className="avatar-cropper-slider"
             />
           </label>
-          <p className="avatar-cropper-hint">
-            Pince ou utilise la molette pour zoomer, glisse pour positionner ton visage au centre.
+          <p className="avatar-cropper-hint">{hint}</p>
+          <p className="avatar-cropper-output-info">
+            Sortie : {finalW}×{finalH}px · WebP/JPEG ~85%
           </p>
         </div>
 
