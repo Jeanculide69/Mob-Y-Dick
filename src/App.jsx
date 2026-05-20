@@ -506,8 +506,17 @@ function App() {
             .then(({ data }) => { if (data) setDbOrders(data) })
           supabase.from('sponsors').select('*').order('created_at', { ascending: false })
             .then(({ data, error }) => { if (data && !error) setDbSponsors(data) })
-          supabase.from('moto_affiliations').select('*, profiles(display_name, email)').order('requested_at', { ascending: false })
-            .then(({ data, error }) => { if (data && !error) setDbAffiliations(data) })
+          // PostgREST émet une 400 si la FK moto_affiliations.user_id → profiles
+          // n'est pas déclarée. On fait le join en 2 temps côté client.
+          supabase.from('moto_affiliations').select('*').order('requested_at', { ascending: false })
+            .then(async ({ data, error }) => {
+              if (error || !data) return
+              const ids = [...new Set(data.map(a => a.user_id).filter(Boolean))]
+              if (ids.length === 0) { setDbAffiliations(data); return }
+              const { data: profs } = await supabase.from('profiles').select('id, display_name, email').in('id', ids)
+              const byId = new Map((profs || []).map(p => [p.id, p]))
+              setDbAffiliations(data.map(a => ({ ...a, profiles: byId.get(a.user_id) || null })))
+            })
         }
       })
     }

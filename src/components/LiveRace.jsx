@@ -57,6 +57,7 @@ export default function LiveRace({ customSessionId, onClose }) {
   const [shopOpen, setShopOpen] = useState(false)
   const [modalTab, setModalTab] = useState('shop') // 'shop' | 'donation'
   const [fabOpen, setFabOpen] = useState(false) // floating action button
+  const fabLastToggleRef = useRef(0) // debounce hard contre double-fire mobile
 
   // Donation form state
   const [donationPseudo, setDonationPseudo] = useState('')
@@ -1390,12 +1391,26 @@ export default function LiveRace({ customSessionId, onClose }) {
           <button
             type="button"
             className={`live-fab-btn ${fabOpen ? 'active' : ''}`}
-            onClick={(e) => {
-              // Garde-fou : empêche tout double-déclenchement éventuel
-              // (touch + click sur certains Android, ou bubbling vers
-              // un parent qui aurait un handler) en stoppant la
-              // propagation et en togglant explicitement
+            onPointerUp={(e) => {
+              // PointerUp est unifié (touch + souris) et fire UNE seule fois
+              // par geste. On debounce en plus avec une fenêtre de 350ms
+              // au cas où onClick remonterait quand même derrière (certains
+              // Android Chrome continuent à émettre les deux).
               e.stopPropagation()
+              e.preventDefault()
+              const now = Date.now()
+              if (now - fabLastToggleRef.current < 350) return
+              fabLastToggleRef.current = now
+              setFabOpen(o => !o)
+            }}
+            onClick={(e) => {
+              // onClick est conservé pour l'accessibilité clavier (Enter/Space).
+              // On debounce sur la même ref que onPointerUp pour ignorer le
+              // click synthétique qui suit le tap mobile.
+              e.stopPropagation()
+              const now = Date.now()
+              if (now - fabLastToggleRef.current < 350) return
+              fabLastToggleRef.current = now
               setFabOpen(o => !o)
             }}
             aria-label={fabOpen ? 'Fermer le menu' : 'Emotes et Dons'}
