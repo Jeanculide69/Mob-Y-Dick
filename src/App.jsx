@@ -9,6 +9,7 @@ import UserManagement from './components/UserManagement'
 import EmoteAdmin from './components/EmoteAdmin'
 import DonationsAdmin from './components/DonationsAdmin'
 import RiderPage from './components/RiderPage'
+import VideoBackgroundDual from './components/VideoBackgroundDual'
 import RaceSetup from './components/RaceSetup'
 import RaceChrono from './components/RaceChrono'
 import LiveRace from './components/LiveRace'
@@ -1172,181 +1173,17 @@ function App() {
 
   return (
     <>
-      {/* ─── Video Background — ping-pong via Frame Capture ───
-         Boucle "palindrome" parfaitement fluide :
-         - Forward : lecture vidéo native + copie rAF sur canvas
-           + capture de chaque frame en ImageBitmap
-         - Reverse : replay des ImageBitmaps capturés en ordre inverse
-           via rAF avec timing contrôlé → MÊME vitesse, ZÉRO seeking,
-           aucune saccade.
-         Les ImageBitmaps sont stockés en mémoire GPU → efficace. */}
+      {/* ─── Video Background — dual-video crossfade ───
+         Approche stable, sans artefacts :
+         - 2 <video loop muted autoplay> en superposition
+         - Pendant que A approche de sa fin, on déclenche B et crossfade
+         - La couture de boucle (loop seam) de A se produit pendant son
+           fade-out → invisible
+         - La vidéo invisible est mise en pause après le fade pour
+           économiser le CPU
+         - Décodage GPU natif, zéro canvas, zéro RAM extra */}
       <div className="video-bg">
-        <canvas
-          className="video-canvas"
-          ref={(canvasEl) => {
-            if (!canvasEl || canvasEl.__mydBound) return
-            canvasEl.__mydBound = true
-
-            const videoEl = document.createElement('video')
-            videoEl.src = '/video_background.mp4'
-            videoEl.muted = true
-            videoEl.playsInline = true
-            videoEl.preload = 'auto'
-            videoEl.style.display = 'none'
-            document.body.appendChild(videoEl)
-
-            const ctx = canvasEl.getContext('2d')
-            let direction = 'forward'
-            let rafId = null
-
-            // Frame capture buffer
-            const capturedFrames = []
-            const CAPTURE_FPS = 24
-            const CAPTURE_INTERVAL = 1000 / CAPTURE_FPS
-            let lastCaptureTime = 0
-
-            const NEAR_END_THRESHOLD = 0.15
-
-            // Resize canvas to match viewport
-            let canvasW = 0, canvasH = 0
-            const resizeCanvas = () => {
-              const rect = canvasEl.getBoundingClientRect()
-              canvasW = rect.width
-              canvasH = rect.height
-              // Use 1x resolution (not DPR) to keep frame capture manageable
-              canvasEl.width = canvasW
-              canvasEl.height = canvasH
-            }
-
-            // Draw a source (video or ImageBitmap) with object-fit:cover
-            const drawCover = (source, srcW, srcH) => {
-              const canvasRatio = canvasW / canvasH
-              const sourceRatio = srcW / srcH
-              let sw, sh, sx, sy
-              if (sourceRatio > canvasRatio) {
-                sh = srcH
-                sw = srcH * canvasRatio
-                sx = (srcW - sw) / 2
-                sy = 0
-              } else {
-                sw = srcW
-                sh = srcW / canvasRatio
-                sx = 0
-                sy = (srcH - sh) / 2
-              }
-              ctx.drawImage(source, sx, sy, sw, sh, 0, 0, canvasW, canvasH)
-            }
-
-            // Draw current video frame
-            const drawVideoFrame = () => {
-              if (!videoEl.videoWidth) return
-              drawCover(videoEl, videoEl.videoWidth, videoEl.videoHeight)
-            }
-
-            // Forward loop: draw video + capture frames
-            const forwardLoop = (timestamp) => {
-              if (direction !== 'forward') return
-              drawVideoFrame()
-
-              // Capture frame at controlled rate
-              if (timestamp - lastCaptureTime >= CAPTURE_INTERVAL) {
-                lastCaptureTime = timestamp
-                if (videoEl.readyState >= 2) {
-                  createImageBitmap(videoEl).then(bmp => {
-                    capturedFrames.push(bmp)
-                  }).catch(() => {})
-                }
-              }
-
-              // Check near-end
-              if (videoEl.duration && !isNaN(videoEl.duration) &&
-                  videoEl.currentTime >= videoEl.duration - NEAR_END_THRESHOLD) {
-                direction = 'reverse'
-                videoEl.pause()
-                startReverse()
-                return
-              }
-              rafId = requestAnimationFrame(forwardLoop)
-            }
-
-            // Reverse loop: replay captured frames in reverse
-            const startReverse = () => {
-              let frameIndex = capturedFrames.length - 1
-              const frameDuration = CAPTURE_INTERVAL // même vitesse que la capture
-              let lastFrameTime = performance.now()
-
-              const reverseLoop = (now) => {
-                if (direction !== 'reverse') return
-
-                if (now - lastFrameTime >= frameDuration) {
-                  lastFrameTime = now
-
-                  if (frameIndex >= 0) {
-                    const bmp = capturedFrames[frameIndex]
-                    drawCover(bmp, bmp.width, bmp.height)
-                    frameIndex--
-                  } else {
-                    // Finished reverse — clean up bitmaps and restart forward
-                    capturedFrames.forEach(b => b.close())
-                    capturedFrames.length = 0
-                    lastCaptureTime = 0
-                    direction = 'forward'
-                    videoEl.currentTime = 0
-                    videoEl.play().catch(() => {})
-                    rafId = requestAnimationFrame(forwardLoop)
-                    return
-                  }
-                }
-
-                rafId = requestAnimationFrame(reverseLoop)
-              }
-
-              rafId = requestAnimationFrame(reverseLoop)
-            }
-
-            // Init on video ready
-            const onLoadedData = () => {
-              resizeCanvas()
-              drawVideoFrame()
-              direction = 'forward'
-              videoEl.play().catch(() => {})
-              rafId = requestAnimationFrame(forwardLoop)
-            }
-
-            // Safety: handle 'ended' event
-            videoEl.addEventListener('ended', () => {
-              if (direction === 'forward') {
-                direction = 'reverse'
-                videoEl.pause()
-                startReverse()
-              }
-            })
-
-            videoEl.addEventListener('loadeddata', onLoadedData)
-
-            // Handle resize
-            let resizeTimer
-            const onResize = () => {
-              clearTimeout(resizeTimer)
-              resizeTimer = setTimeout(() => {
-                resizeCanvas()
-                if (direction === 'forward') drawVideoFrame()
-              }, 100)
-            }
-            window.addEventListener('resize', onResize)
-            resizeCanvas()
-
-            // Cleanup
-            canvasEl.__mydCleanup = () => {
-              if (rafId) cancelAnimationFrame(rafId)
-              window.removeEventListener('resize', onResize)
-              capturedFrames.forEach(b => b.close())
-              capturedFrames.length = 0
-              videoEl.pause()
-              videoEl.remove()
-            }
-          }}
-        />
+        <VideoBackgroundDual src="/video_background.mp4" />
         <div className="video-overlay" />
       </div>
 

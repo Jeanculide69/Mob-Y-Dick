@@ -11,13 +11,24 @@
   background: var(--bg-color);
 }
 
-.video-bg .video-canvas {
+/* Dual-video crossfade : deux <video> superposées, le JS bascule
+   leurs opacités pour masquer le seam de loop natif.
+   Durée de transition CSS = FADE_DURATION du composant (1.5s). */
+.video-bg-layer {
+  position: absolute;
+  inset: 0;
   width: 100%;
   height: 100%;
-  display: block;
-  opacity: 0.5;
+  object-fit: cover;
   filter: brightness(0.6) contrast(1.1) saturate(0.8);
+  opacity: 0;                                    /* la 2e layer commence à 0 */
+  transition: opacity 1.5s ease-in-out;
 }
+/* La 1ère layer démarre visible. Le JS gère le reste. */
+.video-bg-layer:first-of-type { opacity: 1; }
+
+/* Voile sombre par-dessus pour matcher l'ambiance précédente */
+.video-bg .video-canvas { display: none; }      /* nettoie ancien build */
 
 .video-overlay {
   position: absolute;
