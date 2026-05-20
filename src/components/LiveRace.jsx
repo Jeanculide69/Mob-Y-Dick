@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient'
 import LiveTeamDrawer from './LiveTeamDrawer'
 import PayPalButton from './PayPalButton'
 import RaceFlagOverlay from './RaceFlagOverlay'
-import { playPremiumSound, playDonationSound } from '../utils/soundEffects'
+import { playPremiumSound, playDonationSound, playRaceSignalSound, playAnnouncementSound } from '../utils/soundEffects'
 import './LiveRace.css'
 
 const EMOJIS = ['🔥', '👏', '🏁', '🏍️', '⚡', '🤙', '😱', '🚀']
@@ -377,7 +377,24 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
         setTimeout(() => setHighlightedLap(null), 4000)
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'race_sessions', filter: `id=eq.${session.id}` }, ({ new: row }) => {
-        setSession(row)
+        setSession(prev => {
+          // Détecter les transitions pour jouer le son de signal de course
+          if (prev && row) {
+            const wasStarted   = !!prev.started_at
+            const isStarted    = !!row.started_at
+            const wasLive      = prev.status === 'live'
+            const isFinished   = row.status === 'finished' || row.status === 'published'
+            // Départ de course : started_at passe de null → date
+            if (!wasStarted && isStarted) {
+              playRaceSignalSound()
+            }
+            // Fin de course : status live → finished/published
+            else if (wasLive && isFinished) {
+              playRaceSignalSound()
+            }
+          }
+          return row
+        })
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'race_announcements', filter: `session_id=eq.${session.id}` }, ({ new: row }) => {
         setAnnouncementsHistory(prev => [row, ...prev])
@@ -413,6 +430,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       })
       .on('broadcast', { event: 'announcement' }, ({ payload }) => {
         setAnnouncement(payload.text)
+        playAnnouncementSound()
         setTimeout(() => setAnnouncement(null), 12000)
       })
       .on('broadcast', { event: 'team-status' }, ({ payload }) => {

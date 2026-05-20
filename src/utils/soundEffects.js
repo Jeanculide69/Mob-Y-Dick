@@ -269,3 +269,26 @@ export function playDonationSound() {
     console.log('Donation sound error:', e)
   }
 }
+
+// ── Sons de notification réels (fichiers MP3 dans /sounds) ──
+// Volume bas pour ne pas surprendre — cohérent avec MASTER_GAIN du synth.
+
+const playFileSound = (url, volume = 0.45) => {
+  try {
+    const audio = new Audio(url)
+    audio.volume = volume
+    audio.play().catch(() => { /* autoplay bloqué = on ignore */ })
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Son long (notification center) : départ ET arrêt de course. */
+export function playRaceSignalSound() {
+  playFileSound('/sounds/race-signal.mp3', 0.5)
+}
+
+/** Son court : annonce d'un organisateur pendant la course. */
+export function playAnnouncementSound() {
+  playFileSound('/sounds/announcement.mp3', 0.45)
+}
