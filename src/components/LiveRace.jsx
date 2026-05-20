@@ -1340,7 +1340,7 @@ export default function LiveRace({ customSessionId, onClose }) {
         <div className="live-fab-container">
           {fabOpen && (
             <div
-              className="live-fab-menu glass fade-in"
+              className="live-fab-menu glass"
               onClick={(e) => e.stopPropagation()}
               onMouseDown={(e) => e.stopPropagation()}
               onTouchStart={(e) => e.stopPropagation()}

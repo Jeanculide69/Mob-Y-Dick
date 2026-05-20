@@ -1899,7 +1899,11 @@
   min-width: 260px;
   max-width: 320px;
   box-shadow: 0 10px 40px rgba(0,0,0,0.6);
-  animation: fab-slide-up 0.25s ease-out;
+  /* fill-mode forwards : sans ça l'élément retombait à opacity:0 après
+     l'animation (la classe .fade-in qu'on avait ajoutée par erreur
+     définissait une baseline opacity:0). On a aussi retiré .fade-in
+     du JSX, mais ce forwards est une ceinture en plus de la bretelle. */
+  animation: fab-slide-up 0.25s ease-out forwards;
 }
 
 @keyframes fab-slide-up {
