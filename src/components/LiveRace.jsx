@@ -54,12 +54,37 @@ export default function LiveRace({ customSessionId, onClose }) {
   const [activeAlerts, setActiveAlerts] = useState([])
   const [shopOpen, setShopOpen] = useState(false)
   const [modalTab, setModalTab] = useState('shop') // 'shop' | 'donation'
+  const [fabOpen, setFabOpen] = useState(false) // floating action button
 
   // Donation form state
   const [donationPseudo, setDonationPseudo] = useState('')
   const [donationMessage, setDonationMessage] = useState('')
   const [donationAmount, setDonationAmount] = useState(5)
   const [customAmount, setCustomAmount] = useState('')
+
+  // ── Audio unlock for mobile browsers ──
+  const audioUnlockedRef = useRef(false)
+  useEffect(() => {
+    const unlockAudio = () => {
+      if (audioUnlockedRef.current) return
+      // Play a tiny silent sound to unlock the audio context on mobile
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)()
+        const buf = ctx.createBuffer(1, 1, 22050)
+        const src = ctx.createBufferSource()
+        src.buffer = buf
+        src.connect(ctx.destination)
+        src.start(0)
+        audioUnlockedRef.current = true
+      } catch(e) { /* ignore */ }
+    }
+    document.addEventListener('click', unlockAudio, { once: true })
+    document.addEventListener('touchstart', unlockAudio, { once: true })
+    return () => {
+      document.removeEventListener('click', unlockAudio)
+      document.removeEventListener('touchstart', unlockAudio)
+    }
+  }, [])
 
   const elapsedRef          = useRef(null)
   const prevRankingsRef     = useRef({})
@@ -130,9 +155,16 @@ export default function LiveRace({ customSessionId, onClose }) {
 
     // Play sound if available
     if (item.sound_url) {
-      const audio = new Audio(item.sound_url)
-      audio.volume = 0.5
-      audio.play().catch(err => console.log('Audio playback prevented:', err))
+      try {
+        const audio = new Audio(item.sound_url)
+        audio.volume = 0.6
+        audio.crossOrigin = 'anonymous'
+        const playPromise = audio.play()
+        if (playPromise) playPromise.catch(() => {
+          // Retry after a short delay (mobile unlock may be pending)
+          setTimeout(() => audio.play().catch(() => {}), 200)
+        })
+      } catch(e) { console.log('Audio error:', e) }
     }
 
     // Auto-remove after 4.5 seconds
@@ -153,9 +185,15 @@ export default function LiveRace({ customSessionId, onClose }) {
     }])
 
     // Play cash register sound
-    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2019/2019-84.wav')
-    audio.volume = 0.5
-    audio.play().catch(err => console.log('Audio playback prevented:', err))
+    try {
+      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2019/2019-84.wav')
+      audio.volume = 0.6
+      audio.crossOrigin = 'anonymous'
+      const playPromise = audio.play()
+      if (playPromise) playPromise.catch(() => {
+        setTimeout(() => audio.play().catch(() => {}), 200)
+      })
+    } catch(e) { console.log('Donation audio error:', e) }
 
     // Auto-remove after 8 seconds
     setTimeout(() => {
@@ -1122,6 +1160,64 @@ export default function LiveRace({ customSessionId, onClose }) {
               )}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Floating Action Button (FAB) pour Emotes & Dons ── */}
+      {isLive && !shopOpen && (
+        <div className="live-fab-container">
+          {fabOpen && (
+            <div className="live-fab-menu glass fade-in">
+              <div className="live-fab-menu-title">💬 Réactions rapides</div>
+              <div className="live-fab-emoji-row">
+                {EMOJIS.map(emoji => (
+                  <button key={emoji} className="live-reaction-btn" onClick={() => sendReaction(emoji)}>
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+              <div className="live-fab-divider" />
+              <div className="live-fab-menu-title">💎 Premium</div>
+              <div className="live-fab-emoji-row">
+                {shopItems.filter(item => item.type !== 'pack').map(item => {
+                  const isOwned = userPurchases.includes(item.slug) || userPurchases.includes('pack_premium_all');
+                  return (
+                    <button
+                      key={item.id}
+                      className={`live-reaction-btn ${!isOwned ? 'locked' : ''}`}
+                      onClick={() => {
+                        if (isOwned) {
+                          sendPremiumReaction(item);
+                        } else {
+                          setModalTab('shop'); setShopOpen(true); setFabOpen(false);
+                        }
+                      }}
+                      title={isOwned ? item.name : `Débloquer ${item.name}`}
+                    >
+                      {item.emoji || '🔊'}
+                      {!isOwned && <span className="live-lock-badge" style={{fontSize:'0.55rem'}}>🔒</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className="live-fab-divider" />
+              <div className="live-fab-actions">
+                <button className="live-fab-action-btn" onClick={() => { setModalTab('shop'); setShopOpen(true); setFabOpen(false); }}>
+                  🛍️ Boutique
+                </button>
+                <button className="live-fab-action-btn donation" onClick={() => { setModalTab('donation'); setShopOpen(true); setFabOpen(false); }}>
+                  💸 Faire un Don
+                </button>
+              </div>
+            </div>
+          )}
+          <button
+            className={`live-fab-btn ${fabOpen ? 'active' : ''}`}
+            onClick={() => setFabOpen(!fabOpen)}
+            aria-label="Emotes et Dons"
+          >
+            {fabOpen ? '✕' : '🎉'}
+          </button>
         </div>
       )}
     </section>
