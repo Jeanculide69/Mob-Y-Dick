@@ -190,7 +190,7 @@ export default function LiveRace({ customSessionId, onClose }) {
     // 1. Si MP4 : le <video> joue son propre son → on ne déclenche rien d'autre
     // 2. Sinon si sound_url (mp3 uploadé) : on joue ce fichier
     // 3. Sinon : fallback sur le synthé Web Audio API
-    const isVideo = item.media_type === 'mp4' || /\.mp4($|\?)/i.test(item.media_url || item.animation_url || '')
+    const isVideo = item.media_type === 'mp4' || /\.(mp4|webm)($|\?)/i.test(item.media_url || item.animation_url || '')
     if (!isVideo) {
       if (item.sound_url) {
         try {
@@ -600,7 +600,7 @@ export default function LiveRace({ customSessionId, onClose }) {
           {activeAlerts.filter(a => a.type === 'premium-reaction').map(a => {
             // Priorité au champ media_url (v15 admin upload) sinon fallback sur l'ancien animation_url
             const mediaSrc = a.item.media_url || a.item.animation_url
-            const isVideo = a.item.media_type === 'mp4' || /\.mp4($|\?)/i.test(mediaSrc || '')
+            const isVideo = a.item.media_type === 'mp4' || /\.(mp4|webm)($|\?)/i.test(mediaSrc || '')
             return (
               <div key={a.id} className="live-emote-overlay-stage">
                 <div className="live-premium-emote-alert">

@@ -1,0 +1,254 @@
+/* ═══════════════════════════════════════
+   VideoTrimmer — Modal de trim/compression
+   ═══════════════════════════════════════ */
+
+.video-trimmer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 3000;
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding:
+    calc(20px + env(safe-area-inset-top, 0px))
+    16px
+    calc(20px + env(safe-area-inset-bottom, 0px))
+    16px;
+  overflow-y: auto;
+  animation: videoTrimmerFadeIn 0.18s ease-out;
+}
+
+@keyframes videoTrimmerFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.video-trimmer {
+  width: 100%;
+  max-width: 640px;
+  background: rgba(15, 15, 18, 0.96);
+  border: 1px solid rgba(255, 85, 0, 0.25);
+  border-radius: 16px;
+  display: flex;
+  flex-direction: column;
+  max-height: 90dvh;
+  overflow: hidden;
+  animation: videoTrimmerSlideIn 0.22s ease-out;
+}
+
+@keyframes videoTrimmerSlideIn {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* ─── Header ─── */
+.video-trimmer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.video-trimmer-header h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #fff;
+}
+
+.video-trimmer-close {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.video-trimmer-close:hover:not(:disabled) {
+  background: rgba(255, 85, 0, 0.12);
+  border-color: rgba(255, 85, 0, 0.4);
+  color: var(--accent);
+}
+
+.video-trimmer-close:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── Body ─── */
+.video-trimmer-body {
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+}
+
+.video-trimmer-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: rgba(255, 85, 0, 0.06);
+  border: 1px solid rgba(255, 85, 0, 0.15);
+}
+
+.video-trimmer-hint strong {
+  color: var(--accent);
+}
+
+/* ─── Vidéo preview ─── */
+.video-trimmer-preview {
+  background: #000;
+  border-radius: 10px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+}
+
+.video-trimmer-video {
+  width: 100%;
+  max-height: 320px;
+  object-fit: contain;
+  display: block;
+  background: #000;
+}
+
+/* ─── Contrôles ─── */
+.video-trimmer-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.video-trimmer-times {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.video-trimmer-times strong {
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.video-trimmer-slider {
+  width: 100%;
+  height: 6px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  outline: none;
+  cursor: pointer;
+}
+
+.video-trimmer-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(255, 85, 0, 0.15);
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.video-trimmer-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.1);
+}
+
+.video-trimmer-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(255, 85, 0, 0.15);
+  border: none;
+  cursor: pointer;
+}
+
+/* ─── Progression ─── */
+.video-trimmer-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.video-trimmer-progress-bar {
+  width: 100%;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.video-trimmer-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #ff8c42);
+  transition: width 0.15s ease-out;
+}
+
+/* ─── Erreur ─── */
+.video-trimmer-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 60, 60, 0.1);
+  border: 1px solid rgba(255, 60, 60, 0.3);
+  color: #ff7575;
+  font-size: 0.82rem;
+}
+
+/* ─── Footer ─── */
+.video-trimmer-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 18px;
+  border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.video-trimmer-footer .btn {
+  min-height: 40px;
+}
+
+/* ─── Mobile ─── */
+@media (max-width: 600px) {
+  .video-trimmer {
+    max-height: 95dvh;
+  }
+  .video-trimmer-body {
+    padding: 14px;
+  }
+  .video-trimmer-video {
+    max-height: 240px;
+  }
+  .video-trimmer-footer {
+    flex-direction: column-reverse;
+  }
+  .video-trimmer-footer .btn {
+    width: 100%;
+  }
+  .video-trimmer-times {
+    font-size: 0.78rem;
+    gap: 10px;
+  }
+}

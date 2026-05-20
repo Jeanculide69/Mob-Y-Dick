@@ -12,19 +12,27 @@
  */
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../supabaseClient'
+import VideoTrimmer from './VideoTrimmer'
 import './EmoteAdmin.css'
 
 const MAX_MEDIA_SIZE = 20 * 1024 * 1024  // 20 MB
 const MAX_SOUND_SIZE = 5 * 1024 * 1024   // 5 MB
 
-const MEDIA_ACCEPT = 'image/gif,image/png,image/webp,image/jpeg,video/mp4'
+const MEDIA_ACCEPT = 'image/gif,image/png,image/webp,image/jpeg,video/mp4,video/webm,video/quicktime'
 const SOUND_ACCEPT = 'audio/mpeg,audio/mp3,audio/wav,audio/ogg'
 
 const inferMediaType = (fileName) => {
   const ext = (fileName.split('.').pop() || '').toLowerCase()
-  if (ext === 'mp4') return 'mp4'
+  if (['mp4', 'webm', 'mov', 'm4v'].includes(ext)) return 'mp4' // sémantique : vidéo avec son intégré
   if (['gif', 'png', 'webp', 'jpg', 'jpeg'].includes(ext)) return 'gif'
   return 'gif'
+}
+
+const isVideoFile = (file) => {
+  if (!file) return false
+  if (file.type && file.type.startsWith('video/')) return true
+  const ext = (file.name.split('.').pop() || '').toLowerCase()
+  return ['mp4', 'webm', 'mov', 'm4v'].includes(ext)
 }
 
 export default function EmoteAdmin({ onClose }) {
@@ -32,6 +40,8 @@ export default function EmoteAdmin({ onClose }) {
   const [loading, setLoading] = useState(true)
   const [savingId, setSavingId] = useState(null)
   const [drafts, setDrafts] = useState({}) // { itemId: { name, description, price_cents, is_visible } }
+  // Trimmer vidéo : on garde le contexte de l'upload pendant la modale
+  const [trimmer, setTrimmer] = useState(null) // { item, file } | null
   const mediaInputsRef = useRef({})
   const soundInputsRef = useRef({})
 
@@ -207,7 +217,7 @@ export default function EmoteAdmin({ onClose }) {
         {items.map(item => {
           const isPack = item.type === 'pack'
           const mediaUrl = item.media_url || item.animation_url
-          const isVideo = item.media_type === 'mp4' || /\.mp4($|\?)/i.test(mediaUrl || '')
+          const isVideo = item.media_type === 'mp4' || /\.(mp4|webm)($|\?)/i.test(mediaUrl || '')
           const saving = savingId === item.id
 
           return (
@@ -288,7 +298,12 @@ export default function EmoteAdmin({ onClose }) {
                   <div className="emote-admin-uploads">
                     {/* MEDIA upload */}
                     <div className="emote-admin-upload">
-                      <span className="emote-admin-label">Visuel (GIF / PNG / WebP / MP4 — max 20 Mo)</span>
+                      <span className="emote-admin-label">
+                        Visuel (GIF / PNG / WebP / MP4 — max 20 Mo)
+                        <em style={{ marginLeft: 8, color: 'var(--text-muted)' }}>
+                          — les vidéos passent par un trim 5s + compression auto
+                        </em>
+                      </span>
                       <div className="emote-admin-upload-row">
                         <button
                           type="button"
@@ -305,8 +320,18 @@ export default function EmoteAdmin({ onClose }) {
                           style={{ display: 'none' }}
                           onChange={(e) => {
                             const f = e.target.files?.[0]
-                            handleUpload(item, f, 'media')
                             e.target.value = ''
+                            if (!f) return
+                            // Vidéo → passage par le trimmer/compresseur avant upload
+                            if (isVideoFile(f)) {
+                              if (f.size > MAX_MEDIA_SIZE) {
+                                alert(`Vidéo trop volumineuse. Max : ${MAX_MEDIA_SIZE / (1024 * 1024)} Mo`)
+                                return
+                              }
+                              setTrimmer({ item, file: f })
+                            } else {
+                              handleUpload(item, f, 'media')
+                            }
                           }}
                         />
                         {mediaUrl && (
@@ -385,6 +410,19 @@ export default function EmoteAdmin({ onClose }) {
         <div className="emote-admin-footer">
           <button className="btn btn-ghost" onClick={onClose}>Fermer</button>
         </div>
+      )}
+
+      {/* Modal trim/compression vidéo */}
+      {trimmer && (
+        <VideoTrimmer
+          file={trimmer.file}
+          onConfirm={(compressedFile) => {
+            const ctx = trimmer
+            setTrimmer(null)
+            handleUpload(ctx.item, compressedFile, 'media')
+          }}
+          onCancel={() => setTrimmer(null)}
+        />
       )}
     </div>
   )
