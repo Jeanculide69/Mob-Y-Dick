@@ -436,6 +436,8 @@ function App() {
   const [activeMotoNumbers, setActiveMotoNumbers] = useState([])
   // Rider profile (clic sur une team-card)
   const [viewingRider, setViewingRider] = useState(null)
+  // 'upcoming' | 'past' — onglet actif dans la section Événements
+  const [eventsTab, setEventsTab] = useState('upcoming')
   const [checkoutData, setCheckoutData] = useState({
     customText: '',
     size: 'M',
@@ -777,6 +779,45 @@ function App() {
 
   // Fix Javascript empty array traps for default fallback render cards
   const displayEvents = (dbEvents && dbEvents.length > 0) ? dbEvents : EVENTS.map((e, i) => ({ ...e, id: i }))
+
+  // ── Tri + split passés / à venir ──
+  // "Passé" = a une session associée avec status='finished' ou 'published',
+  // OU la date est antérieure à aujourd'hui (sans heure, donc minuit local).
+  // "À venir / en cours" = tout le reste.
+  // Tri : à venir = chronologique croissant (proche en haut),
+  //       passés  = chronologique décroissant (récent en haut).
+  const { upcomingEvents, pastEvents } = (() => {
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    const parseDate = (s) => {
+      const d = new Date(s)
+      return isNaN(d.getTime()) ? null : d
+    }
+    const findSession = (eventId) => raceSessions?.find(s => s.event_id === eventId)
+    const isPast = (ev) => {
+      const sess = findSession(ev.id)
+      if (sess && (sess.status === 'finished' || sess.status === 'published')) return true
+      const d = parseDate(ev.date)
+      return d != null && d < today
+    }
+    const upcoming = []
+    const past = []
+    for (const ev of displayEvents) {
+      if (isPast(ev)) past.push(ev)
+      else upcoming.push(ev)
+    }
+    upcoming.sort((a, b) => {
+      const da = parseDate(a.date)?.getTime() ?? Infinity
+      const db = parseDate(b.date)?.getTime() ?? Infinity
+      return da - db
+    })
+    past.sort((a, b) => {
+      const da = parseDate(a.date)?.getTime() ?? 0
+      const db = parseDate(b.date)?.getTime() ?? 0
+      return db - da
+    })
+    return { upcomingEvents: upcoming, pastEvents: past }
+  })()
   const displayGallery = dbGallery
   const displayProducts = (dbProducts && dbProducts.length > 0) ? dbProducts : PRODUCTS
   const displayTeam = (() => {
@@ -1708,16 +1749,53 @@ function App() {
             <div className="container">
               <div className="section-header">
                 <span className="section-tag">Agenda</span>
-                <h2>Événements à venir</h2>
-                <p className="section-sub">Nos prochains rassemblements et expos.</p>
+                <h2>{eventsTab === 'upcoming' ? 'Événements à venir' : 'Événements passés'}</h2>
+                <p className="section-sub">
+                  {eventsTab === 'upcoming'
+                    ? 'Nos prochains rassemblements et courses, du plus proche au plus lointain.'
+                    : 'Les éditions précédentes et leurs résultats.'}
+                </p>
                 {hasPermission('manage_events') && (
                   <button className="btn btn-primary btn-sm inline-add-btn" onClick={() => handleOpenForm('event')}>
                     ➕ Ajouter un Événement
                   </button>
                 )}
               </div>
+
+              {/* ── Tabs À venir / Passés ── */}
+              <div className="events-tabs">
+                <button
+                  type="button"
+                  className={`events-tab ${eventsTab === 'upcoming' ? 'active' : ''}`}
+                  onClick={() => setEventsTab('upcoming')}
+                >
+                  📅 À venir
+                  <span className="events-tab-count">{upcomingEvents.length}</span>
+                </button>
+                <button
+                  type="button"
+                  className={`events-tab ${eventsTab === 'past' ? 'active' : ''}`}
+                  onClick={() => setEventsTab('past')}
+                >
+                  🏁 Passés
+                  <span className="events-tab-count">{pastEvents.length}</span>
+                </button>
+              </div>
+
+              {(() => {
+                const list = eventsTab === 'upcoming' ? upcomingEvents : pastEvents
+                if (list.length === 0) {
+                  return (
+                    <div className="events-empty">
+                      {eventsTab === 'upcoming'
+                        ? 'Aucun événement à venir pour le moment. Reviens bientôt !'
+                        : 'Aucun événement passé enregistré.'}
+                    </div>
+                  )
+                }
+                return (
               <div className="events-list">
-                {displayEvents.map((ev, i) => {
+                {list.map((ev, i) => {
                   const dateStr = ev.date || ''
                   const dateObj = new Date(dateStr)
                   const isValidDate = !isNaN(dateObj.getTime()) && dateStr.includes('-')
@@ -1838,6 +1916,8 @@ function App() {
                   )
                 })}
               </div>
+                )
+              })()}
             </div>
           </section>
         )}
