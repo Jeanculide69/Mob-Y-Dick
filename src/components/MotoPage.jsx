@@ -257,6 +257,8 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
   }, [])
 
   // Le bouton "retour" du téléphone ferme la page moto au lieu de quitter le site.
+  // Deps vide volontaire (cf. LiveTeamDrawer) — sinon le cleanup ré-appelle
+  // history.back() à chaque re-render du parent et ferme la page tout seul.
   useEffect(() => {
     let closedByBack = false
     window.history.pushState({ mydMotoPage: true }, '')
@@ -271,7 +273,8 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
         window.history.back()
       }
     }
-  }, [onClose])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleReviewAffiliation = async (id, newStatus) => {
     setReviewingId(id)

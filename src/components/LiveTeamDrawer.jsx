@@ -86,6 +86,10 @@ export default function LiveTeamDrawer({ team, allLaps, position, onClose }) {
   // On empile un état dans l'historique à l'ouverture, on écoute popstate pour
   // appeler onClose, et on resynchronise l'historique si la fermeture vient
   // de la croix (et pas du back natif).
+  //
+  // ⚠️ Deps vide volontaire : si on dépend de onClose (qui change à chaque
+  // render du parent), le cleanup tire history.back() en boucle et le drawer
+  // se referme aussitôt après son ouverture.
   useEffect(() => {
     let closedByBack = false
     window.history.pushState({ mydDrawer: true }, '')
@@ -97,11 +101,11 @@ export default function LiveTeamDrawer({ team, allLaps, position, onClose }) {
     return () => {
       window.removeEventListener('popstate', onPop)
       if (!closedByBack) {
-        // Fermeture via X ou clic backdrop → on pop l'état qu'on avait empilé
         window.history.back()
       }
     }
-  }, [onClose])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   return (
     <>
