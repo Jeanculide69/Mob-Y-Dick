@@ -1756,7 +1756,7 @@ function App() {
               <div className="section-header">
                 <span className="section-tag">Shop</span>
                 <h2>Boutique Officielle</h2>
-                <p className="section-sub">Toutes nos créations sont personnalisables à 100% avec ton propre pseudo graffiti.</p>
+                <p className="section-sub">Toutes nos créations sont personnalisables à 100% avec ton propre pseudo.</p>
                 {hasPermission('manage_products') && (
                   <button className="btn btn-primary btn-sm inline-add-btn" onClick={() => handleOpenForm('product')}>
                     ➕ Ajouter un Produit

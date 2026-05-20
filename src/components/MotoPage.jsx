@@ -448,7 +448,25 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
                       className="moto-photo-upload-zone"
                       onClick={() => !photoUploading && fileInputRef.current?.click()}
                       title="Cliquer pour changer la photo"
+                      style={{ position: 'relative' }}
                     >
+                      <div style={{
+                        position: 'absolute',
+                        top: '8px',
+                        right: '8px',
+                        background: 'rgba(0,0,0,0.6)',
+                        borderRadius: '50%',
+                        width: '32px',
+                        height: '32px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        cursor: 'pointer',
+                        zIndex: 10,
+                        boxShadow: '0 2px 4px rgba(0,0,0,0.3)'
+                      }}>
+                        ✏️
+                      </div>
                       {profile?.photo_url ? (
                         <img src={profile.photo_url} alt={displayName} className="moto-hero-img" />
                       ) : (
@@ -486,16 +504,7 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
                       onChange={handleFileChange}
                     />
 
-                    {/* Petit label sous la photo */}
-                    <p style={{
-                      textAlign: 'center',
-                      fontSize: '0.7rem',
-                      color: 'var(--text-muted)',
-                      marginTop: '6px',
-                      lineHeight: '1.3',
-                    }}>
-                      Cliquer pour modifier<br />Auto-recadrage 3:2
-                    </p>
+
                   </>
                 ) : (
                   profile?.photo_url ? (
@@ -634,10 +643,7 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
                 <h3 className="moto-request-title">🔗 Rejoindre ce numéro</h3>
                 <p className="moto-request-desc">
                   Tu pilotes le <strong>#{motoNumber}</strong> ? Demande à être associé à ce numéro pour personnaliser son profil.
-                  {(isAdmin || isModerator)
-                    ? <> En tant qu'admin tu peux <strong>approuver ta propre demande</strong> directement dans le panneau ci-dessous.</>
-                    : <> Un admin ou modérateur validera ta demande.</>
-                  }
+                  Un admin ou modérateur validera ta demande.
                 </p>
                 <textarea
                   className="moto-request-note"
@@ -650,7 +656,6 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
                 {submitStatus === 'sent' && (
                   <div className="moto-request-success">
                     ✅ Demande enregistrée !
-                    {(isAdmin || isModerator) && ' Approuve-la dans le panneau "Affiliations" ci-dessous.'}
                   </div>
                 )}
                 {submitStatus === 'error' && (
@@ -675,91 +680,7 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
               </div>
             )}
 
-            {/* ── Panneau admin : gestion des affiliations ── */}
-            {(isAdmin || isModerator) && (
-              <div className="moto-admin-aff glass">
-                <h3 className="moto-admin-aff-title">
-                  🔗 Affiliations — #{motoNumber}
-                  <span className="moto-admin-aff-count">
-                    {allAffiliations.filter(a => a.status === 'pending').length > 0 &&
-                      <span className="moto-admin-aff-badge">
-                        {allAffiliations.filter(a => a.status === 'pending').length} en attente
-                      </span>
-                    }
-                  </span>
-                </h3>
 
-                {allAffiliations.length === 0 ? (
-                  <p className="moto-admin-aff-empty">Aucune demande d'affiliation pour ce numéro.</p>
-                ) : (
-                  <div className="moto-admin-aff-list">
-                    {allAffiliations.map(aff => (
-                      <div key={aff.id} className={`moto-admin-aff-row moto-admin-aff-row--${aff.status}`}>
-                        <div className="moto-admin-aff-user">
-                          <span className="moto-admin-aff-name">
-                            {aff.profiles?.display_name || '—'}
-                          </span>
-                          <span className="moto-admin-aff-email">
-                            {aff.profiles?.email || aff.user_id?.slice(0, 8) + '…'}
-                          </span>
-                          {aff.note && (
-                            <span className="moto-admin-aff-note">💬 {aff.note}</span>
-                          )}
-                          <span className="moto-admin-aff-date">
-                            {new Date(aff.requested_at).toLocaleDateString('fr-FR')}
-                          </span>
-                        </div>
-
-                        <div className="moto-admin-aff-status">
-                          {aff.status === 'pending'  && <span className="moto-aff-badge moto-aff-pending">⏳ En attente</span>}
-                          {aff.status === 'approved' && <span className="moto-aff-badge moto-aff-approved">✅ Approuvé</span>}
-                          {aff.status === 'rejected' && <span className="moto-aff-badge moto-aff-rejected">❌ Refusé</span>}
-                        </div>
-
-                        <div className="moto-admin-aff-actions">
-                          {aff.status === 'pending' && (
-                            <>
-                              <button
-                                className="btn btn-success btn-sm"
-                                onClick={() => handleReviewAffiliation(aff.id, 'approved')}
-                                disabled={reviewingId === aff.id}
-                              >
-                                ✅ Approuver
-                              </button>
-                              <button
-                                className="btn btn-danger btn-sm"
-                                onClick={() => handleReviewAffiliation(aff.id, 'rejected')}
-                                disabled={reviewingId === aff.id}
-                              >
-                                ❌ Refuser
-                              </button>
-                            </>
-                          )}
-                          {aff.status === 'approved' && (
-                            <button
-                              className="btn btn-danger btn-sm"
-                              onClick={() => handleReviewAffiliation(aff.id, 'rejected')}
-                              disabled={reviewingId === aff.id}
-                            >
-                              🔒 Révoquer
-                            </button>
-                          )}
-                          {aff.status === 'rejected' && (
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => handleReviewAffiliation(aff.id, 'approved')}
-                              disabled={reviewingId === aff.id}
-                            >
-                              ↩️ Réapprouver
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
 
           </div>
         </div>
