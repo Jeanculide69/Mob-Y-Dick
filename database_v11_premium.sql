@@ -106,8 +106,8 @@ VALUES
   ('emote_poop', '💩 Emote Caca', 'Envoie un caca qui s''écrase au milieu de l''écran avec un bruit rigolo.', 'emote_sound', 300, '💩', 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3hmdWw1ZmlnYTh1eXVpazQ0Ymd0N29hMHl2Y3o3Zng3bzR3dnl4dyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/WOBH1Z4y8S1c73v1d9/giphy.gif', 'https://www.soundjay.com/misc/sounds/fart-01.mp3', 1),
   ('emote_fart', '💨 Super Pet', 'Un nuage de fumée pétaradant qui traverse l''écran.', 'emote_sound', 300, '💨', 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExaG45cDQ4ZmhuOWlyOHB2YTZodDZtYXhuYXhrNXozYTh1eTNzOHpxNSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/VfJ2Fq98J1YQv2t3hX/giphy.gif', 'https://www.soundjay.com/misc/sounds/fart-02.mp3', 2),
   ('sound_horn', '📯 Klaxon de Brêle', 'Fait retentir un vieux klaxon de mobylette pour encourager les riders.', 'sound', 200, '📯', NULL, 'https://www.soundjay.com/transportation/sounds/car-horn-3.mp3', 3),
-  ('emote_clown', '🤡 Emote Clown', 'Affiche un clown rigolo en plein écran.', 'emote', 200, '🤡', 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbTZ6MTUydnpqM2VpazMyaGdzazc3ejA1bTZ6N3Q0MGV6azc4YmZzciZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/5YpUtSNDZgB3f0PZ5S/giphy.gif', NULL, 4),
-  ('emote_fire', '🔥 Flammes En Enfer', 'Inonde le live de flammes géantes.', 'emote', 300, '🔥', 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExdW93bnFmaTN2NnhyOWZ4aWZ3YmsxMndqczNnYmd3M3E4djRmdTFldSZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9cw/mB9tEhyS46P6t88U4N/giphy.gif', NULL, 5)
+  ('emote_clown', '🤡 Emote Clown', 'Affiche un clown rigolo en plein écran.', 'emote', 200, '🤡', 'https://media.giphy.com/media/x0npYExCGOZeo/giphy.gif', 'https://www.soundjay.com/misc/sounds/fail-buzzer-01.mp3', 4),
+  ('emote_fire', '🔥 Flammes En Enfer', 'Inonde le live de flammes géantes.', 'emote', 300, '🔥', 'https://media.giphy.com/media/Lopx9eUi34rbq/giphy.gif', 'https://www.soundjay.com/nature/sounds/fire-1.mp3', 5)
 ON CONFLICT (slug) DO NOTHING;
 
 -- Créer le pack complet qui regroupe tout pour 30€
