@@ -440,9 +440,10 @@ export default function LiveRace({ customSessionId, onClose }) {
       const { data: annData } = await supabase.from('race_announcements').select('*').eq('session_id', s.id).order('created_at', { ascending: false })
       setAnnouncementsHistory(annData || [])
 
-      // ── Replay des 3 derniers dons + 3 derniers emote_triggers de la
-      //    session : l'utilisateur qui arrive en retard les voit défiler
-      //    une fois en séquence (la queue d'alertes les espace). ──
+      // ── Replay des 3 derniers dons UNIQUEMENT ──
+      //    Les emotes ne sont PAS rejouées au mount (trop bruyant, et la
+      //    valeur informative d'un emote passé est faible vs un don avec
+      //    son message qui mérite d'être (re)vu).
       const { data: recentDonations } = await supabase
         .from('donations')
         .select('*')
@@ -450,14 +451,6 @@ export default function LiveRace({ customSessionId, onClose }) {
         .order('created_at', { ascending: false })
         .limit(3)
       ;(recentDonations || []).slice().reverse().forEach(d => triggerDonationAlert(d))
-
-      const { data: recentTriggers } = await supabase
-        .from('emote_triggers')
-        .select('*')
-        .eq('session_id', s.id)
-        .order('triggered_at', { ascending: false })
-        .limit(3)
-      ;(recentTriggers || []).slice().reverse().forEach(t => triggerPremiumReaction(t.item_slug, t.display_name))
     }
     setLoading(false)
   }
