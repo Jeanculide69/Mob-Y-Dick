@@ -167,7 +167,7 @@ export default function LiveRace({ customSessionId, onClose }) {
         if (item.sound_url) {
           try {
             const audio = new Audio(item.sound_url)
-            audio.volume = 0.7
+            audio.volume = 0.3   // baissé : les MP3 uploadés étaient trop forts
             audio.play().catch(() => { if (!isVideo) playPremiumSound(item.slug) })
           } catch {
             if (!isVideo) playPremiumSound(item.slug)

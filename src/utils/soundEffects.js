@@ -227,12 +227,34 @@ const slugToSound = {
   emote_mindblown: 'mindblown',
 }
 
+// ── Master gain ──
+// Tous les générateurs `connect(ctx.destination)` directement. Pour
+// baisser globalement le volume sans toucher aux 14 générateurs, on
+// passe au générateur un Proxy du ctx qui retourne un GainNode à la
+// place de `destination`. Le GainNode est branché sur le vrai
+// destination avec un volume réduit.
+const MASTER_GAIN = 0.3  // 30% du volume nominal des générateurs
+
+const playWithMasterGain = (ctx, runGenerator) => {
+  const master = ctx.createGain()
+  master.gain.value = MASTER_GAIN
+  master.connect(ctx.destination)
+  const proxyCtx = new Proxy(ctx, {
+    get(target, prop) {
+      if (prop === 'destination') return master
+      const v = target[prop]
+      return typeof v === 'function' ? v.bind(target) : v
+    },
+  })
+  runGenerator(proxyCtx)
+}
+
 export function playPremiumSound(slug) {
   try {
     const ctx = getAudioCtx()
     const soundName = slugToSound[slug]
     if (soundName && soundGenerators[soundName]) {
-      soundGenerators[soundName](ctx)
+      playWithMasterGain(ctx, (proxy) => soundGenerators[soundName](proxy))
     }
   } catch (e) {
     console.log('Sound playback error:', e)
@@ -242,7 +264,7 @@ export function playPremiumSound(slug) {
 export function playDonationSound() {
   try {
     const ctx = getAudioCtx()
-    soundGenerators.cashregister(ctx)
+    playWithMasterGain(ctx, (proxy) => soundGenerators.cashregister(proxy))
   } catch (e) {
     console.log('Donation sound error:', e)
   }

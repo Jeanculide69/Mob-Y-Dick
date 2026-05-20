@@ -8,6 +8,7 @@ import ProfilePage from './components/ProfilePage'
 import UserManagement from './components/UserManagement'
 import EmoteAdmin from './components/EmoteAdmin'
 import DonationsAdmin from './components/DonationsAdmin'
+import RiderPage from './components/RiderPage'
 import RaceSetup from './components/RaceSetup'
 import RaceChrono from './components/RaceChrono'
 import LiveRace from './components/LiveRace'
@@ -432,6 +433,8 @@ function App() {
   // Moto affiliation system
   const [viewingMotoNumber, setViewingMotoNumber] = useState(null)
   const [activeMotoNumbers, setActiveMotoNumbers] = useState([])
+  // Rider profile (clic sur une team-card)
+  const [viewingRider, setViewingRider] = useState(null)
   const [checkoutData, setCheckoutData] = useState({
     customText: '',
     size: 'M',
@@ -1544,7 +1547,23 @@ function App() {
               </div>
               <div className="team-grid">
                 {displayTeam.map((m, i) => (
-                  <div key={m.id || m.name} className={`team-card fade-in fade-in-delay-${i % 4 + 1} admin-card-parent`}>
+                  <div
+                    key={m.id || m.name}
+                    className={`team-card fade-in fade-in-delay-${i % 4 + 1} admin-card-parent ${m.id ? 'team-card-clickable' : ''}`}
+                    onClick={(e) => {
+                      // L'admin-inline-actions (✏️🗑️) ne doit pas ouvrir la fiche
+                      if (e.target.closest('.admin-inline-actions')) return
+                      if (m.id) setViewingRider(m)
+                    }}
+                    role={m.id ? 'button' : undefined}
+                    tabIndex={m.id ? 0 : undefined}
+                    onKeyDown={(e) => {
+                      if (m.id && (e.key === 'Enter' || e.key === ' ')) {
+                        e.preventDefault()
+                        setViewingRider(m)
+                      }
+                    }}
+                  >
                     <div className="team-img-wrap">
                       {m.image_url || m.img ? (
                         <img src={m.image_url || m.img} alt={m.name} className="team-img" loading="lazy" />
@@ -2298,6 +2317,20 @@ function App() {
           isAdmin={isAdmin}
           isModerator={isModerator}
           onClose={() => setViewingMotoNumber(null)}
+        />
+      )}
+
+      {/* ─── Rider Profile Page (overlay) ─── */}
+      {viewingRider && (
+        <RiderPage
+          rider={viewingRider}
+          canEdit={isAdmin}
+          onClose={() => setViewingRider(null)}
+          onSaved={(updated) => {
+            setViewingRider(updated)
+            // Reflet immédiat dans la grille team
+            setDbTeam(prev => prev ? prev.map(t => t.id === updated.id ? updated : t) : prev)
+          }}
         />
       )}
 
