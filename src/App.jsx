@@ -6,6 +6,7 @@ import LiveChat from './components/LiveChat'
 import PhotoComments from './components/PhotoComments'
 import ProfilePage from './components/ProfilePage'
 import UserManagement from './components/UserManagement'
+import EmoteAdmin from './components/EmoteAdmin'
 import RaceSetup from './components/RaceSetup'
 import RaceChrono from './components/RaceChrono'
 import LiveRace from './components/LiveRace'
@@ -1210,6 +1211,8 @@ function App() {
                   onClick: () => { closeMenu(); handleOpenForm('sponsors_admin') } },
                 { id: 'affiliations', icon: '🏍️', label: 'Affiliations', badge: pendingAffiliations,
                   onClick: () => { closeMenu(); handleOpenForm('affiliations_admin') } },
+                { id: 'emotes', icon: '🎉', label: 'Emotes & Sons',
+                  onClick: () => { closeMenu(); handleOpenForm('emotes_admin') } },
                 { id: 'users', icon: '👥', label: 'Utilisateurs',
                   onClick: () => { closeMenu(); handleOpenForm('users_admin') } },
               ]
@@ -2353,7 +2356,7 @@ function App() {
       {/* ─── Sleek Dynamic Forms and Lists Modal (Admin) ─── */}
       {activeForm && (
         <div className="admin-overlay">
-          <div className={`admin-panel glass admin-visual-modal ${['orders','sponsors_admin','users_admin','bikes_admin','affiliations_admin'].includes(activeForm) ? 'wide' : ''}`}>
+          <div className={`admin-panel glass admin-visual-modal ${['orders','sponsors_admin','users_admin','bikes_admin','affiliations_admin','emotes_admin'].includes(activeForm) ? 'wide' : ''}`}>
             <div className="admin-header">
               <h2>
                 {activeForm === 'event' && '📅 Gérer Événement'}
@@ -2366,6 +2369,7 @@ function App() {
                 {activeForm === 'bike_edit' && '✏️ Modifier la Moto'}
                 {activeForm === 'sponsors_admin' && '🤝 Propositions Sponsors'}
                 {activeForm === 'affiliations_admin' && '🏍️ Demandes d\'affiliation'}
+                {activeForm === 'emotes_admin' && '🎉 Emotes & Sons Premium'}
                 {activeForm === 'users_admin' && '👥 Gestion des Utilisateurs'}
               </h2>
               <button className="admin-close" onClick={() => { setActiveForm(null); setEditingItem(null) }}>✕</button>
@@ -2614,19 +2618,21 @@ function App() {
                 )}
               </div>
             ) : activeForm === 'users_admin' ? (
-              <UserManagement 
+              <UserManagement
                 users={dbUsers}
                 onRefresh={() => {
                   supabase.from('profiles').select('*').order('created_at', { ascending: false })
-                    .then(({ data, error }) => { 
+                    .then(({ data, error }) => {
                       if (error) {
                         alert('Erreur lors du chargement des profils : ' + error.message)
                       } else if (data) {
-                        setDbUsers(data) 
+                        setDbUsers(data)
                       }
                     })
                 }}
               />
+            ) : activeForm === 'emotes_admin' ? (
+              <EmoteAdmin onClose={() => setActiveForm(null)} />
             ) : activeForm === 'bikes_admin' ? (
               <div className="admin-orders-container" style={{ maxHeight: '75vh', overflowY: 'auto' }}>
                 {(!dbBikes || dbBikes.length === 0) && (

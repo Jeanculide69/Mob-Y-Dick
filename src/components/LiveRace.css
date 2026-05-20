@@ -1807,43 +1807,67 @@
    FLOATING ACTION BUTTON (FAB) — Emotes & Dons
    ═══════════════════════════════════════════ */
 
+/* FAB aligné à GAUCHE du bouton chat (chat = right:20px, ~120px de large).
+   Pill-shape pour matcher le style du chat. z-index supérieur au chat
+   (999) pour rester accessible même quand le chat est ouvert. */
 .live-fab-container {
   position: fixed;
-  bottom: 24px;
-  right: 100px; /* next to Crisp Chat button */
-  z-index: 9000;
+  bottom: 20px;
+  right: 150px; /* chat button (~120px wide) + 10px gap + 20px right inset */
+  z-index: 1000;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 12px;
 }
 
+@supports (padding: env(safe-area-inset-bottom)) {
+  .live-fab-container {
+    bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
 .live-fab-btn {
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border-radius: 30px;
   border: none;
   background: linear-gradient(135deg, #ff5500 0%, #ff8c42 100%);
   color: #fff;
-  font-size: 1.6rem;
+  font-weight: 700;
+  font-size: 0.95rem;
   cursor: pointer;
-  box-shadow: 0 4px 20px rgba(255, 85, 0, 0.5), 0 0 0 0 rgba(255,85,0,0.4);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  box-shadow: 0 5px 20px rgba(255, 85, 0, 0.5);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  min-height: 44px;
+  white-space: nowrap;
+  font-family: inherit;
   animation: fab-pulse 2s ease-in-out infinite;
 }
 
+.live-fab-btn .live-fab-icon {
+  font-size: 1.1rem;
+  line-height: 1;
+}
+
+.live-fab-btn .live-fab-label {
+  font-family: var(--font-heading);
+  font-size: 0.85rem;
+  letter-spacing: 0.5px;
+}
+
 .live-fab-btn:hover {
-  transform: scale(1.1);
-  box-shadow: 0 6px 28px rgba(255, 85, 0, 0.6);
+  transform: translateY(-2px) scale(1.04);
+  box-shadow: 0 8px 28px rgba(255, 85, 0, 0.65);
 }
 
 .live-fab-btn.active {
-  background: linear-gradient(135deg, #333 0%, #555 100%);
+  background: rgba(30, 30, 35, 0.95);
+  border: 1px solid rgba(255, 85, 0, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
   animation: none;
-  transform: rotate(90deg);
 }
 
 @keyframes fab-pulse {
@@ -1933,17 +1957,35 @@
 }
 
 @media (max-width: 600px) {
+  /* Sur mobile, le chat est à right:16px ; on garde le FAB à sa gauche */
   .live-fab-container {
     bottom: 16px;
-    right: 16px;
+    right: 130px;
+  }
+  @supports (padding: env(safe-area-inset-bottom)) {
+    .live-fab-container {
+      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+    }
   }
   .live-fab-btn {
-    width: 54px;
-    height: 54px;
-    font-size: 1.4rem;
+    padding: 8px 14px;
+    font-size: 0.85rem;
+  }
+  .live-fab-btn .live-fab-label {
+    font-size: 0.8rem;
   }
   .live-fab-menu {
     min-width: 240px;
     max-width: calc(100vw - 40px);
+  }
+}
+
+/* Très petit écran : on cache le label, on garde juste l'icône */
+@media (max-width: 400px) {
+  .live-fab-btn .live-fab-label {
+    display: none;
+  }
+  .live-fab-btn {
+    padding: 10px 14px;
   }
 }

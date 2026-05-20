@@ -176,7 +176,7 @@ export default function LiveRace({ customSessionId, onClose }) {
     if (!item) return
 
     const alertId = Date.now() + Math.random()
-    
+
     // Add to active alerts
     setActiveAlerts(prev => [...prev, {
       id: alertId,
@@ -185,8 +185,24 @@ export default function LiveRace({ customSessionId, onClose }) {
       userDisplayName
     }])
 
-    // Play sound using Web Audio API (no external files, no CORS)
-    playPremiumSound(slug)
+    // ── Stratégie de son ──
+    // 1. Si MP4 : le <video> joue son propre son → on ne déclenche rien d'autre
+    // 2. Sinon si sound_url (mp3 uploadé) : on joue ce fichier
+    // 3. Sinon : fallback sur le synthé Web Audio API
+    const isVideo = item.media_type === 'mp4' || /\.mp4($|\?)/i.test(item.media_url || item.animation_url || '')
+    if (!isVideo) {
+      if (item.sound_url) {
+        try {
+          const audio = new Audio(item.sound_url)
+          audio.volume = 0.7
+          audio.play().catch(() => playPremiumSound(slug))
+        } catch {
+          playPremiumSound(slug)
+        }
+      } else {
+        playPremiumSound(slug)
+      }
+    }
 
     // Auto-remove after 4.5 seconds
     setTimeout(() => {
@@ -572,18 +588,34 @@ export default function LiveRace({ customSessionId, onClose }) {
       </div>
 
       {/* ── Premium Emote Overlays ── */}
-      {activeAlerts.filter(a => a.type === 'premium-reaction').map(a => (
-        <div key={a.id} className="live-emote-overlay-stage">
-          <div className="live-premium-emote-alert">
-            {a.item.animation_url && (
-              <img src={a.item.animation_url} alt={a.item.name} className="live-premium-emote-img" />
-            )}
-            <div className="live-premium-emote-user">
-              <span>{a.userDisplayName}</span> envoie {a.item.name} !
+      {activeAlerts.filter(a => a.type === 'premium-reaction').map(a => {
+        // Priorité au champ media_url (v15 admin upload) sinon fallback sur l'ancien animation_url
+        const mediaSrc = a.item.media_url || a.item.animation_url
+        const isVideo = a.item.media_type === 'mp4' || /\.mp4($|\?)/i.test(mediaSrc || '')
+        return (
+          <div key={a.id} className="live-emote-overlay-stage">
+            <div className="live-premium-emote-alert">
+              {mediaSrc && (
+                isVideo ? (
+                  <video
+                    src={mediaSrc}
+                    className="live-premium-emote-img"
+                    autoPlay
+                    playsInline
+                    /* Le MP4 porte son propre son ; pas de muted volontairement */
+                    onEnded={(e) => { try { e.currentTarget.pause() } catch { /* ignore */ } }}
+                  />
+                ) : (
+                  <img src={mediaSrc} alt={a.item.name} className="live-premium-emote-img" />
+                )
+              )}
+              <div className="live-premium-emote-user">
+                <span>{a.userDisplayName}</span> envoie {a.item.name} !
+              </div>
             </div>
           </div>
-        </div>
-      ))}
+        )
+      })}
 
       {/* ── Floating emoji container ── */}
       <div className="live-emoji-stage" aria-hidden="true">
@@ -1227,9 +1259,10 @@ export default function LiveRace({ customSessionId, onClose }) {
           <button
             className={`live-fab-btn ${fabOpen ? 'active' : ''}`}
             onClick={() => setFabOpen(!fabOpen)}
-            aria-label="Emotes et Dons"
+            aria-label={fabOpen ? 'Fermer le menu' : 'Emotes et Dons'}
           >
-            {fabOpen ? '✕' : '🎉'}
+            <span className="live-fab-icon">{fabOpen ? '✕' : '🎉'}</span>
+            <span className="live-fab-label">{fabOpen ? 'Fermer' : 'Réactions'}</span>
           </button>
         </div>
       )}
