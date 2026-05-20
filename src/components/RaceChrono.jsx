@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../supabaseClient'
 import './RaceChrono.css'
 
@@ -114,6 +115,15 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
 
   // Undo countdown cleanup
   useEffect(() => () => clearInterval(undoTimerRef.current), [])
+
+  // Verrouille le scroll du body quand le mode XXL est actif : l'overlay
+  // est sur le body via Portal et la page derrière ne doit pas bouger.
+  useEffect(() => {
+    if (!xxlMode) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [xxlMode])
 
 
 
@@ -305,8 +315,13 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
   const previewTeam = motoInput ? teams.find(t => t.moto_number === parseInt(motoInput)) : null
 
   // ── XXL Numpad Overlay ──
+  // Portal sur document.body : un ancêtre (.section avec animation pageEnter
+  // qui laisse un transform résiduel) crée un containing block et casserait
+  // le position:fixed → l'overlay XXL apparaîtrait en plein milieu de la page
+  // au lieu de couvrir le viewport. Sur mobile, c'est invivable : la moitié
+  // du clavier dépasse, on voit le footer/navbar autour.
   if (xxlMode) {
-    return (
+    return createPortal(
       <div className="chrono-xxl-overlay">
         <div className="chrono-xxl-header">
           <button className="btn btn-ghost chrono-xxl-close" onClick={() => setXxlMode(false)}>✕ Normal</button>
@@ -361,7 +376,8 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
             </div>
           ))}
         </div>
-      </div>
+      </div>,
+      document.body
     )
   }
 
