@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../supabaseClient'
 import LiveTeamDrawer from './LiveTeamDrawer'
 import PayPalButton from './PayPalButton'
+import { playPremiumSound, playDonationSound } from '../utils/soundEffects'
 import './LiveRace.css'
 
 const EMOJIS = ['🔥', '👏', '🏁', '🏍️', '⚡', '🤙', '😱', '🚀']
@@ -153,19 +154,8 @@ export default function LiveRace({ customSessionId, onClose }) {
       userDisplayName
     }])
 
-    // Play sound if available
-    if (item.sound_url) {
-      try {
-        const audio = new Audio(item.sound_url)
-        audio.volume = 0.6
-        audio.crossOrigin = 'anonymous'
-        const playPromise = audio.play()
-        if (playPromise) playPromise.catch(() => {
-          // Retry after a short delay (mobile unlock may be pending)
-          setTimeout(() => audio.play().catch(() => {}), 200)
-        })
-      } catch(e) { console.log('Audio error:', e) }
-    }
+    // Play sound using Web Audio API (no external files, no CORS)
+    playPremiumSound(slug)
 
     // Auto-remove after 4.5 seconds
     setTimeout(() => {
@@ -184,16 +174,8 @@ export default function LiveRace({ customSessionId, onClose }) {
       message: row.message
     }])
 
-    // Play cash register sound
-    try {
-      const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2019/2019-84.wav')
-      audio.volume = 0.6
-      audio.crossOrigin = 'anonymous'
-      const playPromise = audio.play()
-      if (playPromise) playPromise.catch(() => {
-        setTimeout(() => audio.play().catch(() => {}), 200)
-      })
-    } catch(e) { console.log('Donation audio error:', e) }
+    // Play cash register sound using Web Audio API
+    playDonationSound()
 
     // Auto-remove after 8 seconds
     setTimeout(() => {
