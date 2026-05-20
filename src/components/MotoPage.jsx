@@ -191,11 +191,35 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
   }
 
   const loadAdminAffiliations = async () => {
-    const { data } = await supabase
+    // Try with the profiles join first
+    let { data, error } = await supabase
       .from('moto_affiliations')
       .select('*, profiles(display_name, email)')
       .eq('moto_number', motoNumber)
       .order('requested_at', { ascending: false })
+
+    // If the join fails (missing FK to profiles), fall back to a plain query
+    if (error || !data) {
+      const plain = await supabase
+        .from('moto_affiliations')
+        .select('*')
+        .eq('moto_number', motoNumber)
+        .order('requested_at', { ascending: false })
+      data = plain.data || []
+
+      // Enrich with profile info manually
+      if (data.length > 0) {
+        const userIds = [...new Set(data.map(a => a.user_id).filter(Boolean))]
+        const { data: profs } = await supabase
+          .from('profiles')
+          .select('id, display_name, email')
+          .in('id', userIds)
+        const profMap = {}
+        ;(profs || []).forEach(p => { profMap[p.id] = p })
+        data = data.map(a => ({ ...a, profiles: profMap[a.user_id] || null }))
+      }
+    }
+
     setAllAffiliations(data || [])
   }
 
