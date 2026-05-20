@@ -1169,19 +1169,14 @@ function App() {
 
   return (
     <>
-      {/* ─── Video Background — ping-pong via Canvas ───
-         Boucle "palindrome" fluide : la vidéo joue en avant (lecture native),
-         puis en arrière (seeks piloté par requestAnimationFrame + rendu canvas).
-         Le canvas visible masque totalement les artefacts de seek, donnant
-         un reverse parfaitement lisse visuellement.
-         
-         Architecture :
-         - <video> caché (opacity:0, pointer-events:none) = source de données
-         - <canvas> visible = ce que l'utilisateur voit
-         - Forward : video.play() + rAF copie chaque frame sur le canvas
-         - Reverse : video pausée, on seek en arrière par pas de ~33ms (30fps),
-           à chaque `seeked` on dessine le frame sur le canvas, puis on
-           programme le seek suivant. Le canvas buffer fait que c'est fluide. */}
+      {/* ─── Video Background — ping-pong via Frame Capture ───
+         Boucle "palindrome" parfaitement fluide :
+         - Forward : lecture vidéo native + copie rAF sur canvas
+           + capture de chaque frame en ImageBitmap
+         - Reverse : replay des ImageBitmaps capturés en ordre inverse
+           via rAF avec timing contrôlé → MÊME vitesse, ZÉRO seeking,
+           aucune saccade.
+         Les ImageBitmaps sont stockés en mémoire GPU → efficace. */}
       <div className="video-bg">
         <canvas
           className="video-canvas"
@@ -1200,48 +1195,66 @@ function App() {
             const ctx = canvasEl.getContext('2d')
             let direction = 'forward'
             let rafId = null
-            const NEAR_END_THRESHOLD = 0.15
-            const REVERSE_STEP = 1 / 25  // ~40ms pas arrière (25fps reverse)
 
-            // Resize canvas to match video
+            // Frame capture buffer
+            const capturedFrames = []
+            const CAPTURE_FPS = 24
+            const CAPTURE_INTERVAL = 1000 / CAPTURE_FPS
+            let lastCaptureTime = 0
+
+            const NEAR_END_THRESHOLD = 0.15
+
+            // Resize canvas to match viewport
+            let canvasW = 0, canvasH = 0
             const resizeCanvas = () => {
-              const dpr = window.devicePixelRatio || 1
               const rect = canvasEl.getBoundingClientRect()
-              canvasEl.width = rect.width * dpr
-              canvasEl.height = rect.height * dpr
-              ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+              canvasW = rect.width
+              canvasH = rect.height
+              // Use 1x resolution (not DPR) to keep frame capture manageable
+              canvasEl.width = canvasW
+              canvasEl.height = canvasH
             }
 
-            // Draw current video frame to canvas, covering the whole area
-            const drawFrame = () => {
-              if (!videoEl.videoWidth) return
-              const cw = canvasEl.getBoundingClientRect().width
-              const ch = canvasEl.getBoundingClientRect().height
-              const vw = videoEl.videoWidth
-              const vh = videoEl.videoHeight
-
-              // object-fit: cover logic
-              const canvasRatio = cw / ch
-              const videoRatio = vw / vh
+            // Draw a source (video or ImageBitmap) with object-fit:cover
+            const drawCover = (source, srcW, srcH) => {
+              const canvasRatio = canvasW / canvasH
+              const sourceRatio = srcW / srcH
               let sw, sh, sx, sy
-              if (videoRatio > canvasRatio) {
-                sh = vh
-                sw = vh * canvasRatio
-                sx = (vw - sw) / 2
+              if (sourceRatio > canvasRatio) {
+                sh = srcH
+                sw = srcH * canvasRatio
+                sx = (srcW - sw) / 2
                 sy = 0
               } else {
-                sw = vw
-                sh = vw / canvasRatio
+                sw = srcW
+                sh = srcW / canvasRatio
                 sx = 0
-                sy = (vh - sh) / 2
+                sy = (srcH - sh) / 2
               }
-              ctx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, cw, ch)
+              ctx.drawImage(source, sx, sy, sw, sh, 0, 0, canvasW, canvasH)
             }
 
-            // Forward: rAF loop drawing video frames
-            const forwardLoop = () => {
+            // Draw current video frame
+            const drawVideoFrame = () => {
+              if (!videoEl.videoWidth) return
+              drawCover(videoEl, videoEl.videoWidth, videoEl.videoHeight)
+            }
+
+            // Forward loop: draw video + capture frames
+            const forwardLoop = (timestamp) => {
               if (direction !== 'forward') return
-              drawFrame()
+              drawVideoFrame()
+
+              // Capture frame at controlled rate
+              if (timestamp - lastCaptureTime >= CAPTURE_INTERVAL) {
+                lastCaptureTime = timestamp
+                if (videoEl.readyState >= 2) {
+                  createImageBitmap(videoEl).then(bmp => {
+                    capturedFrames.push(bmp)
+                  }).catch(() => {})
+                }
+              }
+
               // Check near-end
               if (videoEl.duration && !isNaN(videoEl.duration) &&
                   videoEl.currentTime >= videoEl.duration - NEAR_END_THRESHOLD) {
@@ -1253,49 +1266,51 @@ function App() {
               rafId = requestAnimationFrame(forwardLoop)
             }
 
-            // Reverse: seek backward step by step, draw on seeked
+            // Reverse loop: replay captured frames in reverse
             const startReverse = () => {
-              const doStep = () => {
+              let frameIndex = capturedFrames.length - 1
+              const frameDuration = CAPTURE_INTERVAL // même vitesse que la capture
+              let lastFrameTime = performance.now()
+
+              const reverseLoop = (now) => {
                 if (direction !== 'reverse') return
-                const next = videoEl.currentTime - REVERSE_STEP
-                if (next <= 0.05) {
-                  // Reached beginning — restart forward
-                  videoEl.currentTime = 0
-                  direction = 'forward'
-                  videoEl.play().catch(() => {})
-                  rafId = requestAnimationFrame(forwardLoop)
-                  return
+
+                if (now - lastFrameTime >= frameDuration) {
+                  lastFrameTime = now
+
+                  if (frameIndex >= 0) {
+                    const bmp = capturedFrames[frameIndex]
+                    drawCover(bmp, bmp.width, bmp.height)
+                    frameIndex--
+                  } else {
+                    // Finished reverse — clean up bitmaps and restart forward
+                    capturedFrames.forEach(b => b.close())
+                    capturedFrames.length = 0
+                    lastCaptureTime = 0
+                    direction = 'forward'
+                    videoEl.currentTime = 0
+                    videoEl.play().catch(() => {})
+                    rafId = requestAnimationFrame(forwardLoop)
+                    return
+                  }
                 }
-                videoEl.currentTime = next
+
+                rafId = requestAnimationFrame(reverseLoop)
               }
 
-              // On each seeked event during reverse, draw frame then schedule next step
-              const onSeeked = () => {
-                if (direction !== 'reverse') {
-                  videoEl.removeEventListener('seeked', onSeeked)
-                  return
-                }
-                drawFrame()
-                // Small delay via rAF to let the browser breathe
-                requestAnimationFrame(() => {
-                  doStep()
-                })
-              }
-
-              videoEl.addEventListener('seeked', onSeeked)
-              doStep()
+              rafId = requestAnimationFrame(reverseLoop)
             }
 
-            // Init
+            // Init on video ready
             const onLoadedData = () => {
               resizeCanvas()
-              drawFrame()
+              drawVideoFrame()
               direction = 'forward'
               videoEl.play().catch(() => {})
               rafId = requestAnimationFrame(forwardLoop)
             }
 
-            // Also handle ended as safety
+            // Safety: handle 'ended' event
             videoEl.addEventListener('ended', () => {
               if (direction === 'forward') {
                 direction = 'reverse'
@@ -1312,16 +1327,18 @@ function App() {
               clearTimeout(resizeTimer)
               resizeTimer = setTimeout(() => {
                 resizeCanvas()
-                drawFrame()
+                if (direction === 'forward') drawVideoFrame()
               }, 100)
             }
             window.addEventListener('resize', onResize)
             resizeCanvas()
 
-            // Cleanup ref
+            // Cleanup
             canvasEl.__mydCleanup = () => {
               if (rafId) cancelAnimationFrame(rafId)
               window.removeEventListener('resize', onResize)
+              capturedFrames.forEach(b => b.close())
+              capturedFrames.length = 0
               videoEl.pause()
               videoEl.remove()
             }
