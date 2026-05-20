@@ -1,21 +1,22 @@
 /**
- * RaceFlagOverlay — 2 drapeaux à damier façon départ de course
- *
- * Approche : tissu CSS pur (background damier + perspective + skew + rotate),
- * pas de SVG filter complexe — le résultat est plus lisible qu'un noise
- * displacement et tourne sans effort sur mobile.
+ * RaceFlagOverlay — Drapeau à damier fullscreen avec mouvement organique
  *
  * Deux modes :
- *  - 'pre-race'  : "DÉPART IMMINENT" (session.status='live' & !started_at)
- *  - 'post-race' : "FIN DE LA COURSE" + countdown 5min + auto-exit
+ *  - 'pre-race'  : "DÉPART IMMINENT" — affiché quand la session est créée
+ *                  (status='live') mais started_at est null. Disparait dès
+ *                  que l'orga lance le chrono.
+ *  - 'post-race' : "FIN DE LA COURSE" — affiché quand status='finished'/
+ *                  'published'. Décompte de 5 minutes à partir de finished_at
+ *                  puis appelle onAutoExit pour fermer la page live.
  *
- * Croix ✕ en haut à droite pour quitter le live à tout moment.
+ * Le drapeau est un pattern damier + filtre SVG feTurbulence + feDisplacementMap
+ * animé, ce qui produit un effet "billowing" organique sans canvas ni vidéo.
  */
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import './RaceFlagOverlay.css'
 
-const POST_RACE_DURATION_MS = 5 * 60 * 1000
+const POST_RACE_DURATION_MS = 5 * 60 * 1000 // 5 minutes
 
 const formatRemaining = (ms) => {
   if (ms <= 0) return '0:00'
@@ -25,28 +26,17 @@ const formatRemaining = (ms) => {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-// Drapeau : un mât + un tissu damier en perspective qui ondule.
-function Flag({ side }) {
-  return (
-    <div className={`race-flag race-flag-${side}`}>
-      <div className="race-flag-mast" />
-      <div className="race-flag-mast-knob" />
-      <div className="race-flag-fabric-perspective">
-        <div className="race-flag-fabric" />
-      </div>
-    </div>
-  )
-}
-
-export default function RaceFlagOverlay({ mode, session, onAutoExit, onClose }) {
+export default function RaceFlagOverlay({ mode, session, onAutoExit }) {
   const [now, setNow] = useState(() => Date.now())
 
+  // Ticker pour rafraichir le compteur post-race chaque seconde
   useEffect(() => {
     if (mode !== 'post-race') return
     const interval = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(interval)
   }, [mode])
 
+  // Calcul du temps restant et trigger de l'auto-exit
   const finishedAt = session?.finished_at ? new Date(session.finished_at).getTime() : null
   const exitTime = finishedAt ? finishedAt + POST_RACE_DURATION_MS : null
   const remaining = (mode === 'post-race' && exitTime) ? exitTime - now : 0
@@ -54,6 +44,8 @@ export default function RaceFlagOverlay({ mode, session, onAutoExit, onClose }) 
   useEffect(() => {
     if (mode !== 'post-race') return
     if (!exitTime) {
+      // Pas de finished_at → on prend now() comme référence de secours
+      // (ne devrait pas arriver en théorie)
       const fallbackTimer = setTimeout(() => onAutoExit?.(), POST_RACE_DURATION_MS)
       return () => clearTimeout(fallbackTimer)
     }
@@ -66,33 +58,46 @@ export default function RaceFlagOverlay({ mode, session, onAutoExit, onClose }) 
 
   const isPre = mode === 'pre-race'
 
-  const handleClose = () => {
-    if (onClose) onClose()
-    else if (onAutoExit) onAutoExit()
-  }
-
   return createPortal(
     <div className={`race-flag-overlay ${isPre ? 'is-pre' : 'is-post'}`}>
-      {/* Croix de sortie */}
-      <button
-        type="button"
-        className="race-flag-close-btn"
-        onClick={handleClose}
-        aria-label="Quitter le live"
-        title="Quitter le live"
-      >
-        ✕
-      </button>
+      {/* Filtre SVG : turbulence + displacement = effet "billowing" du drapeau */}
+      <svg className="race-flag-svg-defs" aria-hidden="true">
+        <defs>
+          <filter id="race-flag-wave" x="-10%" y="-10%" width="120%" height="120%">
+            <feTurbulence
+              type="fractalNoise"
+              baseFrequency="0.012 0.018"
+              numOctaves="2"
+              seed="3"
+              result="noise"
+            >
+              <animate
+                attributeName="baseFrequency"
+                dur="14s"
+                values="0.012 0.018; 0.020 0.024; 0.012 0.018"
+                repeatCount="indefinite"
+              />
+            </feTurbulence>
+            <feDisplacementMap
+              in="SourceGraphic"
+              in2="noise"
+              scale="32"
+              xChannelSelector="R"
+              yChannelSelector="G"
+            />
+          </filter>
+        </defs>
+      </svg>
 
-      {/* Fond + vignette */}
-      <div className="race-flag-bg" />
+      {/* Couche damier (le drapeau lui-même) */}
+      <div className="race-flag-canvas">
+        <div className="race-flag-pattern" />
+      </div>
+
+      {/* Vignette pour la profondeur */}
       <div className="race-flag-vignette" />
 
-      {/* 2 drapeaux */}
-      <Flag side="left" />
-      <Flag side="right" />
-
-      {/* Contenu central */}
+      {/* Texte principal */}
       <div className="race-flag-content">
         {isPre ? (
           <>
