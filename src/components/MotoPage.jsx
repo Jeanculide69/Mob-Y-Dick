@@ -51,7 +51,8 @@ import MotoCropper from './MotoCropper'
 import MotoCharts from './MotoCharts'
 import './MotoPage.css'
 
-const MAX_RAW_FILE_SIZE = 20 * 1024 * 1024 // 20 Mo (le cropper compresse à <200 Ko)
+const MAX_RAW_FILE_SIZE  = 20 * 1024 * 1024 // 20 Mo (le cropper compresse à <200 Ko)
+const MAX_AFFILIATIONS  = 3                // Nombre max de pilotes affiliés par moto
 
 const formatTime = (ms) => {
   if (!ms && ms !== 0) return '--:--.---'
@@ -67,6 +68,7 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
   const [affiliation, setAffiliation] = useState(null)
   const [stats, setStats]             = useState(null)
   const [teamHistory, setTeamHistory] = useState([])
+  const [approvedUsers, setApprovedUsers] = useState([]) // noms affichés dynamiquement
 
   // ── UI ──
   const [loading, setLoading]         = useState(true)
@@ -100,6 +102,7 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
     await Promise.all([
       loadProfile(),
       loadStats(),
+      loadApprovedUsers(),
       session ? loadAffiliation() : Promise.resolve(),
       (isAdmin || isModerator) ? loadAdminAffiliations() : Promise.resolve(),
     ])
@@ -190,6 +193,26 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
     setAffiliation(data)
   }
 
+  // ─── Charger les affiliés approuvés (visible par tous) ───
+  const loadApprovedUsers = async () => {
+    // Récupère les user_id approuvés pour ce numéro
+    const { data: affs } = await supabase
+      .from('moto_affiliations')
+      .select('user_id')
+      .eq('moto_number', motoNumber)
+      .eq('status', 'approved')
+
+    if (!affs || affs.length === 0) { setApprovedUsers([]); return }
+
+    // Récupère les display_name des profils
+    const userIds = affs.map(a => a.user_id)
+    const { data: profs } = await supabase
+      .from('profiles')
+      .select('id, display_name')
+      .in('id', userIds)
+    setApprovedUsers((profs || []).map(p => p.display_name).filter(Boolean))
+  }
+
   const loadAdminAffiliations = async () => {
     // Try with the profiles join first
     let { data, error } = await supabase
@@ -232,11 +255,23 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
       reviewed_by: user?.id,
     }).eq('id', id)
     await loadAdminAffiliations()
+    await loadApprovedUsers()
     setReviewingId(null)
   }
 
   // ─── Affiliation request ───────────────────
   const handleRequest = async () => {
+    // Vérifier la limite de 3 affiliés max
+    const { count } = await supabase
+      .from('moto_affiliations')
+      .select('id', { count: 'exact', head: true })
+      .eq('moto_number', motoNumber)
+      .in('status', ['approved', 'pending'])
+    if (count >= MAX_AFFILIATIONS) {
+      setSubmitStatus('full')
+      return
+    }
+
     setRequesting(true)
     const { error } = await supabase.from('moto_affiliations').insert([{
       user_id: session.user.id,
@@ -247,7 +282,6 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
     setSubmitStatus(error ? 'error' : 'sent')
     if (!error) {
       await loadAffiliation()
-      // Recharge la liste admin pour que l'admin voie sa propre demande immédiatement
       if (isAdmin || isModerator) await loadAdminAffiliations()
     }
     setRequesting(false)
@@ -337,7 +371,10 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
   )
 
   const displayName = profile?.display_name || `Moto #${motoNumber}`
-  const pilotList   = stats?.pilots?.join(' / ') || '—'
+  // Affiche les affiliés approuvés en priorité, sinon fallback sur les pilotes des courses
+  const pilotList = approvedUsers.length > 0
+    ? approvedUsers.join(' / ')
+    : (stats?.pilots?.join(' / ') || '—')
 
   return (
     <>
@@ -574,6 +611,9 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
                 )}
                 {submitStatus === 'error' && (
                   <div className="moto-request-error">❌ Erreur lors de l'envoi. Réessaye ou vérifie la console.</div>
+                )}
+                {submitStatus === 'full' && (
+                  <div className="moto-request-error">⚠️ Ce numéro a déjà atteint la limite de {MAX_AFFILIATIONS} pilotes affiliés.</div>
                 )}
                 {!submitStatus && (
                   <button className="btn btn-primary" onClick={handleRequest} disabled={requesting}>
