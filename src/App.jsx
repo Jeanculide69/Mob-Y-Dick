@@ -424,6 +424,7 @@ function App() {
   const [submittingSponsor, setSubmittingSponsor] = useState(false)
   const [sponsorSuccess, setSponsorSuccess] = useState(false)
   const [dbSponsors, setDbSponsors] = useState([])
+  const [dbAffiliations, setDbAffiliations] = useState([])
 
   // Moto affiliation system
   const [viewingMotoNumber, setViewingMotoNumber] = useState(null)
@@ -502,6 +503,8 @@ function App() {
             .then(({ data }) => { if (data) setDbOrders(data) })
           supabase.from('sponsors').select('*').order('created_at', { ascending: false })
             .then(({ data, error }) => { if (data && !error) setDbSponsors(data) })
+          supabase.from('moto_affiliations').select('*, profiles(display_name, email)').order('requested_at', { ascending: false })
+            .then(({ data, error }) => { if (data && !error) setDbAffiliations(data) })
         }
       })
     }
@@ -1181,7 +1184,8 @@ function App() {
             {isAdmin && (() => {
               const pendingOrders = dbOrders.filter(o => o.status === 'En attente de paiement').length
               const pendingSponsors = dbSponsors.filter(s => s.status === 'En attente').length
-              const totalNotifs = pendingOrders + pendingSponsors
+              const pendingAffiliations = dbAffiliations.filter(a => a.status === 'pending').length
+              const totalNotifs = pendingOrders + pendingSponsors + pendingAffiliations
               const closeMenu = () => { setAdminMenuOpen(false); setMobileMenuOpen(false); }
               const adminMenuItems = [
                 ...((!dbProducts || dbProducts.length === 0) ? [{
@@ -1197,6 +1201,8 @@ function App() {
                   onClick: () => { closeMenu(); handleOpenForm('bikes_admin') } },
                 { id: 'sponsors', icon: '🤝', label: 'Sponsors', badge: pendingSponsors,
                   onClick: () => { closeMenu(); handleOpenForm('sponsors_admin') } },
+                { id: 'affiliations', icon: '🏍️', label: 'Affiliations', badge: pendingAffiliations,
+                  onClick: () => { closeMenu(); handleOpenForm('affiliations_admin') } },
                 { id: 'users', icon: '👥', label: 'Utilisateurs',
                   onClick: () => { closeMenu(); handleOpenForm('users_admin') } },
               ]
@@ -2339,7 +2345,7 @@ function App() {
       {/* ─── Sleek Dynamic Forms and Lists Modal (Admin) ─── */}
       {activeForm && (
         <div className="admin-overlay">
-          <div className={`admin-panel glass admin-visual-modal ${['orders','sponsors_admin','users_admin','bikes_admin'].includes(activeForm) ? 'wide' : ''}`}>
+          <div className={`admin-panel glass admin-visual-modal ${['orders','sponsors_admin','users_admin','bikes_admin','affiliations_admin'].includes(activeForm) ? 'wide' : ''}`}>
             <div className="admin-header">
               <h2>
                 {activeForm === 'event' && '📅 Gérer Événement'}
@@ -2351,6 +2357,7 @@ function App() {
                 {activeForm === 'bikes_admin' && '🏍️ Gérer les Motos'}
                 {activeForm === 'bike_edit' && '✏️ Modifier la Moto'}
                 {activeForm === 'sponsors_admin' && '🤝 Propositions Sponsors'}
+                {activeForm === 'affiliations_admin' && '🏍️ Demandes d\'affiliation'}
                 {activeForm === 'users_admin' && '👥 Gestion des Utilisateurs'}
               </h2>
               <button className="admin-close" onClick={() => { setActiveForm(null); setEditingItem(null) }}>✕</button>
@@ -2490,6 +2497,113 @@ function App() {
                     )
                   })}
                 </div>
+              </div>
+            ) : activeForm === 'affiliations_admin' ? (
+              <div className="admin-orders-container" style={{ maxHeight: '75vh', overflowY: 'auto' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                  <h3 style={{ margin: 0 }}>🏍️ Demandes d'affiliation aux motos ({dbAffiliations.length})</h3>
+                  <button className="btn btn-ghost" style={{ fontSize: '0.8rem', padding: '6px 12px' }} onClick={() => refreshData(true)}>↻ Actualiser</button>
+                </div>
+
+                {dbAffiliations.length === 0 ? (
+                  <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px 0' }}>
+                    Aucune demande d'affiliation pour le moment.
+                  </p>
+                ) : (
+                  <div>
+                    {['pending', 'approved', 'rejected'].map(statusGroup => {
+                      const group = dbAffiliations.filter(a => a.status === statusGroup)
+                      if (group.length === 0) return null
+                      const labels = { pending: '⏳ En attente', approved: '✅ Approuvées', rejected: '❌ Refusées' }
+                      return (
+                        <div key={statusGroup} style={{ marginBottom: '24px' }}>
+                          <h4 style={{
+                            margin: '0 0 10px',
+                            fontSize: '0.8rem',
+                            textTransform: 'uppercase',
+                            letterSpacing: '1.5px',
+                            color: statusGroup === 'pending' ? '#ffaa00' : statusGroup === 'approved' ? '#00cc66' : '#ff6666',
+                            borderBottom: '1px solid rgba(255,255,255,0.06)',
+                            paddingBottom: '8px',
+                          }}>
+                            {labels[statusGroup]} ({group.length})
+                          </h4>
+                          {group.map(aff => {
+                            const userName = aff.profiles?.display_name || aff.profiles?.email || aff.user_id.slice(0, 8) + '…'
+                            return (
+                              <div key={aff.id} style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '14px',
+                                padding: '14px 16px',
+                                marginBottom: '8px',
+                                background: 'rgba(255,255,255,0.03)',
+                                border: '1px solid rgba(255,255,255,0.06)',
+                                borderRadius: '12px',
+                                flexWrap: 'wrap',
+                              }}>
+                                <div style={{
+                                  background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))',
+                                  color: '#fff',
+                                  fontWeight: '900',
+                                  fontSize: '1.1rem',
+                                  fontFamily: 'var(--font-heading)',
+                                  padding: '6px 14px',
+                                  borderRadius: '8px',
+                                  letterSpacing: '1px',
+                                  flexShrink: 0,
+                                }}>
+                                  #{aff.moto_number}
+                                </div>
+                                <div style={{ flex: 1, minWidth: '140px' }}>
+                                  <div style={{ fontWeight: '600', color: '#fff', fontSize: '0.9rem' }}>{userName}</div>
+                                  {aff.note && (
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '3px', fontStyle: 'italic' }}>
+                                      « {aff.note} »
+                                    </div>
+                                  )}
+                                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                                    {new Date(aff.requested_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                  </div>
+                                </div>
+                                <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                                  {statusGroup === 'pending' && (
+                                    <>
+                                      <button className="btn btn-primary" style={{ padding: '7px 14px', fontSize: '0.8rem', background: 'linear-gradient(135deg,#00cc66,#009944)', boxShadow: 'none' }} onClick={async () => {
+                                        const { data: { user } } = await supabase.auth.getUser()
+                                        await supabase.from('moto_affiliations').update({ status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: user?.id }).eq('id', aff.id)
+                                        refreshData(true)
+                                      }}>✅ Approuver</button>
+                                      <button className="btn btn-ghost" style={{ padding: '7px 14px', fontSize: '0.8rem', borderColor: '#ff4444', color: '#ff4444' }} onClick={async () => {
+                                        const { data: { user } } = await supabase.auth.getUser()
+                                        await supabase.from('moto_affiliations').update({ status: 'rejected', reviewed_at: new Date().toISOString(), reviewed_by: user?.id }).eq('id', aff.id)
+                                        refreshData(true)
+                                      }}>❌ Refuser</button>
+                                    </>
+                                  )}
+                                  {statusGroup === 'approved' && (
+                                    <button className="btn btn-ghost" style={{ padding: '6px 12px', fontSize: '0.75rem', borderColor: '#ff4444', color: '#ff4444' }} onClick={async () => {
+                                      const { data: { user } } = await supabase.auth.getUser()
+                                      await supabase.from('moto_affiliations').update({ status: 'rejected', reviewed_at: new Date().toISOString(), reviewed_by: user?.id }).eq('id', aff.id)
+                                      refreshData(true)
+                                    }}>Révoquer</button>
+                                  )}
+                                  {statusGroup === 'rejected' && (
+                                    <button className="btn btn-ghost" style={{ padding: '6px 12px', fontSize: '0.75rem', borderColor: '#00cc66', color: '#00cc66' }} onClick={async () => {
+                                      const { data: { user } } = await supabase.auth.getUser()
+                                      await supabase.from('moto_affiliations').update({ status: 'approved', reviewed_at: new Date().toISOString(), reviewed_by: user?.id }).eq('id', aff.id)
+                                      refreshData(true)
+                                    }}>Réapprouver</button>
+                                  )}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
             ) : activeForm === 'users_admin' ? (
               <UserManagement 
