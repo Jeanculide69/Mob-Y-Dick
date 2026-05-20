@@ -425,6 +425,65 @@ export default function LiveRace({ customSessionId, onClose }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
   useEffect(() => { loadLiveSession() }, [customSessionId])
 
+  // ── Resync au retour de l'arrière-plan (mobile) ──
+  // Quand l'onglet est suspendu (changement d'app, écran éteint, etc.),
+  // Supabase Realtime peut perdre le socket et rater les INSERT. À la
+  // remise en avant-plan, on re-fetch tout l'état + les laps récents.
+  useEffect(() => {
+    let lastVisibleAt = Date.now()
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') {
+        lastVisibleAt = Date.now()
+        return
+      }
+      const awaySeconds = (Date.now() - lastVisibleAt) / 1000
+      // Si on est resté >2s en arrière-plan, on resync
+      if (awaySeconds > 2 && session?.id) {
+        supabase
+          .from('race_laps')
+          .select('*')
+          .eq('session_id', session.id)
+          .order('recorded_at', { ascending: false })
+          .then(({ data }) => { if (data) setLaps(data) })
+        supabase
+          .from('race_sessions')
+          .select('*')
+          .eq('id', session.id)
+          .single()
+          .then(({ data }) => { if (data) setSession(data) })
+      }
+      lastVisibleAt = Date.now()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('focus', onVisible)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('focus', onVisible)
+    }
+  }, [session?.id])
+
+  // ── Heartbeat de secours : re-fetch les laps toutes les 15s pendant un live ──
+  // Garde-fou si le socket Realtime est silencieusement mort sans déclencher
+  // visibilitychange (cas réseau mobile dégueulasse).
+  useEffect(() => {
+    if (!session?.id || session?.status !== 'live') return
+    const interval = setInterval(() => {
+      supabase
+        .from('race_laps')
+        .select('*')
+        .eq('session_id', session.id)
+        .order('recorded_at', { ascending: false })
+        .then(({ data }) => {
+          if (data) {
+            // Mise à jour seulement si on a un changement de cardinalité
+            // (évite le re-render inutile à chaque tick)
+            setLaps(prev => prev.length !== data.length ? data : prev)
+          }
+        })
+    }, 15000)
+    return () => clearInterval(interval)
+  }, [session?.id, session?.status])
+
   // ── Track position changes when laps update ──
   const getRankingsForAll = useCallback(() => {
     return teams.map(team => {
