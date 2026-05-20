@@ -248,6 +248,14 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
   // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
   useEffect(() => { loadAll() }, [motoNumber, session?.user?.id])
 
+  // Verrouille le scroll du body quand la page moto est ouverte
+  // (sinon le classement derrière continue à scroller sous la modal)
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+
   const handleReviewAffiliation = async (id, newStatus) => {
     setReviewingId(id)
     const { data: { user } } = await supabase.auth.getUser()

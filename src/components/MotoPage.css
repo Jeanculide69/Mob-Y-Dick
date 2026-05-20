@@ -784,21 +784,67 @@
 
 /* ─── Responsive ─── */
 @media (max-width: 600px) {
+  /* Plein écran : la page moto se met en avant, l'utilisateur doit fermer
+     avec la croix pour revenir au classement. Évite le décalage visuel
+     quand l'utilisateur clique depuis une ligne basse du tableau. */
   .moto-page-overlay {
     padding: 0;
-    align-items: flex-end;
+    align-items: stretch;
+    justify-content: stretch;
   }
 
   .moto-page-shell {
-    border-radius: 24px 24px 0 0;
+    border-radius: 0;
     max-width: 100%;
-    min-height: 80vh;
+    width: 100%;
+    min-height: 100dvh;
     animation-name: motoShellMobile;
+    display: flex;
+    flex-direction: column;
   }
 
   @keyframes motoShellMobile {
-    from { transform: translateY(40px); opacity: 0; }
-    to   { transform: translateY(0);    opacity: 1; }
+    from { transform: translateX(20px); opacity: 0; }
+    to   { transform: translateX(0);    opacity: 1; }
+  }
+
+  /* Header sticky en haut, safe-area iPhone, croix bien visible */
+  .moto-page-header {
+    position: sticky;
+    top: 0;
+    z-index: 5;
+    padding:
+      calc(10px + env(safe-area-inset-top, 0px))
+      14px
+      10px
+      14px;
+    background: rgba(10, 10, 10, 0.92);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+  }
+
+  /* Le bouton retour devient une croix compacte mais facile à toucher */
+  .moto-back-btn {
+    padding: 0;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    font-size: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .moto-back-btn::before {
+    content: '✕';
+    font-size: 1.2rem;
+    font-weight: 600;
+  }
+
+  .moto-edit-btn {
+    font-size: 0.78rem !important;
+    padding: 8px 12px !important;
+    min-height: 40px;
   }
 
   .moto-hero {
