@@ -58,12 +58,13 @@ DO $$ BEGIN
 END $$;
 
 
--- 2. (re)Vérifications
+-- 2. (re)Vérifications — colonnes correctes de pg_policy : polname / polcmd
+--    polcmd : 'r' = SELECT, 'a' = INSERT, 'w' = UPDATE, 'd' = DELETE, '*' = ALL
 SELECT 'emote_triggers' AS table_name,
        COUNT(*) AS row_count
 FROM public.emote_triggers;
 
-SELECT polname, cmd
+SELECT polname, polcmd
 FROM pg_policy
 WHERE polrelid = 'public.emote_triggers'::regclass;
 
