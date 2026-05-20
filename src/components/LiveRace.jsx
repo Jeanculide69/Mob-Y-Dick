@@ -368,13 +368,32 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   }
 
   // ── Realtime laps & session ──
+  // Helper : refetch complet des laps. Sert pour les DELETE (undo chrono)
+  // et les UPDATE — qu'on ne peut pas patcher proprement en mémoire.
+  const refetchLaps = useCallback(async (sid) => {
+    if (!sid) return
+    const { data } = await supabase
+      .from('race_laps')
+      .select('*')
+      .eq('session_id', sid)
+      .order('recorded_at', { ascending: false })
+    if (data) setLaps(data)
+  }, [])
+
   useEffect(() => {
     if (!session?.id) return
     const ch = supabase.channel(`live_race_public_${session.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'race_laps', filter: `session_id=eq.${session.id}` }, ({ new: row }) => {
-        setLaps(prev => [row, ...prev])
+        setLaps(prev => prev.some(l => l.id === row.id) ? prev : [row, ...prev])
         setHighlightedLap(row.id)
         setTimeout(() => setHighlightedLap(null), 4000)
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'race_laps', filter: `session_id=eq.${session.id}` }, () => {
+        // Chrono undo → refetch complet pour rester aligné
+        refetchLaps(session.id)
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'race_laps', filter: `session_id=eq.${session.id}` }, () => {
+        refetchLaps(session.id)
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'race_sessions', filter: `id=eq.${session.id}` }, ({ new: row }) => {
         setSession(prev => {
@@ -402,8 +421,17 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'donations', filter: `session_id=eq.${session.id}` }, ({ new: row }) => {
         triggerDonationAlert(row)
       })
-      .subscribe()
+      .subscribe((status) => {
+        // En cas d'erreur ou de fermeture du canal, on resynchronise via
+        // un refetch immédiat (le heartbeat 5s prendra le relais ensuite).
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          // eslint-disable-next-line no-console
+          console.warn('[LiveRace] Realtime channel status:', status, '→ refetch')
+          refetchLaps(session.id)
+        }
+      })
     return () => supabase.removeChannel(ch)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.id])
 
   // ── Presence — spectator count ──
@@ -534,9 +562,10 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
     }
   }, [session?.id])
 
-  // ── Heartbeat de secours : re-fetch les laps toutes les 15s pendant un live ──
-  // Garde-fou si le socket Realtime est silencieusement mort sans déclencher
-  // visibilitychange (cas réseau mobile dégueulasse).
+  // ── Heartbeat de secours : re-fetch les laps toutes les 5s pendant un live ──
+  // Garde-fou si le socket Realtime est silencieusement mort. 5s est un bon
+  // compromis pendant un live de chronométrage (vs 15s qui laissait trop
+  // de retard côté viewer PC quand le chronométreur saisissait sur mobile).
   useEffect(() => {
     if (!session?.id || session?.status !== 'live') return
     const interval = setInterval(() => {
@@ -546,13 +575,20 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
         .eq('session_id', session.id)
         .order('recorded_at', { ascending: false })
         .then(({ data }) => {
-          if (data) {
-            // Mise à jour seulement si on a un changement de cardinalité
-            // (évite le re-render inutile à chaque tick)
-            setLaps(prev => prev.length !== data.length ? data : prev)
-          }
+          if (!data) return
+          setLaps(prev => {
+            // Mise à jour si cardinalité différente, OU si le set d'IDs
+            // a bougé (couvre les DELETE qui gardent la même cardinalité
+            // après un insert simultané).
+            if (prev.length !== data.length) return data
+            const prevIds = new Set(prev.map(l => l.id))
+            for (const l of data) {
+              if (!prevIds.has(l.id)) return data
+            }
+            return prev
+          })
         })
-    }, 15000)
+    }, 5000)
     return () => clearInterval(interval)
   }, [session?.id, session?.status])
 
