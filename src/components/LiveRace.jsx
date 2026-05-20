@@ -178,7 +178,20 @@ export default function LiveRace({ customSessionId, onClose }) {
       }
 
       // ── Programmer le retrait ──
-      const duration = head.type === 'donation' ? 8000 : 4500
+      // - donation        : 8s (le temps de lire le message)
+      // - premium video   : 10s (cap large ; le <video onEnded> finit en réalité
+      //                          au bout de sa durée réelle 1-10s)
+      // - premium non-vid : 7s (GIF/image animée + son synth ~1-2s)
+      let duration
+      if (head.type === 'donation') {
+        duration = 8000
+      } else if (head.type === 'premium-reaction') {
+        const item = head.item
+        const isVideo = item.media_type === 'mp4' || /\.(mp4|webm)($|\?)/i.test(item.media_url || item.animation_url || '')
+        duration = isVideo ? 10000 : 7000
+      } else {
+        duration = 7000
+      }
       const tid = setTimeout(() => {
         activatedAlertsRef.current.delete(head.id)
         setActiveAlerts(prev => prev.filter(a => a.id !== head.id))
@@ -187,6 +200,13 @@ export default function LiveRace({ customSessionId, onClose }) {
     }
     return () => { timers.forEach(t => clearTimeout(t)) }
   }, [activeAlerts])
+
+  // Permet à un <video onEnded> de retirer son alerte avant le cap
+  // (animation joue jusqu'à sa fin réelle puis dégage la queue).
+  const dismissAlertImmediately = (alertId) => {
+    activatedAlertsRef.current.delete(alertId)
+    setActiveAlerts(prev => prev.filter(a => a.id !== alertId))
+  }
 
   // ── Premium Auth & Shop Setup ──
   const fetchUserProfile = async (uid) => {
@@ -718,7 +738,11 @@ export default function LiveRace({ customSessionId, onClose }) {
                            dans ce cas c'est le MP3 qui joue (cf. triggerPremiumReaction).
                            Sinon, le MP4 joue son propre son intégré. */
                         muted={!!a.item.sound_url}
-                        onEnded={(e) => { try { e.currentTarget.pause() } catch { /* ignore */ } }}
+                        onEnded={(e) => {
+                          try { e.currentTarget.pause() } catch { /* ignore */ }
+                          // Petite marge pour laisser respirer l'overlay text "X envoie Y!"
+                          setTimeout(() => dismissAlertImmediately(a.id), 500)
+                        }}
                       />
                     ) : (
                       <img src={mediaSrc} alt={a.item.name} className="live-premium-emote-img" />
