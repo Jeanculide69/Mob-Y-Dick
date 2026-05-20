@@ -1162,34 +1162,30 @@ function LiveVideoBroadcaster({ session, raceSession }) {
     setLoading(true)
     setErrorMsg(null)
     try {
-      // 1. Try to get camera - try rear first, then any camera as fallback
+      // 0. Check if browser supports camera access
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("📷 Ton navigateur ne supporte pas l'accès caméra.\n\nAssure-toi d'utiliser Chrome, Firefox ou Safari en HTTPS.\nURL actuelle : " + window.location.href)
+      }
+
+      if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
+        throw new Error("🔒 L'accès caméra nécessite une connexion sécurisée (HTTPS).\n\nTon URL actuelle commence par 'http://' — il faut 'https://'.")
+      }
+
+      // 1. Try to get camera with simplest possible constraints first
       let stream
       try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: 'environment',
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            frameRate: { ideal: 30 }
-          },
-          audio: false
-        })
+        // Start with just { video: true } — maximizes compatibility
+        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
       } catch (camErr) {
-        // If rear camera fails, try any camera
-        console.log('Rear camera failed, trying any camera:', camErr.name)
-        try {
-          stream = await navigator.mediaDevices.getUserMedia({
-            video: { width: { ideal: 1280 }, height: { ideal: 720 } },
-            audio: false
-          })
-        } catch (camErr2) {
-          if (camErr2.name === 'NotAllowedError' || camErr2.name === 'PermissionDeniedError') {
-            throw new Error("📷 Accès caméra refusé par le navigateur.\n\nSur Android : appuie sur le cadenas 🔒 dans la barre d'adresse → Autorisations → Caméra → Autoriser, puis recharge la page.\n\nSur iPhone : Réglages → Safari → Caméra → Autoriser.")
-          } else if (camErr2.name === 'NotFoundError') {
-            throw new Error("📷 Aucune caméra détectée sur cet appareil.")
-          } else {
-            throw new Error(`📷 Erreur caméra : ${camErr2.message}`)
-          }
+        console.error('Camera error:', camErr.name, camErr.message)
+        if (camErr.name === 'NotAllowedError' || camErr.name === 'PermissionDeniedError') {
+          throw new Error("📷 Accès caméra refusé.\n\nLe navigateur a bloqué la caméra. Essaie de :\n• Ouvrir cette page en navigation privée (incognito)\n• Ou : menu ⋮ → Paramètres → Paramètres des sites → Appareil photo → Autoriser pour ce site")
+        } else if (camErr.name === 'NotFoundError' || camErr.name === 'DevicesNotFoundError') {
+          throw new Error("📷 Aucune caméra détectée sur cet appareil.")
+        } else if (camErr.name === 'NotReadableError' || camErr.name === 'TrackStartError') {
+          throw new Error("📷 La caméra est déjà utilisée par une autre app.\n\nFerme les autres apps qui utilisent la caméra (WhatsApp, Zoom, etc.) et réessaie.")
+        } else {
+          throw new Error("📷 Erreur caméra : " + camErr.name + " — " + camErr.message)
         }
       }
 
