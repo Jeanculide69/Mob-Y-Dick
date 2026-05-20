@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../supabaseClient'
 import LiveTeamDrawer from './LiveTeamDrawer'
 import PayPalButton from './PayPalButton'
@@ -568,70 +569,81 @@ export default function LiveRace({ customSessionId, onClose }) {
 
   return (
     <section className="section page-top live-section">
-      {/* ── Active Alerts Container ── */}
-      <div className="live-alerts-container">
-        {activeAlerts.filter(a => a.type === 'donation').map(a => (
-          <div key={a.id} className="live-donation-alert">
-            <div className="donation-alert-header">
-              💎 SUPER CHAT 💎
-            </div>
-            <div className="donation-alert-body">
-              <span>{a.display_name}</span> a donné {a.amount}€ !
-            </div>
-            {a.message && (
-              <div className="donation-alert-message">
-                "{a.message}"
+      {/* ── Overlays Live (dons, emotes premium, emojis flottants, annonces) ──
+         Rendus dans un Portal sur document.body : la <section> parente a
+         un transform résiduel (animation pageEnter) qui crée un containing
+         block et casserait le position:fixed des overlays — du coup ils
+         se retrouveraient placés au milieu de la section et non du
+         viewport. Le portal court-circuite tout l'arbre transformé. */}
+      {createPortal(
+        <>
+          {/* ── Active Alerts Container (dons) ── */}
+          <div className="live-alerts-container">
+            {activeAlerts.filter(a => a.type === 'donation').map(a => (
+              <div key={a.id} className="live-donation-alert">
+                <div className="donation-alert-header">
+                  💎 SUPER CHAT 💎
+                </div>
+                <div className="donation-alert-body">
+                  <span>{a.display_name}</span> a donné {a.amount}€ !
+                </div>
+                {a.message && (
+                  <div className="donation-alert-message">
+                    "{a.message}"
+                  </div>
+                )}
               </div>
-            )}
+            ))}
           </div>
-        ))}
-      </div>
 
-      {/* ── Premium Emote Overlays ── */}
-      {activeAlerts.filter(a => a.type === 'premium-reaction').map(a => {
-        // Priorité au champ media_url (v15 admin upload) sinon fallback sur l'ancien animation_url
-        const mediaSrc = a.item.media_url || a.item.animation_url
-        const isVideo = a.item.media_type === 'mp4' || /\.mp4($|\?)/i.test(mediaSrc || '')
-        return (
-          <div key={a.id} className="live-emote-overlay-stage">
-            <div className="live-premium-emote-alert">
-              {mediaSrc && (
-                isVideo ? (
-                  <video
-                    src={mediaSrc}
-                    className="live-premium-emote-img"
-                    autoPlay
-                    playsInline
-                    /* Le MP4 porte son propre son ; pas de muted volontairement */
-                    onEnded={(e) => { try { e.currentTarget.pause() } catch { /* ignore */ } }}
-                  />
-                ) : (
-                  <img src={mediaSrc} alt={a.item.name} className="live-premium-emote-img" />
-                )
-              )}
-              <div className="live-premium-emote-user">
-                <span>{a.userDisplayName}</span> envoie {a.item.name} !
+          {/* ── Premium Emote Overlays ── */}
+          {activeAlerts.filter(a => a.type === 'premium-reaction').map(a => {
+            // Priorité au champ media_url (v15 admin upload) sinon fallback sur l'ancien animation_url
+            const mediaSrc = a.item.media_url || a.item.animation_url
+            const isVideo = a.item.media_type === 'mp4' || /\.mp4($|\?)/i.test(mediaSrc || '')
+            return (
+              <div key={a.id} className="live-emote-overlay-stage">
+                <div className="live-premium-emote-alert">
+                  {mediaSrc && (
+                    isVideo ? (
+                      <video
+                        src={mediaSrc}
+                        className="live-premium-emote-img"
+                        autoPlay
+                        playsInline
+                        /* Le MP4 porte son propre son ; pas de muted volontairement */
+                        onEnded={(e) => { try { e.currentTarget.pause() } catch { /* ignore */ } }}
+                      />
+                    ) : (
+                      <img src={mediaSrc} alt={a.item.name} className="live-premium-emote-img" />
+                    )
+                  )}
+                  <div className="live-premium-emote-user">
+                    <span>{a.userDisplayName}</span> envoie {a.item.name} !
+                  </div>
+                </div>
               </div>
-            </div>
+            )
+          })}
+
+          {/* ── Floating emoji container ── */}
+          <div className="live-emoji-stage" aria-hidden="true">
+            {floatingEmojis.map(e => (
+              <span key={e.id} className="live-emoji-float" style={{ left: `${e.x}%` }}>
+                {e.emoji}
+              </span>
+            ))}
           </div>
-        )
-      })}
 
-      {/* ── Floating emoji container ── */}
-      <div className="live-emoji-stage" aria-hidden="true">
-        {floatingEmojis.map(e => (
-          <span key={e.id} className="live-emoji-float" style={{ left: `${e.x}%` }}>
-            {e.emoji}
-          </span>
-        ))}
-      </div>
-
-      {/* ── Announcement banner ── */}
-      {announcement && (
-        <div className="live-announcement-banner glass">
-          <span className="live-announcement-icon">📢</span>
-          <span className="live-announcement-text">{announcement}</span>
-        </div>
+          {/* ── Announcement banner ── */}
+          {announcement && (
+            <div className="live-announcement-banner glass">
+              <span className="live-announcement-icon">📢</span>
+              <span className="live-announcement-text">{announcement}</span>
+            </div>
+          )}
+        </>,
+        document.body
       )}
 
       <div className="container">
@@ -1208,8 +1220,10 @@ export default function LiveRace({ customSessionId, onClose }) {
         </div>
       )}
 
-      {/* ── Floating Action Button (FAB) pour Emotes & Dons ── */}
-      {isLive && !shopOpen && (
+      {/* ── Floating Action Button (FAB) pour Emotes & Dons ──
+         Également rendu via Portal (même raison : transform du parent
+         cassait le position:fixed du FAB). */}
+      {isLive && !shopOpen && createPortal(
         <div className="live-fab-container">
           {fabOpen && (
             <div className="live-fab-menu glass fade-in">
@@ -1264,7 +1278,8 @@ export default function LiveRace({ customSessionId, onClose }) {
             <span className="live-fab-icon">{fabOpen ? '✕' : '🎉'}</span>
             <span className="live-fab-label">{fabOpen ? 'Fermer' : 'Réactions'}</span>
           </button>
-        </div>
+        </div>,
+        document.body
       )}
     </section>
   )
