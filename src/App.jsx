@@ -7,6 +7,7 @@ import PhotoComments from './components/PhotoComments'
 import ProfilePage from './components/ProfilePage'
 import UserManagement from './components/UserManagement'
 import EmoteAdmin from './components/EmoteAdmin'
+import DonationsAdmin from './components/DonationsAdmin'
 import RaceSetup from './components/RaceSetup'
 import RaceChrono from './components/RaceChrono'
 import LiveRace from './components/LiveRace'
@@ -1229,6 +1230,8 @@ function App() {
                   onClick: () => { closeMenu(); handleOpenForm('affiliations_admin') } },
                 { id: 'emotes', icon: '🎉', label: 'Emotes & Sons',
                   onClick: () => { closeMenu(); handleOpenForm('emotes_admin') } },
+                { id: 'donations', icon: '💰', label: 'Historique dons',
+                  onClick: () => { closeMenu(); handleOpenForm('donations_admin') } },
                 { id: 'users', icon: '👥', label: 'Utilisateurs',
                   onClick: () => { closeMenu(); handleOpenForm('users_admin') } },
               ]
@@ -2372,7 +2375,7 @@ function App() {
       {/* ─── Sleek Dynamic Forms and Lists Modal (Admin) ─── */}
       {activeForm && (
         <div className="admin-overlay">
-          <div className={`admin-panel glass admin-visual-modal ${['orders','sponsors_admin','users_admin','bikes_admin','affiliations_admin','emotes_admin'].includes(activeForm) ? 'wide' : ''}`}>
+          <div className={`admin-panel glass admin-visual-modal ${['orders','sponsors_admin','users_admin','bikes_admin','affiliations_admin','emotes_admin','donations_admin'].includes(activeForm) ? 'wide' : ''}`}>
             <div className="admin-header">
               <h2>
                 {activeForm === 'event' && '📅 Gérer Événement'}
@@ -2386,6 +2389,7 @@ function App() {
                 {activeForm === 'sponsors_admin' && '🤝 Propositions Sponsors'}
                 {activeForm === 'affiliations_admin' && '🏍️ Demandes d\'affiliation'}
                 {activeForm === 'emotes_admin' && '🎉 Emotes & Sons Premium'}
+                {activeForm === 'donations_admin' && '💰 Historique des Dons & Emotes'}
                 {activeForm === 'users_admin' && '👥 Gestion des Utilisateurs'}
               </h2>
               <button className="admin-close" onClick={() => { setActiveForm(null); setEditingItem(null) }}>✕</button>
@@ -2649,6 +2653,8 @@ function App() {
               />
             ) : activeForm === 'emotes_admin' ? (
               <EmoteAdmin onClose={() => setActiveForm(null)} />
+            ) : activeForm === 'donations_admin' ? (
+              <DonationsAdmin onClose={() => setActiveForm(null)} />
             ) : activeForm === 'bikes_admin' ? (
               <div className="admin-orders-container" style={{ maxHeight: '75vh', overflowY: 'auto' }}>
                 {(!dbBikes || dbBikes.length === 0) && (

@@ -141,6 +141,52 @@ export default function LiveRace({ customSessionId, onClose }) {
     shopItemsRef.current = shopItems
   }, [shopItems])
 
+  // ── Queue séquentielle d'alertes ──
+  // On affiche au plus UNE alerte par type à la fois (donation +
+  // premium-reaction peuvent coexister, sur des zones différentes
+  // de l'écran). Le son ne se déclenche qu'au moment où l'alerte
+  // devient visible (= tête de sa queue). Les suivantes attendent.
+  const activatedAlertsRef = useRef(new Set())
+  useEffect(() => {
+    const heads = {
+      donation: activeAlerts.find(a => a.type === 'donation'),
+      'premium-reaction': activeAlerts.find(a => a.type === 'premium-reaction'),
+    }
+    const timers = []
+    for (const [, head] of Object.entries(heads)) {
+      if (!head || activatedAlertsRef.current.has(head.id)) continue
+      activatedAlertsRef.current.add(head.id)
+
+      // ── Son ──
+      if (head.type === 'donation') {
+        playDonationSound()
+      } else if (head.type === 'premium-reaction') {
+        const item = head.item
+        const isVideo = item.media_type === 'mp4' || /\.(mp4|webm)($|\?)/i.test(item.media_url || item.animation_url || '')
+        if (item.sound_url) {
+          try {
+            const audio = new Audio(item.sound_url)
+            audio.volume = 0.7
+            audio.play().catch(() => { if (!isVideo) playPremiumSound(item.slug) })
+          } catch {
+            if (!isVideo) playPremiumSound(item.slug)
+          }
+        } else if (!isVideo) {
+          playPremiumSound(item.slug)
+        }
+      }
+
+      // ── Programmer le retrait ──
+      const duration = head.type === 'donation' ? 8000 : 4500
+      const tid = setTimeout(() => {
+        activatedAlertsRef.current.delete(head.id)
+        setActiveAlerts(prev => prev.filter(a => a.id !== head.id))
+      }, duration)
+      timers.push(tid)
+    }
+    return () => { timers.forEach(t => clearTimeout(t)) }
+  }, [activeAlerts])
+
   // ── Premium Auth & Shop Setup ──
   const fetchUserProfile = async (uid) => {
     try {
@@ -172,75 +218,49 @@ export default function LiveRace({ customSessionId, onClose }) {
     }
   }
 
+  // ── Enqueueing (NE déclenche PAS le son ; c'est l'effet ci-dessous qui
+  //    le fait quand l'alerte devient la "tête" de sa queue) ──
   const triggerPremiumReaction = (slug, userDisplayName) => {
     const item = shopItemsRef.current.find(i => i.slug === slug)
     if (!item) return
-
-    const alertId = Date.now() + Math.random()
-
-    // Add to active alerts
+    const alertId = `${Date.now()}-${Math.random()}`
     setActiveAlerts(prev => [...prev, {
       id: alertId,
       type: 'premium-reaction',
       item,
-      userDisplayName
-    }])
-
-    // ── Stratégie de son ──
-    // - Si un sound_url est présent : il a la priorité (cas vidéo
-    //   silencieuse uploadée + MP3 séparé, OU GIF + MP3)
-    //   → la <video> sera mutée à l'affichage pour éviter le double son
-    // - Sinon si MP4 : la <video> joue son propre son intégré
-    // - Sinon : fallback sur le synthé Web Audio API
-    const isVideo = item.media_type === 'mp4' || /\.(mp4|webm)($|\?)/i.test(item.media_url || item.animation_url || '')
-    if (item.sound_url) {
-      try {
-        const audio = new Audio(item.sound_url)
-        audio.volume = 0.7
-        audio.play().catch(() => { if (!isVideo) playPremiumSound(slug) })
-      } catch {
-        if (!isVideo) playPremiumSound(slug)
-      }
-    } else if (!isVideo) {
-      playPremiumSound(slug)
-    }
-    // Cas vidéo sans sound_url : le <video> en jsx joue son audio intégré.
-
-    // Auto-remove after 4.5 seconds
-    setTimeout(() => {
-      setActiveAlerts(prev => prev.filter(a => a.id !== alertId))
-    }, 4500)
+      userDisplayName,
+    }].slice(-30)) // cap dur pour éviter un buildup infini
   }
 
   const triggerDonationAlert = (row) => {
-    const alertId = Date.now() + Math.random()
-    
+    const alertId = `${Date.now()}-${Math.random()}`
     setActiveAlerts(prev => [...prev, {
       id: alertId,
       type: 'donation',
       display_name: row.display_name,
       amount: row.amount_cents / 100,
-      message: row.message
-    }])
-
-    // Play cash register sound using Web Audio API
-    playDonationSound()
-
-    // Auto-remove after 8 seconds
-    setTimeout(() => {
-      setActiveAlerts(prev => prev.filter(a => a.id !== alertId))
-    }, 8000)
+      message: row.message,
+    }].slice(-30))
   }
 
   const sendPremiumReaction = (item) => {
     const nameToUse = userProfile?.display_name || authUser?.email?.split('@')[0] || 'Un Rider'
     // 1. Trigger locally
     triggerPremiumReaction(item.slug, nameToUse)
-    // 2. Broadcast
+    // 2. Broadcast (instantané pour les viewers connectés)
     extrasChannelRef.current?.send({
       type: 'broadcast',
       event: 'premium-reaction',
       payload: { slug: item.slug, userDisplayName: nameToUse }
+    })
+    // 3. Log permanent en DB (historique + replay possible) — fire-and-forget
+    supabase.from('emote_triggers').insert([{
+      user_id: authUser?.id || null,
+      display_name: nameToUse,
+      item_slug: item.slug,
+      session_id: session?.id || null,
+    }]).then(({ error }) => {
+      if (error) console.warn('[emote_triggers] insert failed:', error.message)
     })
   }
 
@@ -418,6 +438,25 @@ export default function LiveRace({ customSessionId, onClose }) {
       setLaps(lapsData || [])
       const { data: annData } = await supabase.from('race_announcements').select('*').eq('session_id', s.id).order('created_at', { ascending: false })
       setAnnouncementsHistory(annData || [])
+
+      // ── Replay des 3 derniers dons + 3 derniers emote_triggers de la
+      //    session : l'utilisateur qui arrive en retard les voit défiler
+      //    une fois en séquence (la queue d'alertes les espace). ──
+      const { data: recentDonations } = await supabase
+        .from('donations')
+        .select('*')
+        .eq('session_id', s.id)
+        .order('created_at', { ascending: false })
+        .limit(3)
+      ;(recentDonations || []).slice().reverse().forEach(d => triggerDonationAlert(d))
+
+      const { data: recentTriggers } = await supabase
+        .from('emote_triggers')
+        .select('*')
+        .eq('session_id', s.id)
+        .order('triggered_at', { ascending: false })
+        .limit(3)
+      ;(recentTriggers || []).slice().reverse().forEach(t => triggerPremiumReaction(t.item_slug, t.display_name))
     }
     setLoading(false)
   }
@@ -637,27 +676,37 @@ export default function LiveRace({ customSessionId, onClose }) {
          viewport. Le portal court-circuite tout l'arbre transformé. */}
       {createPortal(
         <>
-          {/* ── Active Alerts Container (dons) ── */}
+          {/* ── Active Alerts Container (dons) ──
+             Une seule donation affichée à la fois (la tête de queue).
+             Les suivantes attendent qu'elle disparaisse (8s). */}
           <div className="live-alerts-container">
-            {activeAlerts.filter(a => a.type === 'donation').map(a => (
-              <div key={a.id} className="live-donation-alert">
-                <div className="donation-alert-header">
-                  💎 SUPER CHAT 💎
-                </div>
-                <div className="donation-alert-body">
-                  <span>{a.display_name}</span> a donné {a.amount}€ !
-                </div>
-                {a.message && (
-                  <div className="donation-alert-message">
-                    "{a.message}"
+            {(() => {
+              const head = activeAlerts.find(a => a.type === 'donation')
+              if (!head) return null
+              const queueRest = activeAlerts.filter(a => a.type === 'donation').length - 1
+              return (
+                <div key={head.id} className="live-donation-alert">
+                  <div className="donation-alert-header">
+                    💎 SUPER CHAT 💎
+                    {queueRest > 0 && (
+                      <span className="donation-alert-queue-badge">+{queueRest}</span>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                  <div className="donation-alert-body">
+                    <span>{head.display_name}</span> a donné {head.amount}€ !
+                  </div>
+                  {head.message && (
+                    <div className="donation-alert-message">
+                      "{head.message}"
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
           </div>
 
-          {/* ── Premium Emote Overlays ── */}
-          {activeAlerts.filter(a => a.type === 'premium-reaction').map(a => {
+          {/* ── Premium Emote Overlays (une à la fois aussi) ── */}
+          {activeAlerts.filter(a => a.type === 'premium-reaction').slice(0, 1).map(a => {
             // Priorité au champ media_url (v15 admin upload) sinon fallback sur l'ancien animation_url
             const mediaSrc = a.item.media_url || a.item.animation_url
             const isVideo = a.item.media_type === 'mp4' || /\.(mp4|webm)($|\?)/i.test(mediaSrc || '')
