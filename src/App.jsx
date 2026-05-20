@@ -1292,8 +1292,6 @@ function App() {
             <div className="container" style={{ marginTop: '20px', marginBottom: '20px' }}>
               <GoogleAd slot="home-banner" navigate={navigate} />
             </div>
-            {/* Live Chat component overlay */}
-            <LiveChat session={session} profile={profile} isAdmin={isAdmin} isModerator={isModerator} />
           </>
         )}
 
@@ -2006,6 +2004,9 @@ function App() {
           </div>
         </div>
       </footer>
+
+      {/* ─── Live Chat (global — visible sur toutes les pages) ─── */}
+      <LiveChat session={session} profile={profile} isAdmin={isAdmin} isModerator={isModerator} />
 
       {/* ─── Auth Modal (Google & Email) ─── */}
       <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />
