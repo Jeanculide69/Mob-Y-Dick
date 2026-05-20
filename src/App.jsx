@@ -9,6 +9,7 @@ import UserManagement from './components/UserManagement'
 import RaceSetup from './components/RaceSetup'
 import RaceChrono from './components/RaceChrono'
 import LiveRace from './components/LiveRace'
+import Championnat from './components/Championnat'
 import './components/AuthNavbar.css'
 
 const SITE_VERSION = 'v2.0.0'
@@ -1195,17 +1196,18 @@ function App() {
               )
             })()}
 
-            {['gallery', 'team', 'bikes', 'shop', 'sponsors', 'events'].map((tab) => (
+            {['gallery', 'team', 'bikes', 'shop', 'sponsors', 'events', 'championnat'].map((tab) => (
               <button
                 key={tab}
                 className={`nav-link ${activeTab === tab ? 'active' : ''}`}
                 onClick={() => navigate(tab)}
               >
-                {tab === 'gallery' ? 'Galerie' :
-                 tab === 'team' ? 'Riders' :
-                 tab === 'bikes' ? 'Motos' :
-                 tab === 'shop' ? 'Boutique' :
-                 tab === 'sponsors' ? 'Sponsors' : 'Événements'}
+                {tab === 'gallery'     ? 'Galerie'      :
+                 tab === 'team'        ? 'Riders'       :
+                 tab === 'bikes'       ? 'Motos'        :
+                 tab === 'shop'        ? 'Boutique'     :
+                 tab === 'sponsors'    ? 'Sponsors'     :
+                 tab === 'championnat' ? '🏆 Championnat' : 'Événements'}
               </button>
             ))}
 
@@ -1891,14 +1893,17 @@ function App() {
 
       {/* ─── LIVE RACE (public) ─── */}
       {activeTab === 'live' && (
-        <LiveRace 
-          customSessionId={viewingSessionId} 
+        <LiveRace
+          customSessionId={viewingSessionId}
           onClose={() => {
             setViewingSessionId(null)
             setActiveTab('events')
           }}
         />
       )}
+
+      {/* ─── CHAMPIONNAT ─── */}
+      {activeTab === 'championnat' && <Championnat />}
 
       {/* ─── RACE SETUP (organisateur) ─── */}
       {activeTab === 'race' && activeRaceView === 'setup' && selectedRaceEvent && (

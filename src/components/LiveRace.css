@@ -724,3 +724,366 @@
     font-size: 1.4rem;
   }
 }
+
+/* ─── Pulse keyframe (used by live-dot-big) ─── */
+@keyframes livePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+/* ─── Hero Actions (share + card buttons) ─── */
+.live-hero-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.live-share-btn {
+  font-size: 0.82rem !important;
+  padding: 9px 16px !important;
+  min-height: 38px !important;
+  border-radius: 20px !important;
+}
+
+/* ─── Spectators stat ─── */
+.live-stat-spectators .live-stat-value {
+  font-size: 1.1rem;
+  color: #a78bfa;
+}
+
+/* ─── Table Scroll Wrapper ─── */
+.live-table-scroll {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #333 transparent;
+}
+
+/* ─── Delta column ─── */
+.live-th-delta {
+  width: 40px;
+  text-align: center;
+}
+
+.live-delta {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 800;
+  width: 40px;
+}
+
+.live-delta-up {
+  color: #22c55e;
+  letter-spacing: -1px;
+}
+
+.live-delta-down {
+  color: #ef4444;
+  letter-spacing: -1px;
+}
+
+/* ─── Best Lap Badge (⚡ on pilot name) ─── */
+.live-best-lap-badge {
+  font-size: 1rem;
+  filter: drop-shadow(0 0 6px rgba(255, 215, 0, 0.7));
+  animation: bestLapPulse 1.6s ease-in-out infinite;
+  flex-shrink: 0;
+}
+
+@keyframes bestLapPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.25); }
+}
+
+/* ─── Expand Button ─── */
+.live-expand-btn {
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  padding: 4px 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-body);
+  min-width: 28px;
+}
+
+.live-expand-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--border-accent);
+  color: var(--text-secondary);
+}
+
+/* ─── Expanded Row Detail ─── */
+.live-row-detail td {
+  padding: 0 12px 14px 12px !important;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.live-lap-breakdown {
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+}
+
+.live-lap-breakdown-title {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+}
+
+.live-lap-splits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.live-lap-split-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  font-size: 0.82rem;
+  transition: background 0.2s;
+}
+
+.live-lap-split-item.best-split {
+  background: rgba(255, 215, 0, 0.08);
+  border-color: rgba(255, 215, 0, 0.35);
+}
+
+.split-num {
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  font-weight: 600;
+  min-width: 24px;
+}
+
+.split-time {
+  font-variant-numeric: tabular-nums;
+  color: #fff;
+  font-weight: 600;
+}
+
+.best-split .split-time {
+  color: #ffd700;
+}
+
+.split-best-tag {
+  font-size: 0.8rem;
+}
+
+/* ─── Emoji Reactions Panel ─── */
+.live-reactions {
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid var(--border-subtle);
+}
+
+.live-reactions-title {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.live-reactions-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.live-reaction-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  font-size: 1.5rem;
+  padding: 10px 4px;
+  cursor: pointer;
+  transition: all 0.15s var(--ease-spring);
+  text-align: center;
+  line-height: 1;
+  touch-action: manipulation;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.live-reaction-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.15);
+  border-color: var(--border-accent);
+}
+
+.live-reaction-btn:active {
+  transform: scale(0.88);
+}
+
+/* ─── Floating Emoji Stage ─── */
+.live-emoji-stage {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 100vh;
+  pointer-events: none;
+  z-index: 900;
+  overflow: hidden;
+}
+
+.live-emoji-float {
+  position: absolute;
+  bottom: 70px;
+  font-size: 2.4rem;
+  animation: emojiFloat 3.2s ease-out forwards;
+  pointer-events: none;
+  user-select: none;
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.2));
+}
+
+@keyframes emojiFloat {
+  0%   { transform: translateY(0)    scale(0.5)  rotate(-5deg); opacity: 0; }
+  12%  { transform: translateY(-50px) scale(1.1) rotate(3deg);  opacity: 1; }
+  80%  { opacity: 1; }
+  100% { transform: translateY(-340px) scale(0.85) rotate(8deg); opacity: 0; }
+}
+
+/* ─── Announcement Banner ─── */
+.live-announcement-banner {
+  position: fixed;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 990;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 28px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 200, 0, 0.35);
+  background: rgba(10, 10, 10, 0.92);
+  max-width: 680px;
+  width: calc(100% - 40px);
+  animation: announceDrop 0.4s var(--ease-spring) forwards;
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 200, 0, 0.1);
+}
+
+@keyframes announceDrop {
+  from { transform: translateX(-50%) translateY(-24px); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0);     opacity: 1; }
+}
+
+.live-announcement-icon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+
+.live-announcement-text {
+  font-size: 1rem;
+  color: #fff;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+/* ─── Animated Podium Entries ─── */
+.podium-anim-1 {
+  animation: podiumRise 0.6s var(--ease-spring) both;
+  animation-delay: 0.05s;
+}
+
+.podium-anim-2 {
+  animation: podiumRise 0.6s var(--ease-spring) both;
+  animation-delay: 0.2s;
+}
+
+.podium-anim-3 {
+  animation: podiumRise 0.6s var(--ease-spring) both;
+  animation-delay: 0.35s;
+}
+
+@keyframes podiumRise {
+  from { transform: translateY(50px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+/* ─── Podium Best Lap time ─── */
+.live-podium-best {
+  font-size: 0.68rem;
+  color: #ffd700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ─── Row flash on new lap ─── */
+.live-row-flash {
+  animation: rowFlash 4s ease forwards;
+}
+
+@keyframes rowFlash {
+  0%   { background: rgba(0, 200, 100, 0.15); }
+  100% { background: transparent; }
+}
+
+/* ─── DNF/DNS status badges ─── */
+.live-status-dnf {
+  display: inline-block;
+  padding: 2px 8px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #ef4444;
+  letter-spacing: 1px;
+  margin-left: 6px;
+}
+
+.live-status-dns {
+  display: inline-block;
+  padding: 2px 8px;
+  background: rgba(156, 163, 175, 0.12);
+  border: 1px solid rgba(156, 163, 175, 0.3);
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #9ca3af;
+  letter-spacing: 1px;
+  margin-left: 6px;
+}
+
+/* ─── Responsive additions ─── */
+@media (max-width: 768px) {
+  .live-announcement-banner {
+    top: 64px;
+    padding: 12px 18px;
+    font-size: 0.9rem;
+  }
+
+  .live-hero-actions {
+    gap: 8px;
+  }
+
+  .live-reactions-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .live-lap-splits {
+    gap: 6px;
+  }
+
+  .live-lap-split-item {
+    padding: 6px 10px;
+    font-size: 0.78rem;
+  }
+}
