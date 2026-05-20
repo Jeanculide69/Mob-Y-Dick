@@ -44,31 +44,19 @@
 .race-flag-pattern {
   width: 100%;
   height: 100%;
-  background-color: #fafafa;
-  /* Damier : 2 dégradés répétitifs croisés */
-  background-image:
-    repeating-linear-gradient(
-      0deg,
-      #000 0, #000 80px,
-      transparent 80px, transparent 160px
-    ),
-    repeating-linear-gradient(
-      90deg,
-      #000 0, #000 80px,
-      transparent 80px, transparent 160px
-    );
-  /* Sans cela, les deux dégradés se superposent en noir partout. On
-     décale le 2e via background-position + le blending mode pour faire
-     un VRAI damier. */
-  background-position: 0 0, 80px 80px;
-  background-blend-mode: difference;
+  background-color: #f5f5f5;
+  /* Damier via SVG inline (data URL) — bulletproof cross-browser.
+     viewBox 0 0 2 2 = un tile 2×2 cases ; agrandi par background-size. */
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 2 2' shape-rendering='crispEdges'><rect width='1' height='1' fill='%23111111'/><rect x='1' y='1' width='1' height='1' fill='%23111111'/></svg>");
+  background-size: 160px 160px;
+  background-repeat: repeat;
   /* Léger pan continu pour donner l'illusion d'un drapeau qui flotte */
   animation: raceFlagPan 30s linear infinite;
 }
 
 @keyframes raceFlagPan {
-  from { background-position: 0 0, 80px 80px; }
-  to   { background-position: 160px 160px, 240px 240px; }
+  from { background-position: 0 0; }
+  to   { background-position: 320px 0; }
 }
 
 /* ─── Vignette ─── */
@@ -213,19 +201,8 @@
 /* ─── Mobile ─── */
 @media (max-width: 600px) {
   .race-flag-pattern {
-    /* Damier plus petit sur mobile pour matcher la densité */
-    background-image:
-      repeating-linear-gradient(
-        0deg,
-        #000 0, #000 50px,
-        transparent 50px, transparent 100px
-      ),
-      repeating-linear-gradient(
-        90deg,
-        #000 0, #000 50px,
-        transparent 50px, transparent 100px
-      );
-    background-position: 0 0, 50px 50px;
+    /* Damier plus petit sur mobile (tiles 100px au lieu de 160px) */
+    background-size: 100px 100px;
   }
 
   .race-flag-title {
