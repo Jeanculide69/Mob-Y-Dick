@@ -32,7 +32,9 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
   const [announcement, setAnnouncement]           = useState('')
   const [sendingAnnouncement, setSendingAnnouncement] = useState(false)
   const [announceSent, setAnnounceSent]           = useState(false)
-  const [xxlMode, setXxlMode]                     = useState(false)
+  const [xxlMode, setXxlMode]                     = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches
+  )
   const [teamStatuses, setTeamStatuses]           = useState({}) // teamId → 'DNF' | 'DNS' | null
 
   const inputRef       = useRef(null)
@@ -45,6 +47,7 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
   const startTime = sessionData?.started_at ? new Date(sessionData.started_at).getTime() : null
 
   // Sync prop changes
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setSessionData(raceSession) }, [raceSession])
 
   // Subscribe to extras channel for sending announcements + team statuses
@@ -54,7 +57,17 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
     return () => supabase.removeChannel(ch)
   }, [raceSession.id])
 
+  const loadLaps = async () => {
+    const { data } = await supabase
+      .from('race_laps')
+      .select('*')
+      .eq('session_id', raceSession.id)
+      .order('recorded_at', { ascending: false })
+    setLaps(data || [])
+  }
+
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadLaps()
     const channel = supabase.channel('race_laps_chrono')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'race_laps', filter: `session_id=eq.${raceSession.id}` }, () => {
@@ -72,11 +85,13 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
       supabase.removeChannel(channel)
       supabase.removeChannel(sessionChannel)
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [raceSession.id])
 
   // Chrono timer
   useEffect(() => {
     if (isRunning && startTime) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setChrono(Date.now() - startTime)
       intervalRef.current = setInterval(() => {
         setChrono(Date.now() - startTime)
@@ -100,14 +115,7 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
   // Undo countdown cleanup
   useEffect(() => () => clearInterval(undoTimerRef.current), [])
 
-  const loadLaps = async () => {
-    const { data } = await supabase
-      .from('race_laps')
-      .select('*')
-      .eq('session_id', raceSession.id)
-      .order('recorded_at', { ascending: false })
-    setLaps(data || [])
-  }
+
 
   const handleStartChrono = async () => {
     const nowStr = new Date().toISOString()
@@ -224,6 +232,13 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
     if (!text) return
     setSendingAnnouncement(true)
     try {
+      // Enregistrer en base de données pour l'historique
+      const { error } = await supabase.from('race_announcements').insert([
+        { session_id: raceSession.id, message: text }
+      ])
+      if (error) console.error('Erreur sauvegarde annonce:', error)
+
+      // Diffuser en direct pour affichage instantané
       await extrasChannelRef.current?.send({
         type: 'broadcast',
         event: 'announcement',
@@ -533,11 +548,13 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
                           <td className="chrono-status-cell">
                             <button
                               className={`chrono-status-btn ${r.status === 'DNF' ? 'active-dnf' : ''}`}
+                              // eslint-disable-next-line react-hooks/refs
                               onClick={() => setTeamStatus(r.id, 'DNF')}
                               title="Marquer DNF (Did Not Finish)"
                             >DNF</button>
                             <button
                               className={`chrono-status-btn ${r.status === 'DNS' ? 'active-dns' : ''}`}
+
                               onClick={() => setTeamStatus(r.id, 'DNS')}
                               title="Marquer DNS (Did Not Start)"
                             >DNS</button>

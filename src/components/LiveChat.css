@@ -127,14 +127,14 @@
   background: none;
   border: none;
   color: var(--text-secondary);
-  font-size: 1.4rem;
+  font-size: 1.6rem;
   line-height: 1;
   cursor: pointer;
   padding: 4px 8px;
   border-radius: 6px;
   transition: all 0.2s;
-  min-width: 32px;
-  min-height: 32px;
+  min-width: 44px;
+  min-height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -337,8 +337,8 @@
     right: 0;
     bottom: 76px; /* above the button */
     width: 100vw;
-    height: 62vh;
-    max-height: 62vh;
+    height: 62dvh; /* dynamic vh shrinks with the soft keyboard */
+    max-height: 62dvh;
     border-radius: 20px 20px 0 0;
     border-left: none;
     border-right: none;

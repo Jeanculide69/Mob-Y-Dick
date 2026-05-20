@@ -738,6 +738,218 @@
   }
 }
 
+/* ─── Mobile : classement en cartes verticales (≤600px) ─── */
+@media (max-width: 600px) {
+  .live-table-scroll {
+    overflow-x: visible;
+  }
+
+  .live-table,
+  .live-table thead,
+  .live-table tbody,
+  .live-table tr,
+  .live-table th,
+  .live-table td {
+    display: block;
+  }
+
+  .live-table thead {
+    display: none;
+  }
+
+  .live-rankings-card {
+    padding: 14px;
+  }
+
+  .live-table tbody tr.live-row {
+    display: grid;
+    grid-template-columns: 44px 1fr auto;
+    grid-template-areas:
+      "pos pilot  best"
+      "pos times  laps"
+      "pos extras extras";
+    align-items: center;
+    column-gap: 12px;
+    row-gap: 6px;
+    padding: 12px 14px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border-subtle);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.025);
+  }
+
+  .live-table tbody tr.live-row:hover {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  /* POS — left column */
+  .live-table .live-pos {
+    grid-area: pos;
+    padding: 0;
+    text-align: center;
+  }
+  .live-table .live-medal {
+    width: 36px;
+    height: 36px;
+    font-size: 0.95rem;
+  }
+  .live-table .live-pos-num {
+    font-size: 1.3rem;
+    font-weight: 800;
+    color: var(--text-primary);
+  }
+
+  /* Pilot block */
+  .live-table .live-pilot-cell {
+    grid-area: pilot;
+    padding: 0;
+    min-width: 0;
+  }
+  .live-table .live-pilot-name {
+    font-size: 0.95rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+  }
+  .live-table .live-pilot-extra {
+    font-size: 0.72rem;
+  }
+
+  /* Best lap on top-right */
+  .live-table .live-time.live-time-best {
+    grid-area: best;
+    padding: 0;
+    text-align: right;
+    font-size: 1rem !important;
+    font-weight: 800 !important;
+    color: #ffd700 !important;
+    font-variant-numeric: tabular-nums;
+  }
+  .live-table .live-time.live-time-best::before {
+    content: 'BEST';
+    display: block;
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    letter-spacing: 1.5px;
+    font-weight: 700;
+    margin-bottom: 1px;
+  }
+
+  /* Cell containing N° + Cat + Gap inline */
+  .live-table .live-num {
+    grid-area: times;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .live-table .live-num-badge {
+    font-size: 0.82rem;
+  }
+
+  /* Cat badge appended next to N° */
+  .live-table .live-cat-cell {
+    grid-area: extras;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .live-table .live-cat-badge {
+    font-size: 0.7rem;
+    padding: 2px 8px;
+  }
+  .live-table .live-cat-cell::after {
+    content: '';
+    flex: 1;
+  }
+
+  /* Gap to leader — placed after the N° badge */
+  .live-table tr.live-row td:nth-of-type(7) {
+    grid-area: times;
+    padding: 0;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    justify-self: end;
+  }
+  .live-table tr.live-row td:nth-of-type(7)::before {
+    content: 'ÉCART ';
+    color: var(--text-muted);
+    font-size: 0.65rem;
+    letter-spacing: 1px;
+  }
+
+  /* Laps count */
+  .live-table .live-laps {
+    grid-area: laps;
+    padding: 0;
+    text-align: right;
+    font-weight: 800;
+    color: #fff;
+    font-size: 0.95rem;
+  }
+  .live-table .live-laps::before {
+    content: 'TOURS';
+    display: block;
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    letter-spacing: 1.5px;
+    font-weight: 700;
+    margin-bottom: 1px;
+  }
+
+  /* Hide secondary data on small mobile to keep cards readable */
+  .live-table .live-delta,
+  .live-table tr.live-row td:nth-of-type(8),  /* INTERVALLE */
+  .live-table tr.live-row td:nth-of-type(9),  /* DERNIER */
+  .live-table tr.live-row td:nth-of-type(10) /* MOY. */ {
+    display: none;
+  }
+
+  /* Expand button: floating top-right corner */
+  .live-table tr.live-row td:last-child {
+    grid-area: extras;
+    padding: 0;
+    justify-self: end;
+  }
+  .live-table .live-expand-btn {
+    font-size: 0.85rem;
+    padding: 6px 10px;
+    min-width: 44px;
+    min-height: 32px;
+  }
+
+  /* Expanded detail row — full width inside its card */
+  .live-table tr.live-row-detail {
+    margin-top: -6px;
+    margin-bottom: 10px;
+    border: 1px solid var(--border-subtle);
+    border-top: 0;
+    border-radius: 0 0 14px 14px;
+    background: rgba(0, 0, 0, 0.25);
+  }
+  .live-table tr.live-row-detail td {
+    padding: 12px !important;
+  }
+  .live-table .live-lap-breakdown {
+    padding: 10px;
+  }
+  .live-table .live-lap-splits {
+    gap: 6px;
+  }
+
+  /* Podium left border still useful */
+  .live-table tr.live-podium-1,
+  .live-table tr.live-podium-2,
+  .live-table tr.live-podium-3 {
+    border-left-width: 4px;
+  }
+}
+
 /* ─── Pulse keyframe (used by live-dot-big) ─── */
 @keyframes livePulse {
   0%, 100% { opacity: 1; transform: scale(1); }
@@ -815,13 +1027,14 @@
   background: transparent;
   border: 1px solid var(--border-subtle);
   border-radius: 6px;
-  color: var(--text-muted);
-  font-size: 0.65rem;
-  padding: 4px 8px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  padding: 6px 10px;
   cursor: pointer;
   transition: all 0.2s;
   font-family: var(--font-body);
-  min-width: 28px;
+  min-width: 32px;
+  min-height: 32px;
 }
 
 .live-expand-btn:hover {

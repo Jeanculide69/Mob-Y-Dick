@@ -19,7 +19,7 @@ export default function AdminPanel({ onClose }) {
   const [gallery, setGallery] = useState([])
   const [products, setProducts] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
-  const [settings, setSettings] = useState({})
+  const [, setSettings] = useState({})
   const [affiliations, setAffiliations] = useState([])
   const [affiliationsLoading, setAffiliationsLoading] = useState(false)
 

@@ -20,7 +20,6 @@ export default function Championnat() {
   const [selectedCat, setSelectedCat] = useState('all')
   const [allCategories, setAllCategories] = useState([])
 
-  useEffect(() => { loadChampionship() }, [])
 
   const loadChampionship = async () => {
     setLoading(true)
@@ -121,6 +120,9 @@ export default function Championnat() {
     setLeaderboard(board)
     setLoading(false)
   }
+
+  // eslint-disable-next-line react-hooks/set-state-in-effect
+  useEffect(() => { loadChampionship() }, [])
 
   if (loading) return (
     <section className="section page-top">

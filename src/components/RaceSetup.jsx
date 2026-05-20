@@ -27,10 +27,10 @@ const DEMO_TEAMS = [
   { moto_number: 74, category: '70cc', pilot_1_name: 'Cédric Roger', pilot_1_sex: 'M', pilot_2_name: 'Arnaud Leroy', pilot_2_sex: 'M' }
 ]
 
-export default function RaceSetup({ event, session, profile, isAdmin, onStartRace, onClose }) {
+export default function RaceSetup({ event, session, isAdmin, onStartRace, onClose }) {
   const [raceSession, setRaceSession] = useState(null)
   const [teams, setTeams] = useState([])
-  const [loading, setLoading] = useState(true)
+
   const [categories, setCategories] = useState(DEFAULT_CATEGORIES)
   const [newCategory, setNewCategory] = useState('')
   const [previousSessions, setPreviousSessions] = useState([])
@@ -50,13 +50,7 @@ export default function RaceSetup({ event, session, profile, isAdmin, onStartRac
   })
   const [editingTeam, setEditingTeam] = useState(null)
 
-  useEffect(() => {
-    loadSession()
-    loadPreviousSessions()
-  }, [event])
-
   const loadSession = async () => {
-    setLoading(true)
     // Check if a race session already exists for this event
     const { data: sessions } = await supabase
       .from('race_sessions')
@@ -86,7 +80,6 @@ export default function RaceSetup({ event, session, profile, isAdmin, onStartRac
         setLaps(lapsData || [])
       }
     }
-    setLoading(false)
   }
 
   const loadPreviousSessions = async () => {
@@ -98,6 +91,13 @@ export default function RaceSetup({ event, session, profile, isAdmin, onStartRac
       .limit(10)
     setPreviousSessions(data || [])
   }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadSession()
+    loadPreviousSessions()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [event])
 
   const handleCreateSession = async () => {
     const { data, error } = await supabase.from('race_sessions').insert([{
@@ -300,7 +300,7 @@ export default function RaceSetup({ event, session, profile, isAdmin, onStartRac
       const leader = sorted[0]
       const prev = sorted[index - 1]
       
-      let gapToLeader = ''
+      let gapToLeader;
       if (r.totalLaps === leader.totalLaps) {
         gapToLeader = `+${((r.lastPassageTime - leader.lastPassageTime) / 1000).toFixed(3)}s`
       } else {
@@ -308,7 +308,7 @@ export default function RaceSetup({ event, session, profile, isAdmin, onStartRac
         gapToLeader = `+${lapsDown} ${lapsDown === 1 ? 'Tour' : 'Tours'}`
       }
 
-      let interval = ''
+      let interval;
       if (r.totalLaps === prev.totalLaps) {
         interval = `+${((r.lastPassageTime - prev.lastPassageTime) / 1000).toFixed(3)}s`
       } else {

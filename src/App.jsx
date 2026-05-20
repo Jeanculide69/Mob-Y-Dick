@@ -27,6 +27,7 @@ const GoogleAd = ({ slot = '1234567890', format = 'auto', style = { display: 'bl
       }
     } catch (e) {
       console.warn("Google AdSense loading failed or ad blocker active.", e);
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAdError(true);
     }
   }, [slot]);
@@ -100,7 +101,8 @@ const SidebarAd = ({ side = 'left', navigate }) => {
       if (window.adsbygoogle) {
         (window.adsbygoogle || []).push({});
       }
-    } catch (e) {
+    } catch {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setAdError(true);
     }
   }, []);
@@ -352,7 +354,6 @@ function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isModerator, setIsModerator] = useState(false)
-  const [isOrganisateur, setIsOrganisateur] = useState(false)
   const [session, setSession] = useState(null)
   const [profile, setProfile] = useState(null)
   const [showAuthModal, setShowAuthModal] = useState(false)
@@ -559,6 +560,7 @@ function App() {
   useEffect(() => {
     const hasSeen = sessionStorage.getItem('myd_intro_seen')
     if (!hasSeen) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowIntroSplash(true)
     }
   }, [])
@@ -594,10 +596,30 @@ function App() {
       permissions: ['manage_events', 'manage_products', 'manage_gallery', 'manage_team', 'manage_bikes', 'manage_settings', 'manage_races', 'manage_users', 'moderate_content']
     };
 
+    const fetchProfileLocal = async (userId) => {
+      let { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
+      if (!data) {
+        await new Promise(r => setTimeout(r, 600))
+        const retry = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
+        data = retry.data
+      }
+      if (data) {
+        setProfile(data)
+        setIsAdmin(data.role === 'admin')
+        setIsModerator(data.role === 'moderator')
+        return data.role === 'admin'
+      }
+      console.error('Profile not found for user', userId, '— check handle_new_user trigger')
+      setProfile(null)
+      setIsAdmin(false)
+      setIsModerator(false)
+      return false
+    }
+
     const handleSession = (session) => {
       setSession(session)
       if (session) {
-        fetchProfile(session.user.id, session.user.email).then((adminStatus) => {
+        fetchProfileLocal(session.user.id).then((adminStatus) => {
           refreshData(adminStatus)
         })
         // Re-fetch fresh race session data from Supabase to replace stale localStorage state
@@ -616,13 +638,11 @@ function App() {
         setProfile(mockProfile)
         setIsAdmin(true)
         setIsModerator(true)
-        setIsOrganisateur(true)
         refreshData(true)
       } else {
         setProfile(null)
         setIsAdmin(false)
         setIsModerator(false)
-        setIsOrganisateur(false)
         // Clear race chrono state if user is not authenticated
         setActiveRaceView(null)
         setActiveRaceSession(null)
@@ -643,12 +663,10 @@ function App() {
     })
 
     return () => subscription.unsubscribe()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const fetchProfile = async (userId, userEmail) => {
-    // Profile creation is handled exclusively by the Postgres trigger handle_new_user.
-    // The trigger runs AFTER INSERT on auth.users, so on first signup the profile may
-    // arrive a few hundred ms later than this fetch — we retry once after a short delay.
+  const fetchProfile = async (userId) => {
     let { data } = await supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
     if (!data) {
       await new Promise(r => setTimeout(r, 600))
@@ -659,16 +677,11 @@ function App() {
       setProfile(data)
       setIsAdmin(data.role === 'admin')
       setIsModerator(data.role === 'moderator')
-      setIsOrganisateur(data.role === 'organisateur')
       return data.role === 'admin'
     }
-    // No profile after retry: stay non-admin. Trigger likely failed — surface the issue
-    // in console rather than silently granting privileges.
-    console.error('Profile not found for user', userId, userEmail, '— check handle_new_user trigger')
     setProfile(null)
     setIsAdmin(false)
     setIsModerator(false)
-    setIsOrganisateur(false)
     return false
   }
 
@@ -708,6 +721,7 @@ function App() {
         })
       }
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isAdmin, dbTeam])
 
 
@@ -1168,7 +1182,7 @@ function App() {
               const pendingOrders = dbOrders.filter(o => o.status === 'En attente de paiement').length
               const pendingSponsors = dbSponsors.filter(s => s.status === 'En attente').length
               const totalNotifs = pendingOrders + pendingSponsors
-              const closeMenu = () => setAdminMenuOpen(false)
+              const closeMenu = () => { setAdminMenuOpen(false); setMobileMenuOpen(false); }
               const adminMenuItems = [
                 ...((!dbProducts || dbProducts.length === 0) ? [{
                   id: 'init', icon: '🚀', label: 'Remplir la base',
@@ -1265,7 +1279,7 @@ function App() {
                 <span>{profile?.display_name || session.user.email.split('@')[0]}</span>
               </button>
             ) : (
-              <button className="nav-link login-btn" onClick={() => setShowAuthModal(true)}>
+              <button className="nav-link login-btn" onClick={() => { setMobileMenuOpen(false); setShowAuthModal(true); }}>
                 🔑 Connexion
               </button>
             )}
@@ -1281,29 +1295,13 @@ function App() {
         {activeTab === 'home' && (
           <>
             {liveSession && liveSession.status === 'live' && (
-              <div className="live-race-banner fade-in" onClick={() => navigate('live')} style={{
-                background: 'linear-gradient(135deg, rgba(234, 18, 18, 0.95) 0%, rgba(186, 12, 12, 0.95) 100%)',
-                borderBottom: '2px solid #ff4444',
-                padding: '16px 20px',
-                textAlign: 'center',
-                cursor: 'pointer',
-                boxShadow: '0 8px 30px rgba(234, 18, 18, 0.4)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '14px',
-                position: 'relative',
-                zIndex: 10,
-                transition: 'all 0.3s ease',
-                margin: '10px 20px 0 20px',
-                borderRadius: '12px'
-              }}>
-                <span className="nav-live-dot" style={{ width: '12px', height: '12px', backgroundColor: '#fff', borderRadius: '50%', display: 'inline-block', boxShadow: '0 0 10px #fff' }} />
-                <span style={{ fontWeight: '800', textTransform: 'uppercase', letterSpacing: '1.5px', fontSize: '1.1rem', color: '#fff' }}>
-                  🏁 COURSE EN DIRECT EN COURS !
+              <div className="live-race-banner fade-in" onClick={() => navigate('live')}>
+                <span className="live-race-banner-dot" />
+                <span className="live-race-banner-title">
+                  🏁 COURSE EN DIRECT EN COURS&nbsp;!
                 </span>
-                <span style={{ background: '#fff', color: '#ea1212', padding: '6px 16px', borderRadius: '20px', fontSize: '0.95rem', fontWeight: 'bold', boxShadow: '0 2px 10px rgba(0,0,0,0.3)', display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
-                  📺 REJOINDRE LE LIVE EN UN CLIC
+                <span className="live-race-banner-cta">
+                  📺 REJOINDRE LE LIVE
                 </span>
               </div>
             )}

@@ -551,17 +551,19 @@
 }
 
 .chrono-status-btn {
-  padding: 3px 8px;
+  padding: 6px 12px;
   border-radius: 6px;
   border: 1px solid var(--border-subtle);
   background: transparent;
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s;
   font-family: var(--font-heading);
   letter-spacing: 0.5px;
+  min-height: 32px;
+  min-width: 44px;
 }
 
 .chrono-status-btn:hover {

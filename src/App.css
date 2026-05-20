@@ -636,12 +636,21 @@
 @media (max-width: 768px) {
   .hamburger { display: flex; }
 
-  .nav-inner { height: 70px; }
-  .nav-logo { height: 52px; }
-  .navbar.with-admin-banner .nav-links { top: 120px; }
-  
-  .page-top { padding-top: 100px; }
-  main.with-admin-banner .page-top { padding-top: 120px; }
+  .nav-inner { height: 64px; }
+  .nav-logo { height: 44px; }
+  .navbar.with-admin-banner .nav-links { top: 116px; }
+
+  .page-top { padding-top: 90px; }
+  main.with-admin-banner .page-top { padding-top: 110px; }
+
+  .hero {
+    padding: 50px 16px 40px;
+  }
+  .hero-sub {
+    font-size: 1rem;
+    letter-spacing: 2px;
+    margin-bottom: 28px;
+  }
 
   .bike-showcase {
     padding: 24px 16px !important;
@@ -654,15 +663,17 @@
 
   .nav-links {
     position: fixed;
-    top: 70px;
+    top: 64px;
     left: 0;
     right: 0;
     bottom: 0;
     background: rgba(10, 10, 10, 0.97);
     backdrop-filter: blur(20px);
     flex-direction: column;
-    justify-content: center;
-    gap: 20px;
+    justify-content: flex-start;
+    align-items: stretch;
+    padding: 24px 20px;
+    gap: 4px;
     transform: translateX(100%);
     transition: transform 0.4s var(--ease-out);
     z-index: 999;
@@ -670,8 +681,12 @@
   .nav-links.open { transform: translateX(0); }
 
   .nav-link {
-    font-size: 1.2rem !important;
-    padding: 16px 32px !important;
+    font-size: 1.05rem !important;
+    padding: 14px 18px !important;
+    text-align: left;
+    border-radius: 10px;
+    width: 100%;
+    justify-content: flex-start;
   }
 
   .nav-donate { margin-left: 0 !important; margin-top: 20px; }
@@ -1018,7 +1033,7 @@
 }
 
 /* Mobile : dropdown takes full screen width below the navbar */
-@media (max-width: 900px) {
+@media (max-width: 900px) and (min-width: 769px) {
   .admin-menu-dropdown {
     position: fixed;
     top: 72px;
@@ -1026,6 +1041,49 @@
     right: 10px;
     width: auto;
     max-width: none;
+  }
+}
+
+/* Mobile (≤768px) : dropdown is rendered INLINE inside the open mobile menu.
+   The .nav-links parent uses `transform`, which creates a containing block
+   and breaks `position: fixed`. Inline flow is also more ergonomic. */
+@media (max-width: 768px) {
+  .nav-admin-wrap {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .nav-admin-trigger {
+    justify-content: center;
+  }
+
+  .admin-menu-overlay {
+    display: none;
+  }
+
+  .admin-menu-dropdown {
+    position: static;
+    top: auto;
+    left: auto;
+    right: auto;
+    width: 100%;
+    max-width: 100%;
+    margin-top: 8px;
+    background: rgba(20, 20, 20, 0.85) !important;
+    animation: none;
+  }
+
+  .admin-menu-dropdown-header {
+    padding: 10px 14px;
+    font-size: 0.78rem;
+  }
+
+  .admin-menu-item {
+    padding: 14px 14px;
+    font-size: 1rem;
+    min-height: 48px;
   }
 }
 
@@ -1483,6 +1541,8 @@ select option {
   display: flex;
   gap: 16px;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .footer-legal-btn {
@@ -2146,6 +2206,83 @@ select option {
 @media (max-width: 1440px) {
   .wing-panel {
     display: none !important;
+  }
+}
+
+/* ─── LIVE Race Banner (Hero top) ─── */
+.live-race-banner {
+  background: linear-gradient(135deg, rgba(234, 18, 18, 0.95) 0%, rgba(186, 12, 12, 0.95) 100%);
+  border: 2px solid #ff4444;
+  padding: 14px 18px;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 8px 30px rgba(234, 18, 18, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  position: relative;
+  z-index: 10;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  margin: 10px 20px 0 20px;
+  border-radius: 12px;
+  flex-wrap: wrap;
+}
+
+.live-race-banner:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 36px rgba(234, 18, 18, 0.5);
+}
+
+.live-race-banner-dot {
+  width: 12px;
+  height: 12px;
+  background: #fff;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 10px #fff;
+  animation: livePulse 1.2s infinite;
+  flex-shrink: 0;
+}
+
+.live-race-banner-title {
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-size: 1.1rem;
+  color: #fff;
+}
+
+.live-race-banner-cta {
+  background: #fff;
+  color: #ea1212;
+  padding: 6px 16px;
+  border-radius: 20px;
+  font-size: 0.92rem;
+  font-weight: 800;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+  .live-race-banner {
+    margin: 8px 12px 0 12px;
+    padding: 12px 14px;
+    gap: 10px;
+    flex-direction: column;
+  }
+  .live-race-banner-title {
+    font-size: 0.95rem;
+    letter-spacing: 1px;
+    line-height: 1.3;
+  }
+  .live-race-banner-cta {
+    font-size: 0.82rem;
+    padding: 8px 14px;
+    min-height: 36px;
   }
 }
 

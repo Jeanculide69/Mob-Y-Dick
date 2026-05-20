@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import './LiveChat.css';
 
-export default function LiveChat({ session, profile, isAdmin, isModerator }) {
+export default function LiveChat({ session, isAdmin, isModerator }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -12,6 +12,7 @@ export default function LiveChat({ session, profile, isAdmin, isModerator }) {
 
   useEffect(() => {
     isOpenRef.current = isOpen;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (isOpen) setUnreadCount(0);
   }, [isOpen]);
 
