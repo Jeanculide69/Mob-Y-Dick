@@ -10,6 +10,7 @@ import RaceSetup from './components/RaceSetup'
 import RaceChrono from './components/RaceChrono'
 import LiveRace from './components/LiveRace'
 import Championnat from './components/Championnat'
+import MotoPage from './components/MotoPage'
 import './components/AuthNavbar.css'
 
 const SITE_VERSION = 'v2.0.0'
@@ -407,6 +408,10 @@ function App() {
   const [submittingSponsor, setSubmittingSponsor] = useState(false)
   const [sponsorSuccess, setSponsorSuccess] = useState(false)
   const [dbSponsors, setDbSponsors] = useState([])
+
+  // Moto affiliation system
+  const [viewingMotoNumber, setViewingMotoNumber] = useState(null)
+  const [activeMotoNumbers, setActiveMotoNumbers] = useState([])
   const [checkoutData, setCheckoutData] = useState({
     customText: '',
     size: 'M',
@@ -521,6 +526,19 @@ function App() {
     if (viewingSessionId) localStorage.setItem('myd_viewingSessionId', viewingSessionId)
     else localStorage.removeItem('myd_viewingSessionId')
   }, [viewingSessionId])
+
+  // Load active moto numbers from race_teams when bikes tab opens
+  useEffect(() => {
+    if (activeTab !== 'bikes') return
+    supabase.from('race_teams')
+      .select('moto_number')
+      .then(({ data }) => {
+        if (data) {
+          const unique = [...new Set(data.map(t => t.moto_number))].filter(Boolean).sort((a, b) => a - b)
+          setActiveMotoNumbers(unique)
+        }
+      })
+  }, [activeTab])
 
   // Trigger cinematic splash screen on first visit in the current session
   useEffect(() => {
@@ -1476,6 +1494,52 @@ function App() {
                   );
                 })()}
               </div>
+
+              {/* ─── Numéros de course actifs ─── */}
+              {activeMotoNumbers.length > 0 && (
+                <div style={{ marginTop: '48px' }}>
+                  <div className="section-header" style={{ marginBottom: '24px' }}>
+                    <span className="section-tag">Numéros Actifs</span>
+                    <h2>Profils des Motos</h2>
+                    <p className="section-sub">Chaque numéro a sa propre page — stats de course, pilotes affiliés et personnalisation.</p>
+                  </div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '12px', justifyContent: 'center' }}>
+                    {activeMotoNumbers.map(num => (
+                      <button
+                        key={num}
+                        onClick={() => setViewingMotoNumber(num)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          width: '80px',
+                          height: '80px',
+                          background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))',
+                          border: 'none',
+                          borderRadius: '14px',
+                          color: '#fff',
+                          fontSize: '1.8rem',
+                          fontWeight: '900',
+                          fontFamily: 'var(--font-heading)',
+                          cursor: 'pointer',
+                          boxShadow: '0 4px 20px var(--accent-glow)',
+                          transition: 'all 0.2s var(--ease-spring)',
+                          letterSpacing: '1px',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.transform = 'translateY(-4px) scale(1.08)'; e.currentTarget.style.boxShadow = '0 8px 32px var(--accent-glow)' }}
+                        onMouseLeave={e => { e.currentTarget.style.transform = ''; e.currentTarget.style.boxShadow = '0 4px 20px var(--accent-glow)' }}
+                        title={`Voir le profil du #${num}`}
+                      >
+                        #{num}
+                      </button>
+                    ))}
+                  </div>
+                  <p style={{ textAlign: 'center', marginTop: '16px', color: 'var(--text-muted)', fontSize: '0.82rem' }}>
+                    Clique sur un numéro pour voir les stats et demander ton affiliation
+                  </p>
+                </div>
+              )}
+
             </div>
           </section>
         )}
@@ -2012,6 +2076,17 @@ function App() {
 
       {/* ─── Live Chat (global — visible sur toutes les pages) ─── */}
       <LiveChat session={session} profile={profile} isAdmin={isAdmin} isModerator={isModerator} />
+
+      {/* ─── Moto Profile Page (overlay) ─── */}
+      {viewingMotoNumber && (
+        <MotoPage
+          motoNumber={viewingMotoNumber}
+          session={session}
+          isAdmin={isAdmin}
+          isModerator={isModerator}
+          onClose={() => setViewingMotoNumber(null)}
+        />
+      )}
 
       {/* ─── Auth Modal (Google & Email) ─── */}
       <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />

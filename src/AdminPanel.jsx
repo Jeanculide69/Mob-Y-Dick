@@ -20,6 +20,8 @@ export default function AdminPanel({ onClose }) {
   const [products, setProducts] = useState([])
   const [teamMembers, setTeamMembers] = useState([])
   const [settings, setSettings] = useState({})
+  const [affiliations, setAffiliations] = useState([])
+  const [affiliationsLoading, setAffiliationsLoading] = useState(false)
 
   // Forms
   const [eventForm, setEventForm] = useState({ title: '', date: '', location: '', description: '' })
@@ -40,6 +42,10 @@ export default function AdminPanel({ onClose }) {
   useEffect(() => {
     if (isLoggedIn) { fetchAll() }
   }, [isLoggedIn])
+
+  useEffect(() => {
+    if (isLoggedIn && activeSection === 'affiliations') fetchAffiliations()
+  }, [isLoggedIn, activeSection])
 
   async function checkSession() {
     if (!supabase) return
@@ -157,6 +163,27 @@ export default function AdminPanel({ onClose }) {
   }
 
   // ─── Settings ───
+  // ─── Affiliations ───
+  async function fetchAffiliations() {
+    setAffiliationsLoading(true)
+    const { data } = await supabase
+      .from('moto_affiliations')
+      .select('*, profiles(display_name, email)')
+      .order('requested_at', { ascending: false })
+    setAffiliations(data || [])
+    setAffiliationsLoading(false)
+  }
+
+  async function reviewAffiliation(id, status) {
+    const { data: { user } } = await supabase.auth.getUser()
+    await supabase.from('moto_affiliations').update({
+      status,
+      reviewed_at: new Date().toISOString(),
+      reviewed_by: user?.id,
+    }).eq('id', id)
+    fetchAffiliations()
+  }
+
   async function saveSocials(e) {
     e.preventDefault()
     for (const [key, value] of Object.entries(socialForm)) {
@@ -188,12 +215,15 @@ export default function AdminPanel({ onClose }) {
     )
   }
 
+  const pendingCount = affiliations.filter(a => a.status === 'pending').length
+
   const TABS = [
     { key: 'events', icon: '📅', label: 'Événements' },
     { key: 'gallery', icon: '📸', label: 'Galerie' },
     { key: 'products', icon: '🛍️', label: 'Boutique' },
     { key: 'team', icon: '👥', label: 'Équipe' },
     { key: 'socials', icon: '🔗', label: 'Réseaux' },
+    { key: 'affiliations', icon: '🏍️', label: `Affiliations${pendingCount > 0 ? ` (${pendingCount})` : ''}` },
     { key: 'settings', icon: '⚙️', label: 'Paramètres' },
   ]
 
@@ -359,6 +389,130 @@ export default function AdminPanel({ onClose }) {
               <input type="url" placeholder="https://snapchat.com/..." value={socialForm.snapchat} onChange={e => setSocialForm({...socialForm, snapchat: e.target.value})} />
               <button type="submit" className="btn btn-primary" style={{marginTop:'12px'}}>Enregistrer</button>
             </form>
+          )}
+
+          {/* ─── AFFILIATIONS ─── */}
+          {activeSection === 'affiliations' && (
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <h3 style={{ margin: 0 }}>🏍️ Demandes d'affiliation aux motos</h3>
+                <button className="btn btn-ghost" style={{ fontSize: '0.8rem', padding: '6px 12px' }} onClick={fetchAffiliations}>↻ Actualiser</button>
+              </div>
+
+              {affiliationsLoading && <p style={{ color: 'var(--text-muted)' }}>Chargement...</p>}
+
+              {!affiliationsLoading && affiliations.length === 0 && (
+                <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '40px 0' }}>
+                  Aucune demande d'affiliation pour le moment.
+                </p>
+              )}
+
+              {/* Pending first */}
+              {['pending', 'approved', 'rejected'].map(statusGroup => {
+                const group = affiliations.filter(a => a.status === statusGroup)
+                if (group.length === 0) return null
+                const labels = { pending: '⏳ En attente', approved: '✅ Approuvées', rejected: '❌ Refusées' }
+                return (
+                  <div key={statusGroup} style={{ marginBottom: '24px' }}>
+                    <h4 style={{
+                      margin: '0 0 10px',
+                      fontSize: '0.8rem',
+                      textTransform: 'uppercase',
+                      letterSpacing: '1.5px',
+                      color: statusGroup === 'pending' ? '#ffaa00' : statusGroup === 'approved' ? '#00cc66' : '#ff6666',
+                      borderBottom: '1px solid rgba(255,255,255,0.06)',
+                      paddingBottom: '8px',
+                    }}>
+                      {labels[statusGroup]} ({group.length})
+                    </h4>
+                    {group.map(aff => {
+                      const userName = aff.profiles?.display_name || aff.profiles?.email || aff.user_id.slice(0, 8) + '…'
+                      return (
+                        <div key={aff.id} style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '14px',
+                          padding: '14px 16px',
+                          marginBottom: '8px',
+                          background: 'rgba(255,255,255,0.03)',
+                          border: '1px solid rgba(255,255,255,0.06)',
+                          borderRadius: '12px',
+                          flexWrap: 'wrap',
+                        }}>
+                          {/* Moto number plate */}
+                          <div style={{
+                            background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))',
+                            color: '#fff',
+                            fontWeight: '900',
+                            fontSize: '1.1rem',
+                            fontFamily: 'var(--font-heading)',
+                            padding: '6px 14px',
+                            borderRadius: '8px',
+                            letterSpacing: '1px',
+                            flexShrink: 0,
+                          }}>
+                            #{aff.moto_number}
+                          </div>
+
+                          {/* Info */}
+                          <div style={{ flex: 1, minWidth: '140px' }}>
+                            <div style={{ fontWeight: '600', color: '#fff', fontSize: '0.9rem' }}>{userName}</div>
+                            {aff.note && (
+                              <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '3px', fontStyle: 'italic' }}>
+                                « {aff.note} »
+                              </div>
+                            )}
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                              {new Date(aff.requested_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                            </div>
+                          </div>
+
+                          {/* Actions */}
+                          {statusGroup === 'pending' && (
+                            <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+                              <button
+                                className="btn btn-primary"
+                                style={{ padding: '7px 14px', fontSize: '0.8rem', background: 'linear-gradient(135deg,#00cc66,#009944)', boxShadow: 'none' }}
+                                onClick={() => reviewAffiliation(aff.id, 'approved')}
+                              >
+                                ✅ Approuver
+                              </button>
+                              <button
+                                className="btn btn-ghost"
+                                style={{ padding: '7px 14px', fontSize: '0.8rem', borderColor: '#ff4444', color: '#ff4444' }}
+                                onClick={() => reviewAffiliation(aff.id, 'rejected')}
+                              >
+                                ❌ Refuser
+                              </button>
+                            </div>
+                          )}
+
+                          {statusGroup === 'approved' && (
+                            <button
+                              className="btn btn-ghost"
+                              style={{ padding: '6px 12px', fontSize: '0.75rem', borderColor: '#ff4444', color: '#ff4444', flexShrink: 0 }}
+                              onClick={() => reviewAffiliation(aff.id, 'rejected')}
+                            >
+                              Révoquer
+                            </button>
+                          )}
+
+                          {statusGroup === 'rejected' && (
+                            <button
+                              className="btn btn-ghost"
+                              style={{ padding: '6px 12px', fontSize: '0.75rem', borderColor: '#00cc66', color: '#00cc66', flexShrink: 0 }}
+                              onClick={() => reviewAffiliation(aff.id, 'approved')}
+                            >
+                              Réapprouver
+                            </button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )
+              })}
+            </div>
           )}
 
           {/* ─── SETTINGS ─── */}
