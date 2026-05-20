@@ -1131,6 +1131,25 @@ function LiveVideoBroadcaster({ session, raceSession }) {
     return () => supabase.removeChannel(ch)
   }, [raceSession.id, session.user.id])
 
+  // Check camera permission on mount
+  const [permissionBlocked, setPermissionBlocked] = useState(false)
+  useEffect(() => {
+    const checkCameraPermission = async () => {
+      try {
+        if (navigator.permissions && navigator.permissions.query) {
+          const result = await navigator.permissions.query({ name: 'camera' })
+          setPermissionBlocked(result.state === 'denied')
+          result.addEventListener('change', () => {
+            setPermissionBlocked(result.state === 'denied')
+          })
+        }
+      } catch (e) {
+        // Permissions API not supported (Safari), skip check
+      }
+    }
+    checkCameraPermission()
+  }, [])
+
   // Auto clean-up on unmount
   useEffect(() => {
     return () => {
@@ -1320,16 +1339,39 @@ function LiveVideoBroadcaster({ session, raceSession }) {
         </div>
       ) : (
         <div>
+          {permissionBlocked && (
+            <div style={{ padding: '14px', background: 'rgba(255,165,0,0.1)', border: '1px solid rgba(255,165,0,0.3)', borderRadius: '10px', marginBottom: '15px', lineHeight: '1.6' }}>
+              <p style={{ margin: '0 0 10px 0', fontSize: '0.95rem', color: '#ffaa00', fontWeight: 'bold' }}>
+                🔒 Caméra bloquée par le navigateur
+              </p>
+              <p style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: '#ccc' }}>
+                Tu as refusé l'accès caméra précédemment. Pour débloquer :
+              </p>
+              <ol style={{ margin: '0 0 12px 0', paddingLeft: '20px', fontSize: '0.85rem', color: '#ccc' }}>
+                <li>Appuie sur le <strong>cadenas 🔒</strong> (ou l'icône ⓘ) dans la barre d'adresse</li>
+                <li>Appuie sur <strong>"Autorisations"</strong> ou <strong>"Paramètres du site"</strong></li>
+                <li>Mets <strong>Caméra → Autoriser</strong></li>
+                <li><strong>Recharge la page</strong> (tire vers le bas ou appuie sur ↻)</li>
+              </ol>
+              <button 
+                className="btn btn-primary"
+                onClick={() => window.location.reload()}
+                style={{ background: '#ffaa00', color: '#000', border: 'none', fontSize: '0.85rem', padding: '8px 16px' }}
+              >
+                🔄 J'ai autorisé — Recharger la page
+              </button>
+            </div>
+          )}
           <p style={{ margin: '0 0 15px 0', fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
             Partagez la course en direct depuis le bord de la piste ! Les spectateurs verront votre caméra s'afficher instantanément sur la page live.
           </p>
           <button 
             className="btn btn-primary" 
             onClick={startStreaming}
-            disabled={loading}
-            style={{ background: 'linear-gradient(135deg, #ff5500 0%, #ff8c42 100%)', border: 'none' }}
+            disabled={loading || permissionBlocked}
+            style={{ background: permissionBlocked ? 'rgba(150,150,150,0.3)' : 'linear-gradient(135deg, #ff5500 0%, #ff8c42 100%)', border: 'none', opacity: permissionBlocked ? 0.6 : 1 }}
           >
-            {loading ? 'Initialisation...' : '🎥 Lancer le Live Vidéo'}
+            {loading ? 'Initialisation...' : permissionBlocked ? '🔒 Caméra bloquée — voir ci-dessus' : '🎥 Lancer le Live Vidéo'}
           </button>
         </div>
       )}
