@@ -2245,6 +2245,12 @@ select option {
   min-height: 300px;
 }
 
+/* Facebook videos are widescreen */
+.gallery-iframe-fb-video {
+  aspect-ratio: 16 / 9;
+  min-height: unset;
+}
+
 /* ═══════════════════════════════════════════════
    Page / Section entrance animation
    ═══════════════════════════════════════════════ */

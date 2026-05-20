@@ -276,15 +276,29 @@ const detectEmbedSource = (url) => {
 }
 
 const getSocialEmbedUrl = (url) => {
+  // YouTube
   const yt = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/)
   if (yt) return `https://www.youtube.com/embed/${yt[1]}`
+
+  // Instagram
   const ig = url.match(/instagram\.com\/(p|reel|tv)\/([a-zA-Z0-9_-]+)/)
   if (ig) return `https://www.instagram.com/${ig[1]}/${ig[2]}/embed/`
+
+  // Facebook — détecter vidéo vs post
   if (/facebook\.com|fb\.com/.test(url)) {
+    const isFbVideo = /\/share\/v\/|\/videos\/|\/watch[/?]|\/reel\//.test(url)
+    if (isFbVideo) {
+      return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(url)}&show_text=false&width=560&height=315&allowFullScreen=true`
+    }
     return `https://www.facebook.com/plugins/post.php?href=${encodeURIComponent(url)}&show_text=true&width=500`
   }
+
   return url
 }
+
+// Retourne 'video' si l'URL Facebook est clairement une vidéo
+const isFacebookVideoUrl = (url) =>
+  /facebook\.com|fb\.com/.test(url) && /\/share\/v\/|\/videos\/|\/watch[/?]|\/reel\//.test(url)
 
 const renderGalleryMedia = (item) => {
   const src = item.url
@@ -302,14 +316,15 @@ const renderGalleryMedia = (item) => {
     )
   }
   if (item.source === 'facebook') {
+    const isFbVid = isFacebookVideoUrl(src)
     return (
       <iframe
         src={getSocialEmbedUrl(src)}
-        className="gallery-media gallery-iframe gallery-iframe-fb"
+        className={`gallery-media gallery-iframe gallery-iframe-fb${isFbVid ? ' gallery-iframe-fb-video' : ''}`}
         frameBorder="0"
         scrolling="no"
         allowFullScreen
-        allow="encrypted-media"
+        allow={isFbVid ? 'autoplay; clipboard-write; encrypted-media; picture-in-picture' : 'encrypted-media'}
         title={item.title}
       />
     )
@@ -2576,13 +2591,18 @@ function App() {
                           type="url"
                           placeholder="Colle ton lien Instagram, Facebook ou YouTube…"
                           value={formData.embed_url}
-                          onChange={e => setFormData({...formData, embed_url: e.target.value})}
+                          onChange={e => {
+                            const url = e.target.value
+                            const autoType = isFacebookVideoUrl(url) || /youtube\.com|youtu\.be/.test(url) ? 'video' : formData.type
+                            setFormData({...formData, embed_url: url, type: autoType})
+                          }}
                           required
                         />
                         {formData.embed_url && (
                           <div style={{ fontSize: '0.8rem', color: 'var(--accent)', marginTop: '-6px', padding: '4px 0' }}>
                             {/instagram\.com/.test(formData.embed_url) && '📸 Instagram détecté — sera intégré directement'}
-                            {/facebook\.com|fb\.com/.test(formData.embed_url) && '📘 Facebook détecté — sera intégré directement'}
+                            {isFacebookVideoUrl(formData.embed_url) && '🎥 Vidéo Facebook détectée — type "Vidéo" sélectionné automatiquement'}
+                            {/facebook\.com|fb\.com/.test(formData.embed_url) && !isFacebookVideoUrl(formData.embed_url) && '📘 Facebook détecté — sera intégré directement'}
                             {/youtube\.com|youtu\.be/.test(formData.embed_url) && '▶️ YouTube détecté — sera intégré directement'}
                             {!/instagram\.com|facebook\.com|fb\.com|youtube\.com|youtu\.be/.test(formData.embed_url) && '🔗 Lien externe détecté'}
                           </div>
