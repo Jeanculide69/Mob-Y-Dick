@@ -894,10 +894,11 @@ function App() {
       } else if (activeForm === 'gallery') {
         if (formData.source === 'embed') {
           const detectedSource = detectEmbedSource(formData.embed_url)
-          await supabase.from('gallery').insert([{
+          const { error: insertErr } = await supabase.from('gallery').insert([{
             title: formData.title, type: formData.type,
             url: formData.embed_url, file_name: '', source: detectedSource
           }])
+          if (insertErr) throw new Error(`Erreur Supabase : ${insertErr.message}`)
         } else {
           if (!formData.file) { alert('Veuillez sélectionner un fichier.'); setUploading(false); return }
           const file = formData.file
@@ -909,10 +910,11 @@ function App() {
           const { error } = await supabase.storage.from('Gallery').upload(fileName, file)
           if (error) throw error
           const { data: { publicUrl } } = supabase.storage.from('Gallery').getPublicUrl(fileName)
-          await supabase.from('gallery').insert([{
+          const { error: insertErr2 } = await supabase.from('gallery').insert([{
             title: formData.title, type: formData.type,
             url: publicUrl, file_name: fileName, source: 'upload'
           }])
+          if (insertErr2) throw new Error(`Erreur Supabase : ${insertErr2.message}`)
         }
       } else if (activeForm === 'product') {
         const uploadedUrls = []
