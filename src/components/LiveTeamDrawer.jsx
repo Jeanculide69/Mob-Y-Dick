@@ -2,7 +2,7 @@
  * LiveTeamDrawer — Panneau détail d'une équipe pendant la course live
  * Desktop : panneau lateral 520px | Mobile : bottom sheet 88dvh
  */
-import { useMemo } from 'react'
+import { useMemo, useEffect } from 'react'
 import './LiveTeamDrawer.css'
 
 // ── SVG chart ────────────────────────────────────────────
@@ -74,6 +74,13 @@ export default function LiveTeamDrawer({ team, allLaps, position, onClose }) {
   const lastTrend = last != null && avg != null
     ? (last < avg ? 'fast' : last > avg ? 'slow' : 'neutral')
     : 'neutral'
+
+  // Verrouille le scroll de la page derrière tant que le drawer est ouvert
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
 
   return (
     <>
