@@ -3,6 +3,7 @@
  * Desktop : panneau lateral 520px | Mobile : bottom sheet 88dvh
  */
 import { useMemo, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 import './LiveTeamDrawer.css'
 
 // ── SVG chart ────────────────────────────────────────────
@@ -116,7 +117,11 @@ export default function LiveTeamDrawer({ team, allLaps, position, onClose }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return (
+  // Portal sur document.body : les sections de la page ont des transforms
+  // (animation pageEnter) qui créent un containing block et cassent le
+  // position:fixed du drawer (sinon il se retrouve placé au milieu du
+  // document, pas du viewport).
+  return createPortal(
     <>
       <div className="ltd-backdrop" onClick={onClose} />
 
@@ -287,6 +292,7 @@ export default function LiveTeamDrawer({ team, allLaps, position, onClose }) {
           </div>
         )}
       </div>
-    </>
+    </>,
+    document.body
   )
 }

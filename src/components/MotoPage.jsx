@@ -46,6 +46,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../supabaseClient'
 import MotoCropper from './MotoCropper'
 import MotoCharts from './MotoCharts'
@@ -399,7 +400,7 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
   }
 
   // ─────────────────────────────────────────
-  if (loading) return (
+  if (loading) return createPortal(
     <div className="moto-page-overlay">
       <div className="moto-page-shell glass">
         <div className="moto-loading">
@@ -407,7 +408,8 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
           <p>Chargement du profil moto...</p>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 
   const displayName = profile?.display_name || `Moto #${motoNumber}`
@@ -416,7 +418,9 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
     ? approvedUsers.join(' / ')
     : (stats?.pilots?.join(' / ') || '—')
 
-  return (
+  // Portal sur document.body : évite que les transforms des sections
+  // parent (animation pageEnter) cassent le position:fixed de l'overlay.
+  return createPortal(
     <>
       <div className="moto-page-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
         <div className="moto-page-shell glass">
@@ -769,6 +773,7 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
           onConfirm={handleCropConfirm}
         />
       )}
-    </>
+    </>,
+    document.body
   )
 }
