@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { supabase } from '../supabaseClient'
 import LiveTeamDrawer from './LiveTeamDrawer'
 import PayPalButton from './PayPalButton'
+import RaceFlagOverlay from './RaceFlagOverlay'
 import { playPremiumSound, playDonationSound } from '../utils/soundEffects'
 import './LiveRace.css'
 
@@ -23,7 +24,7 @@ const formatElapsed = (ms) => {
   return `${h}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`
 }
 
-export default function LiveRace({ customSessionId, onClose }) {
+export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   const [session, setSession]               = useState(null)
   const [teams, setTeams]                   = useState([])
   const [laps, setLaps]                     = useState([])
@@ -680,8 +681,32 @@ export default function LiveRace({ customSessionId, onClose }) {
   const bestOverall  = laps.length > 0 ? Math.min(...laps.map(l => l.lap_time_ms)) : null
   const bestTeam     = bestOverall ? teams.find(t => t.id === laps.find(l => l.lap_time_ms === bestOverall)?.team_id) : null
 
+  // ── Modes overlay : pré-course (drapeau "départ imminent") et post-course
+  //    ("fin de la course" 5min + auto-exit). Calculés à partir du status
+  //    et de started_at / finished_at de la session.
+  const isPreRace  = session?.status === 'live'
+                     && !session?.started_at
+  const isPostRace = session?.status === 'finished'
+                     || session?.status === 'published'
+
   return (
     <section className="section page-top live-section">
+      {/* Overlays drapeau damier (rendus via Portal en interne) */}
+      {isPreRace && (
+        <RaceFlagOverlay mode="pre-race" session={session} />
+      )}
+      {isPostRace && (
+        <RaceFlagOverlay
+          mode="post-race"
+          session={session}
+          onAutoExit={() => {
+            // Soit on remonte au parent qui décide où aller, soit on tombe
+            // sur onClose par défaut.
+            if (onAutoExit) onAutoExit()
+            else if (onClose) onClose()
+          }}
+        />
+      )}
       {/* ── Overlays Live (dons, emotes premium, emojis flottants, annonces) ──
          Rendus dans un Portal sur document.body : la <section> parente a
          un transform résiduel (animation pageEnter) qui crée un containing

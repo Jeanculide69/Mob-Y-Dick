@@ -1,0 +1,260 @@
+/* ═══════════════════════════════════════════
+   RaceFlagOverlay — Drapeau damier fullscreen
+   ═══════════════════════════════════════════ */
+
+.race-flag-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: #050505;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  animation: raceFlagFadeIn 0.5s ease-out both;
+}
+
+@keyframes raceFlagFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.race-flag-svg-defs {
+  position: absolute;
+  width: 0; height: 0;
+  pointer-events: none;
+}
+
+/* ─── Damier de fond ─── */
+.race-flag-canvas {
+  position: absolute;
+  inset: -10%;
+  /* On agrandit pour que le filtre wave ne montre pas les bords */
+  filter: url(#race-flag-wave);
+  will-change: filter;
+  /* Léger zoom + rotation pour mouvement de fond */
+  animation: raceFlagDrift 18s ease-in-out infinite alternate;
+}
+
+@keyframes raceFlagDrift {
+  0%   { transform: scale(1.05) rotate(-1deg); }
+  100% { transform: scale(1.12) rotate(1deg); }
+}
+
+.race-flag-pattern {
+  width: 100%;
+  height: 100%;
+  background-color: #fafafa;
+  /* Damier : 2 dégradés répétitifs croisés */
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      #000 0, #000 80px,
+      transparent 80px, transparent 160px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      #000 0, #000 80px,
+      transparent 80px, transparent 160px
+    );
+  /* Sans cela, les deux dégradés se superposent en noir partout. On
+     décale le 2e via background-position + le blending mode pour faire
+     un VRAI damier. */
+  background-position: 0 0, 80px 80px;
+  background-blend-mode: difference;
+  /* Léger pan continu pour donner l'illusion d'un drapeau qui flotte */
+  animation: raceFlagPan 30s linear infinite;
+}
+
+@keyframes raceFlagPan {
+  from { background-position: 0 0, 80px 80px; }
+  to   { background-position: 160px 160px, 240px 240px; }
+}
+
+/* ─── Vignette ─── */
+.race-flag-vignette {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at center, transparent 30%, rgba(0, 0, 0, 0.85) 100%),
+    linear-gradient(180deg, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0.55) 100%);
+  pointer-events: none;
+}
+
+/* ─── Contenu central ─── */
+.race-flag-content {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  padding: 0 24px;
+  max-width: 640px;
+  animation: raceFlagContentIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.2s both;
+}
+
+@keyframes raceFlagContentIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.race-flag-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 16px;
+  border-radius: 100px;
+  background: rgba(255, 85, 0, 0.18);
+  border: 1px solid rgba(255, 85, 0, 0.45);
+  color: var(--accent);
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 2.5px;
+  margin-bottom: 18px;
+  box-shadow: 0 0 24px rgba(255, 85, 0, 0.25);
+  animation: raceFlagEyebrowPulse 2s ease-in-out infinite;
+}
+
+@keyframes raceFlagEyebrowPulse {
+  0%, 100% { box-shadow: 0 0 16px rgba(255, 85, 0, 0.25); }
+  50%      { box-shadow: 0 0 32px rgba(255, 85, 0, 0.5); }
+}
+
+.race-flag-title {
+  margin: 0 0 12px;
+  font-size: clamp(2.2rem, 7vw, 4rem);
+  font-weight: 900;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 3px;
+  line-height: 1;
+  text-shadow:
+    0 0 30px rgba(255, 85, 0, 0.45),
+    0 6px 32px rgba(0, 0, 0, 0.85);
+}
+
+.race-flag-sub {
+  margin: 0 0 28px;
+  font-size: 1rem;
+  color: rgba(255, 255, 255, 0.82);
+  line-height: 1.5;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.7);
+}
+
+/* ─── Mode pré-départ : points de pulsation ─── */
+.race-flag-pulse-dots {
+  display: inline-flex;
+  gap: 12px;
+}
+
+.race-flag-pulse-dots span {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 12px rgba(255, 85, 0, 0.7);
+  animation: raceFlagDotPulse 1.4s ease-in-out infinite;
+}
+
+.race-flag-pulse-dots span:nth-child(2) { animation-delay: 0.2s; }
+.race-flag-pulse-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes raceFlagDotPulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50%      { opacity: 1;   transform: scale(1.15); }
+}
+
+/* ─── Mode post-race : countdown ─── */
+.race-flag-countdown {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 28px;
+  border-radius: 16px;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  margin-bottom: 16px;
+}
+
+.race-flag-countdown-label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 600;
+}
+
+.race-flag-countdown-time {
+  font-size: 2.4rem;
+  font-weight: 900;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 2px;
+  text-shadow: 0 0 24px rgba(255, 85, 0, 0.5);
+  font-family: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+}
+
+.race-flag-exit-now {
+  font-size: 0.85rem !important;
+  padding: 10px 22px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+}
+
+.race-flag-exit-now:hover {
+  background: rgba(255, 85, 0, 0.18) !important;
+  border-color: rgba(255, 85, 0, 0.6) !important;
+  color: #fff !important;
+}
+
+/* ─── Mobile ─── */
+@media (max-width: 600px) {
+  .race-flag-pattern {
+    /* Damier plus petit sur mobile pour matcher la densité */
+    background-image:
+      repeating-linear-gradient(
+        0deg,
+        #000 0, #000 50px,
+        transparent 50px, transparent 100px
+      ),
+      repeating-linear-gradient(
+        90deg,
+        #000 0, #000 50px,
+        transparent 50px, transparent 100px
+      );
+    background-position: 0 0, 50px 50px;
+  }
+
+  .race-flag-title {
+    letter-spacing: 2px;
+  }
+
+  .race-flag-sub {
+    font-size: 0.9rem;
+  }
+
+  .race-flag-countdown-time {
+    font-size: 2rem;
+  }
+}
+
+/* ─── Réduction du mouvement pour accessibilité ─── */
+@media (prefers-reduced-motion: reduce) {
+  .race-flag-canvas {
+    animation: none;
+    filter: none;
+  }
+  .race-flag-pattern {
+    animation: none;
+  }
+  .race-flag-eyebrow {
+    animation: none;
+  }
+  .race-flag-pulse-dots span {
+    animation: none;
+    opacity: 0.8;
+  }
+}

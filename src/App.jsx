@@ -526,6 +526,37 @@ function App() {
     }
   }
 
+  // ── Realtime sync de la session live courante ──
+  // Quand l'orga termine la course (UPDATE status='finished'), le bouton
+  // "LIVE" doit disparaître immédiatement de la navbar côté tous les
+  // viewers. On écoute toutes les modifs de race_sessions pour réagir.
+  useEffect(() => {
+    if (!supabase) return
+    const ch = supabase.channel('app-race-sessions-watch')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'race_sessions' }, (payload) => {
+        const row = payload.new || payload.old
+        if (!row) return
+        // Met à jour le cache des sessions (pour les badges Live/Résultats
+        // dans l'agenda)
+        setRaceSessions(prev => {
+          if (payload.eventType === 'DELETE') return prev.filter(s => s.id !== row.id)
+          const exists = prev.some(s => s.id === row.id)
+          return exists
+            ? prev.map(s => s.id === row.id ? row : s)
+            : [row, ...prev]
+        })
+        // Met à jour liveSession (bouton LIVE de la navbar)
+        if (row.status === 'live') {
+          setLiveSession(row)
+        } else {
+          // status finished/published/deleted → on retire si c'était la nôtre
+          setLiveSession(curr => (curr && curr.id === row.id) ? null : curr)
+        }
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [])
+
   // Lock body scroll when mobile menu is open (iOS fix)
   useEffect(() => {
     document.body.style.overflow = mobileMenuOpen ? 'hidden' : ''
@@ -2039,6 +2070,14 @@ function App() {
           onClose={() => {
             setViewingSessionId(null)
             setActiveTab('events')
+          }}
+          onAutoExit={() => {
+            // Fin de course : on rentre à l'accueil (vs bouton retour
+            // = events). Nettoie aussi liveSession pour faire disparaitre
+            // le bouton LIVE de la navbar immédiatement.
+            setViewingSessionId(null)
+            setLiveSession(null)
+            setActiveTab('home')
           }}
         />
       )}
