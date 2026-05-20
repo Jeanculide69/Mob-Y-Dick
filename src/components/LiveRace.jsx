@@ -747,12 +747,17 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
     <section className="section page-top live-section">
       {/* Overlays drapeau damier (rendus via Portal en interne) */}
       {isPreRace && (
-        <RaceFlagOverlay mode="pre-race" session={session} />
+        <RaceFlagOverlay
+          mode="pre-race"
+          session={session}
+          onClose={onClose}
+        />
       )}
       {isPostRace && (
         <RaceFlagOverlay
           mode="post-race"
           session={session}
+          onClose={onClose}
           onAutoExit={() => {
             // Soit on remonte au parent qui décide où aller, soit on tombe
             // sur onClose par défaut.

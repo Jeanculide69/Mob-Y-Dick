@@ -26,7 +26,7 @@ const formatRemaining = (ms) => {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export default function RaceFlagOverlay({ mode, session, onAutoExit }) {
+export default function RaceFlagOverlay({ mode, session, onAutoExit, onClose }) {
   const [now, setNow] = useState(() => Date.now())
 
   // Ticker pour rafraichir le compteur post-race chaque seconde
@@ -58,8 +58,24 @@ export default function RaceFlagOverlay({ mode, session, onAutoExit }) {
 
   const isPre = mode === 'pre-race'
 
+  const handleClose = () => {
+    if (onClose) onClose()
+    else if (onAutoExit) onAutoExit()
+  }
+
   return createPortal(
     <div className={`race-flag-overlay ${isPre ? 'is-pre' : 'is-post'}`}>
+      {/* Croix de sortie en haut à droite — toujours accessible */}
+      <button
+        type="button"
+        className="race-flag-close-btn"
+        onClick={handleClose}
+        aria-label="Quitter le live"
+        title="Quitter le live"
+      >
+        ✕
+      </button>
+
       {/* Filtre SVG : turbulence + displacement = effet "billowing" du drapeau */}
       <svg className="race-flag-svg-defs" aria-hidden="true">
         <defs>
