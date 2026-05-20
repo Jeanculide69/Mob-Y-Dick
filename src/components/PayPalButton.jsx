@@ -89,7 +89,7 @@ export default function PayPalButton({ amount, onSuccess, style = {}, type = 'ch
         containerRef.current.innerHTML = '';
       }
     };
-  }, [amount, type, style]);
+  }, [amount, type, JSON.stringify(style)]);
 
   return (
     <div style={{ width: '100%', minHeight: '40px', position: 'relative' }}>
