@@ -1160,23 +1160,58 @@ function App() {
 
   return (
     <>
-      {/* ─── Video Background ───
-         playbackRate=0.3 : on ralentit la lecture pour espacer le "seam"
-         de loop (et donc la micro-saccade qui se voyait souvent). */}
+      {/* ─── Video Background — ping-pong (forward → reverse → forward) ───
+         Au lieu de loop classique qui produisait une saccade à la couture,
+         on lit la vidéo en sens normal, puis dès qu'elle finit on la
+         joue à l'envers via requestAnimationFrame (les navigateurs ne
+         supportent pas playbackRate négatif), puis on repart à l'endroit.
+         Effet boucle propre sans seam visible. */}
       <div className="video-bg">
         <video
           autoPlay
-          loop
           muted
           playsInline
-          ref={(el) => {
-            if (el && el.playbackRate !== 0.3) {
-              el.playbackRate = 0.3
-              el.defaultPlaybackRate = 0.3
+          ref={(videoEl) => {
+            if (!videoEl || videoEl.__mydPingPongBound) return
+            videoEl.__mydPingPongBound = true
+
+            // 'forward' : lecture native (autoPlay)
+            // 'reverse' : on pilote currentTime via rAF, video.paused = true
+            let direction = 'forward'
+            let rafId = null
+
+            const REVERSE_SPEED = 0.04 // secondes décrémentées par frame (~30fps perçus à 60Hz)
+
+            const stepReverse = () => {
+              if (direction !== 'reverse') return
+              const next = videoEl.currentTime - REVERSE_SPEED
+              if (next <= 0) {
+                videoEl.currentTime = 0
+                direction = 'forward'
+                videoEl.play().catch(() => {})
+                return
+              }
+              videoEl.currentTime = next
+              rafId = requestAnimationFrame(stepReverse)
             }
-          }}
-          onLoadedMetadata={(e) => {
-            e.currentTarget.playbackRate = 0.3
+
+            const onEnded = () => {
+              direction = 'reverse'
+              videoEl.pause()
+              // On peut être un peu après duration, on cap.
+              if (videoEl.duration && videoEl.currentTime > videoEl.duration) {
+                videoEl.currentTime = videoEl.duration
+              }
+              rafId = requestAnimationFrame(stepReverse)
+            }
+
+            videoEl.addEventListener('ended', onEnded)
+
+            // Clean-up si la ref est démontée (rare en SPA)
+            videoEl.__mydPingPongCleanup = () => {
+              if (rafId) cancelAnimationFrame(rafId)
+              videoEl.removeEventListener('ended', onEnded)
+            }
           }}
         >
           <source src="/video_background.mp4" type="video/mp4" />
