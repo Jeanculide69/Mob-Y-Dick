@@ -1089,23 +1089,53 @@ function LiveVideoBroadcaster({ session, raceSession }) {
   const [isStreaming, setIsStreaming] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState(null)
+  const [otherStreaming, setOtherStreaming] = useState(false) // someone else is streaming
   
   const videoRef = useRef(null)
   const streamRef = useRef(null)
   const intervalRef = useRef(null)
   const channelRef = useRef(null)
 
+  // Check on mount if someone is already streaming
+  useEffect(() => {
+    const checkStreamStatus = async () => {
+      try {
+        const { data } = await supabase
+          .from('race_sessions')
+          .select('live_stream_active, live_stream_user_id')
+          .eq('id', raceSession.id)
+          .single()
+        
+        if (data?.live_stream_active && data?.live_stream_user_id !== session.user.id) {
+          setOtherStreaming(true)
+        } else {
+          setOtherStreaming(false)
+        }
+      } catch (e) {
+        console.log('Stream status check:', e)
+      }
+    }
+    checkStreamStatus()
+
+    // Subscribe to changes on this session to update button state in real-time
+    const ch = supabase.channel(`stream-status-${raceSession.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'race_sessions', filter: `id=eq.${raceSession.id}` }, ({ new: row }) => {
+        if (row.live_stream_active && row.live_stream_user_id !== session.user.id) {
+          setOtherStreaming(true)
+        } else {
+          setOtherStreaming(false)
+        }
+      })
+      .subscribe()
+
+    return () => supabase.removeChannel(ch)
+  }, [raceSession.id, session.user.id])
+
   // Auto clean-up on unmount
   useEffect(() => {
     return () => {
-      // Clear capture loop
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-      }
-      // Stop camera track
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop())
-      }
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      if (streamRef.current) streamRef.current.getTracks().forEach(track => track.stop())
     }
   }, [])
 
@@ -1113,18 +1143,38 @@ function LiveVideoBroadcaster({ session, raceSession }) {
     setLoading(true)
     setErrorMsg(null)
     try {
-      // 1. Request camera stream first (MUST be immediately after user click for iOS Safari)
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: 'environment',
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          frameRate: { ideal: 30 }
-        },
-        audio: false
-      })
+      // 1. Try to get camera - try rear first, then any camera as fallback
+      let stream
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: 'environment',
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+            frameRate: { ideal: 30 }
+          },
+          audio: false
+        })
+      } catch (camErr) {
+        // If rear camera fails, try any camera
+        console.log('Rear camera failed, trying any camera:', camErr.name)
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+            audio: false
+          })
+        } catch (camErr2) {
+          if (camErr2.name === 'NotAllowedError' || camErr2.name === 'PermissionDeniedError') {
+            throw new Error("📷 Accès caméra refusé par le navigateur.\n\nSur Android : appuie sur le cadenas 🔒 dans la barre d'adresse → Autorisations → Caméra → Autoriser, puis recharge la page.\n\nSur iPhone : Réglages → Safari → Caméra → Autoriser.")
+          } else if (camErr2.name === 'NotFoundError') {
+            throw new Error("📷 Aucune caméra détectée sur cet appareil.")
+          } else {
+            throw new Error(`📷 Erreur caméra : ${camErr2.message}`)
+          }
+        }
+      }
 
-      // 2. Concurrency Check: Check if someone else is already streaming
+      // 2. Concurrency Check
       const { data: latestSession, error: checkError } = await supabase
         .from('race_sessions')
         .select('live_stream_active, live_stream_user_id')
@@ -1133,7 +1183,7 @@ function LiveVideoBroadcaster({ session, raceSession }) {
 
       if (checkError) {
         stream.getTracks().forEach(t => t.stop())
-        throw checkError
+        throw new Error("❌ Erreur base de données : " + checkError.message)
       }
 
       if (latestSession.live_stream_active && latestSession.live_stream_user_id !== session.user.id) {
@@ -1142,33 +1192,31 @@ function LiveVideoBroadcaster({ session, raceSession }) {
       }
 
       streamRef.current = stream
-      // Small timeout to allow video tag to mount and be ready
       setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-        }
+        if (videoRef.current) videoRef.current.srcObject = stream
       }, 100)
 
       // 3. Update DB
-      await supabase.from('race_sessions').update({
+      const { error: updateError } = await supabase.from('race_sessions').update({
         live_stream_active: true,
         live_stream_user_id: session.user.id
       }).eq('id', raceSession.id)
 
-      // 4. Initialize Signaling / Frame Channel
+      if (updateError) {
+        stream.getTracks().forEach(t => t.stop())
+        throw new Error("❌ Impossible de verrouiller le live : " + updateError.message)
+      }
+
+      // 4. Initialize Frame Channel
       const channel = supabase.channel(`live-stream-${raceSession.id}`)
       channelRef.current = channel
       channel.subscribe()
 
-      // 5. Canvas capture: 960x540 (qHD) @ ~6 fps, WebP if supported else JPEG.
-      // WebP is typically 25-40% smaller than JPEG for the same visual quality,
-      // letting us push higher resolution under Supabase Realtime payload limits.
+      // 5. Canvas capture: 960x540 @ ~6 fps
       const canvas = document.createElement('canvas')
       canvas.width = 960
       canvas.height = 540
       const ctx = canvas.getContext('2d', { alpha: false })
-
-      // Feature-detect WebP support once at start.
       const webpSupported = canvas.toDataURL('image/webp', 0.5).indexOf('data:image/webp') === 0
       const mimeType = webpSupported ? 'image/webp' : 'image/jpeg'
       const quality = 0.75
@@ -1179,13 +1227,11 @@ function LiveVideoBroadcaster({ session, raceSession }) {
           try {
             ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
             const base64Frame = canvas.toDataURL(mimeType, quality)
-
             channel.send({
               type: 'broadcast',
               event: 'video-frame',
               payload: { image: base64Frame }
             }).catch(err => {
-              // Don't spam the console if the channel hiccups; warn at most once per 5s.
               const now = Date.now()
               if (now - lastWarnTs > 5000) {
                 console.warn('Live frame send failed:', err)
@@ -1208,25 +1254,10 @@ function LiveVideoBroadcaster({ session, raceSession }) {
   }
 
   const stopStreaming = async () => {
-    // Clear capture loop
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
-    }
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
+    if (streamRef.current) { streamRef.current.getTracks().forEach(track => track.stop()); streamRef.current = null }
+    if (channelRef.current) { supabase.removeChannel(channelRef.current); channelRef.current = null }
 
-    // Stop camera track
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop())
-      streamRef.current = null
-    }
-
-    // Clean channels
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current)
-      channelRef.current = null
-    }
-
-    // Update DB
     try {
       await supabase.from('race_sessions').update({
         live_stream_active: false,
@@ -1246,7 +1277,7 @@ function LiveVideoBroadcaster({ session, raceSession }) {
       </h3>
       
       {errorMsg && (
-        <div style={{ padding: '12px', background: 'rgba(255,68,68,0.1)', border: '1px solid rgba(255,68,68,0.2)', color: '#ff4444', borderRadius: '8px', fontSize: '0.88rem', marginBottom: '15px', lineHeight: '1.4' }}>
+        <div style={{ padding: '12px', background: 'rgba(255,68,68,0.1)', border: '1px solid rgba(255,68,68,0.2)', color: '#ff4444', borderRadius: '8px', fontSize: '0.88rem', marginBottom: '15px', lineHeight: '1.4', whiteSpace: 'pre-line' }}>
           {errorMsg}
         </div>
       )}
@@ -1272,6 +1303,19 @@ function LiveVideoBroadcaster({ session, raceSession }) {
             style={{ borderColor: '#ff4444', color: '#ff4444', width: 'fit-content' }}
           >
             🛑 Arrêter le Live Vidéo
+          </button>
+        </div>
+      ) : otherStreaming ? (
+        <div>
+          <p style={{ margin: '0 0 15px 0', fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+            Un autre organisateur diffuse déjà la vidéo en direct sur cette course.
+          </p>
+          <button 
+            className="btn btn-primary" 
+            disabled
+            style={{ background: 'rgba(150,150,150,0.3)', border: 'none', cursor: 'not-allowed', opacity: 0.6 }}
+          >
+            📡 Live Vidéo en Cours...
           </button>
         </div>
       ) : (
