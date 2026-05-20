@@ -95,7 +95,6 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
   const canEdit      = isAffiliated || isAdmin || isModerator
 
   // ─────────────────────────────────────────
-  useEffect(() => { loadAll() }, [motoNumber, session?.user?.id])
 
   const loadAll = async () => {
     setLoading(true)
@@ -245,6 +244,9 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
 
     setAllAffiliations(data || [])
   }
+
+  // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
+  useEffect(() => { loadAll() }, [motoNumber, session?.user?.id])
 
   const handleReviewAffiliation = async (id, newStatus) => {
     setReviewingId(id)
