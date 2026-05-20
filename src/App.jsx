@@ -11,6 +11,7 @@ import RaceChrono from './components/RaceChrono'
 import LiveRace from './components/LiveRace'
 import Championnat from './components/Championnat'
 import MotoPage from './components/MotoPage'
+import PayPalButton from './components/PayPalButton'
 import './components/AuthNavbar.css'
 
 const SITE_VERSION = 'v2.0.0'
@@ -1084,25 +1085,29 @@ function App() {
     })
   }
 
-  const handleCheckoutSubmit = async (e) => {
+  const handleCheckoutSubmit = (e) => {
     e.preventDefault()
-    if (checkoutStep < 3) {
-      setCheckoutStep(checkoutStep + 1)
+    if (checkoutStep === 1) {
+      setCheckoutStep(2)
       return
     }
     
-    // Validate email before step 3
     if (checkoutStep === 2) {
       const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(checkoutData.customerEmail)
       if (!emailOk) {
         alert('Veuillez entrer une adresse e-mail valide.')
         return
       }
+      if (!checkoutData.customerName || !checkoutData.shippingAddress || !checkoutData.shippingCity || !checkoutData.shippingZip) {
+        alert('Veuillez remplir tous les champs de livraison.')
+        return
+      }
       setCheckoutStep(3)
       return
     }
+  }
 
-    // Save to Database (Step 3 to 4)
+  const handleCheckoutPaymentSuccess = async (details, orderId) => {
     try {
       const orderPayload = {
         product_name: checkoutProduct.name,
@@ -1115,15 +1120,17 @@ function App() {
         shipping_city: checkoutData.shippingCity,
         shipping_zip: checkoutData.shippingZip,
         shipping_country: checkoutData.shippingCountry,
-        status: 'En attente de paiement',
-        user_id: session ? session.user.id : null
+        status: 'Paiement Validé',
+        user_id: session ? session.user.id : null,
+        paypal_order_id: orderId
       }
       
       const { error } = await supabase.from('orders').insert([orderPayload])
       if (error) throw error
       setCheckoutStep(4)
+      refreshData()
     } catch (err) {
-      alert('Erreur lors de l\'enregistrement de votre commande. Veuillez réessayer: ' + err.message)
+      alert("Erreur lors de l'enregistrement de votre commande payée : " + err.message)
     }
   }
 
@@ -2308,33 +2315,34 @@ function App() {
                     <p><strong>Adresse :</strong> {checkoutData.shippingAddress}, {checkoutData.shippingZip} {checkoutData.shippingCity}, {checkoutData.shippingCountry}</p>
                   </div>
                   
-                  <p className="checkout-warning-text">⚠️ En cliquant sur valider, ton achat sera enregistré. Tu procéderas ensuite au règlement sécurisé sur PayPal.</p>
+                  <p className="checkout-warning-text" style={{ marginBottom: '15px' }}>⚠️ Procède au règlement sécurisé ci-dessous pour enregistrer et valider ta commande immédiatement.</p>
 
-                  <div className="admin-row" style={{marginTop:'16px'}}>
-                    <button type="button" className="btn btn-ghost" onClick={() => setCheckoutStep(2)}>⬅ Retour</button>
-                    <button type="submit" className="btn btn-primary">Valider et Payer ➔</button>
+                  <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    <PayPalButton
+                      amount={parseFloat(checkoutProduct.price.replace(/[^0-9.]/g, ''))}
+                      onSuccess={handleCheckoutPaymentSuccess}
+                      type="checkout"
+                    />
+                    <button type="button" className="btn btn-ghost" style={{ width: '100%' }} onClick={() => setCheckoutStep(2)}>⬅ Retour</button>
                   </div>
                 </div>
               )}
 
-              {/* STEP 4: PayPal Redirection */}
+              {/* STEP 4: Checkout Success */}
               {checkoutStep === 4 && (
                 <div className="checkout-step-container text-center" style={{textAlign:'center'}}>
                   <span style={{fontSize:'3rem'}}>🎉</span>
-                  <h3 style={{margin:'10px 0'}}>Commande Pré-Enregistrée !</h3>
+                  <h3 style={{margin:'10px 0'}}>Commande validée et payée !</h3>
                   <p style={{color:'var(--text-secondary)', fontSize:'0.95rem', marginBottom:'20px'}}>
-                    Nous avons bien enregistré ta commande pour le pseudo <strong className="text-accent">{checkoutData.customText}</strong>.
+                    Nous avons bien reçu ton paiement de <strong className="text-accent">{checkoutProduct.price}</strong>.
                     <br /><br />
-                    Pour finaliser l'achat et lancer la production, merci d'effectuer le paiement de <strong>{checkoutProduct.price}</strong> via PayPal.
+                    Ta commande pour <strong className="text-accent">{checkoutData.customerName}</strong> a été enregistrée avec succès.
+                    Notre équipe va s'occuper de sa fabrication et de son expédition ! Merci de ton soutien !
                   </p>
                   
-                  <a href={getPayPalLink(checkoutProduct)} target="_blank" rel="noopener noreferrer" className="btn btn-primary checkout-paypal-btn" onClick={() => setCheckoutProduct(null)}>
-                    💰 Payer {checkoutProduct.price} via PayPal
-                  </a>
-                  
-                  <p className="checkout-hint" style={{marginTop:'16px', fontSize:'0.8rem', color:'var(--text-muted)'}}>
-                    Dès confirmation de ton paiement par notre équipe, ta commande passera en fabrication ! Merci du soutien !
-                  </p>
+                  <button type="button" className="btn btn-primary" style={{ width: '100%' }} onClick={() => setCheckoutProduct(null)}>
+                    Fermer
+                  </button>
                 </div>
               )}
             </form>

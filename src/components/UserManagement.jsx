@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../supabaseClient'
 import { PERMISSION_LABELS, ROLE_CONFIG } from './ProfilePage'
 import './UserManagement.css'
@@ -20,6 +20,40 @@ export default function UserManagement({ users, onRefresh }) {
   const [search, setSearch] = useState('')
   const [expandedUser, setExpandedUser] = useState(null)
   const [saving, setSaving] = useState(null)
+
+  const [shopItems, setShopItems] = useState([])
+  const [allPurchases, setAllPurchases] = useState([])
+
+  useEffect(() => {
+    // Fetch shop items and purchases for admin view
+    const fetchPremiumData = async () => {
+      const { data: items } = await supabase.from('shop_items').select('*').order('sort_order')
+      if (items) setShopItems(items)
+      const { data: purchases } = await supabase.from('user_purchases').select('*')
+      if (purchases) setAllPurchases(purchases)
+    }
+    fetchPremiumData()
+  }, [])
+
+  const handleTogglePremiumItem = async (userId, itemSlug, currentlyHas) => {
+    setSaving(userId)
+    try {
+      if (currentlyHas) {
+        const { error } = await supabase.from('user_purchases').delete().eq('user_id', userId).eq('item_slug', itemSlug)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('user_purchases').insert({ user_id: userId, item_slug: itemSlug, amount_cents: 0 })
+        if (error) throw error
+      }
+      // Refresh local purchases
+      const { data } = await supabase.from('user_purchases').select('*')
+      if (data) setAllPurchases(data)
+    } catch (err) {
+      alert("Erreur lors de l'attribution premium : " + err.message)
+    } finally {
+      setSaving(null)
+    }
+  }
 
   const pendingRequests = users.filter(u => u.display_name_status === 'pending')
 
@@ -254,6 +288,28 @@ export default function UserManagement({ users, onRefresh }) {
                         </div>
                       </>
                     )}
+
+                    {/* Premium Items Management */}
+                    <div className="user-mgmt-premium-section" style={{ marginTop: '20px', borderTop: '1px solid rgba(255,255,255,0.1)', paddingTop: '15px' }}>
+                      <h5 style={{ margin: '0 0 10px 0', color: 'var(--accent)' }}>💎 Accès Items Premium Boutique</h5>
+                      <div className="user-mgmt-perms-grid">
+                        {shopItems.map(item => {
+                          const hasIt = allPurchases.some(p => p.user_id === u.id && p.item_slug === item.slug)
+                          return (
+                            <label key={item.slug} className={`user-mgmt-perm-item ${hasIt ? 'active' : ''}`}>
+                              <input 
+                                type="checkbox"
+                                checked={hasIt}
+                                onChange={() => handleTogglePremiumItem(u.id, item.slug, hasIt)}
+                                disabled={saving === u.id}
+                              />
+                              <span className="user-mgmt-perm-icon">{item.emoji || '🔊'}</span>
+                              <span className="user-mgmt-perm-name">{item.name} {item.type === 'pack' && '(Pack)'}</span>
+                            </label>
+                          )
+                        })}
+                      </div>
+                    </div>
 
                     <div className="user-mgmt-perms-footer">
                       <span className="user-mgmt-date">Inscrit le {new Date(u.created_at).toLocaleDateString('fr-FR')}</span>

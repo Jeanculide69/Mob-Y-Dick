@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../supabaseClient'
 import LiveTeamDrawer from './LiveTeamDrawer'
+import PayPalButton from './PayPalButton'
 import './LiveRace.css'
 
 const EMOJIS = ['🔥', '👏', '🏁', '🏍️', '⚡', '🤙', '😱', '🚀']
@@ -45,6 +46,21 @@ export default function LiveRace({ customSessionId, onClose }) {
   const [activeViewTab, setActiveViewTab]   = useState('classement') // 'classement' | 'podiums' | 'activite'
   const [announcementsHistory, setAnnouncementsHistory] = useState([])
 
+  // ── Premium features ──
+  const [authUser, setAuthUser] = useState(null)
+  const [userProfile, setUserProfile] = useState(null)
+  const [shopItems, setShopItems] = useState([])
+  const [userPurchases, setUserPurchases] = useState([])
+  const [activeAlerts, setActiveAlerts] = useState([])
+  const [shopOpen, setShopOpen] = useState(false)
+  const [modalTab, setModalTab] = useState('shop') // 'shop' | 'donation'
+
+  // Donation form state
+  const [donationPseudo, setDonationPseudo] = useState('')
+  const [donationMessage, setDonationMessage] = useState('')
+  const [donationAmount, setDonationAmount] = useState(5)
+  const [customAmount, setCustomAmount] = useState('')
+
   const elapsedRef          = useRef(null)
   const prevRankingsRef     = useRef({})
   const extrasChannelRef    = useRef(null)
@@ -61,6 +77,185 @@ export default function LiveRace({ customSessionId, onClose }) {
     return () => supabase.removeChannel(ch)
   }, [session])
 
+  // ── Premium Shop & Alert Refs ──
+  const shopItemsRef = useRef([])
+  useEffect(() => {
+    shopItemsRef.current = shopItems
+  }, [shopItems])
+
+  // ── Premium Auth & Shop Setup ──
+  const fetchUserProfile = async (uid) => {
+    try {
+      const { data } = await supabase.from('profiles').select('*').eq('id', uid).single()
+      if (data) setUserProfile(data)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const fetchUserPurchases = async (uid) => {
+    if (!uid) return
+    try {
+      const { data } = await supabase.from('user_purchases').select('item_slug').eq('user_id', uid)
+      if (data) {
+        setUserPurchases(data.map(p => p.item_slug))
+      }
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const fetchShopItems = async () => {
+    try {
+      const { data } = await supabase.from('shop_items').select('*').eq('is_visible', true).order('sort_order', { ascending: true })
+      if (data) setShopItems(data)
+    } catch (err) {
+      console.error(err)
+    }
+  }
+
+  const triggerPremiumReaction = (slug, userDisplayName) => {
+    const item = shopItemsRef.current.find(i => i.slug === slug)
+    if (!item) return
+
+    const alertId = Date.now() + Math.random()
+    
+    // Add to active alerts
+    setActiveAlerts(prev => [...prev, {
+      id: alertId,
+      type: 'premium-reaction',
+      item,
+      userDisplayName
+    }])
+
+    // Play sound if available
+    if (item.sound_url) {
+      const audio = new Audio(item.sound_url)
+      audio.volume = 0.5
+      audio.play().catch(err => console.log('Audio playback prevented:', err))
+    }
+
+    // Auto-remove after 4.5 seconds
+    setTimeout(() => {
+      setActiveAlerts(prev => prev.filter(a => a.id !== alertId))
+    }, 4500)
+  }
+
+  const triggerDonationAlert = (row) => {
+    const alertId = Date.now() + Math.random()
+    
+    setActiveAlerts(prev => [...prev, {
+      id: alertId,
+      type: 'donation',
+      display_name: row.display_name,
+      amount: row.amount_cents / 100,
+      message: row.message
+    }])
+
+    // Play cash register sound
+    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2019/2019-84.wav')
+    audio.volume = 0.5
+    audio.play().catch(err => console.log('Audio playback prevented:', err))
+
+    // Auto-remove after 8 seconds
+    setTimeout(() => {
+      setActiveAlerts(prev => prev.filter(a => a.id !== alertId))
+    }, 8000)
+  }
+
+  const sendPremiumReaction = (item) => {
+    const nameToUse = userProfile?.display_name || authUser?.email?.split('@')[0] || 'Un Rider'
+    // 1. Trigger locally
+    triggerPremiumReaction(item.slug, nameToUse)
+    // 2. Broadcast
+    extrasChannelRef.current?.send({
+      type: 'broadcast',
+      event: 'premium-reaction',
+      payload: { slug: item.slug, userDisplayName: nameToUse }
+    })
+  }
+
+  const handleDonationSuccess = async (details, orderId, pseudo, msg, amount) => {
+    try {
+      const { error } = await supabase.from('donations').insert([{
+        user_id: authUser ? authUser.id : null,
+        display_name: pseudo || 'Donateur Anonyme',
+        amount_cents: Math.round(amount * 100),
+        message: msg || '',
+        session_id: session?.id || null,
+        paypal_order_id: orderId
+      }])
+      if (error) throw error
+      
+      setShopOpen(false)
+      setDonationPseudo('')
+      setDonationMessage('')
+      setCustomAmount('')
+      alert(`Merci infiniment pour ton don de ${amount}€ ! Ton message va s'afficher en direct.`);
+    } catch (err) {
+      alert("Erreur lors de l'enregistrement de ton don : " + err.message)
+    }
+  }
+
+  const handlePremiumPurchaseSuccess = async (details, orderId, item) => {
+    if (!authUser) return
+    try {
+      const { error } = await supabase.from('user_purchases').insert([{
+        user_id: authUser.id,
+        item_slug: item.slug,
+        paypal_order_id: orderId,
+        amount_cents: item.price_cents
+      }])
+      if (error) throw error
+      
+      await fetchUserPurchases(authUser.id)
+      alert(`Génial ! Tu as débloqué : ${item.name} ! Tu peux maintenant l'utiliser en direct sur le Live.`);
+    } catch (err) {
+      alert("Erreur lors de la validation de ton achat : " + err.message)
+    }
+  }
+
+  useEffect(() => {
+    fetchShopItems()
+
+    supabase.auth.getSession().then(({ data: { session: authSession } }) => {
+      if (authSession) {
+        setAuthUser(authSession.user)
+        fetchUserProfile(authSession.user.id)
+        fetchUserPurchases(authSession.user.id)
+      }
+    })
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, authSession) => {
+      if (authSession) {
+        setAuthUser(authSession.user)
+        fetchUserProfile(authSession.user.id)
+        fetchUserPurchases(authSession.user.id)
+      } else {
+        setAuthUser(null)
+        setUserProfile(null)
+        setUserPurchases([])
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  // ── Helpers ──
+  const addFloatingEmoji = (emoji) => {
+    // eslint-disable-next-line react-hooks/purity
+    const id = Date.now() + Math.random()
+    // eslint-disable-next-line react-hooks/purity
+    const x = 5 + Math.random() * 88
+    setFloatingEmojis(prev => [...prev, { id, emoji, x }])
+    setTimeout(() => setFloatingEmojis(prev => prev.filter(e => e.id !== id)), 3200)
+  }
+
+  const sendReaction = (emoji) => {
+    addFloatingEmoji(emoji)
+    extrasChannelRef.current?.send({ type: 'broadcast', event: 'reaction', payload: { emoji } })
+  }
+
   // ── Realtime laps & session ──
   useEffect(() => {
     if (!session?.id) return
@@ -75,6 +270,9 @@ export default function LiveRace({ customSessionId, onClose }) {
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'race_announcements', filter: `session_id=eq.${session.id}` }, ({ new: row }) => {
         setAnnouncementsHistory(prev => [row, ...prev])
+      })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'donations', filter: `session_id=eq.${session.id}` }, ({ new: row }) => {
+        triggerDonationAlert(row)
       })
       .subscribe()
     return () => supabase.removeChannel(ch)
@@ -95,21 +293,6 @@ export default function LiveRace({ customSessionId, onClose }) {
     return () => supabase.removeChannel(ch)
   }, [session?.id])
 
-  // ── Helpers ──
-  const addFloatingEmoji = (emoji) => {
-    // eslint-disable-next-line react-hooks/purity
-    const id = Date.now() + Math.random()
-    // eslint-disable-next-line react-hooks/purity
-    const x = 5 + Math.random() * 88
-    setFloatingEmojis(prev => [...prev, { id, emoji, x }])
-    setTimeout(() => setFloatingEmojis(prev => prev.filter(e => e.id !== id)), 3200)
-  }
-
-  const sendReaction = (emoji) => {
-    addFloatingEmoji(emoji)
-    extrasChannelRef.current?.send({ type: 'broadcast', event: 'reaction', payload: { emoji } })
-  }
-
   // ── Broadcast — emoji reactions + announcements orga ──
   useEffect(() => {
     if (!session?.id) return
@@ -123,6 +306,9 @@ export default function LiveRace({ customSessionId, onClose }) {
       })
       .on('broadcast', { event: 'team-status' }, ({ payload }) => {
         setTeamStatuses(prev => ({ ...prev, [payload.teamId]: payload.status }))
+      })
+      .on('broadcast', { event: 'premium-reaction' }, ({ payload }) => {
+        triggerPremiumReaction(payload.slug, payload.userDisplayName)
       })
       .subscribe()
     extrasChannelRef.current = ch
@@ -315,6 +501,39 @@ export default function LiveRace({ customSessionId, onClose }) {
 
   return (
     <section className="section page-top live-section">
+      {/* ── Active Alerts Container ── */}
+      <div className="live-alerts-container">
+        {activeAlerts.filter(a => a.type === 'donation').map(a => (
+          <div key={a.id} className="live-donation-alert">
+            <div className="donation-alert-header">
+              💎 SUPER CHAT 💎
+            </div>
+            <div className="donation-alert-body">
+              <span>{a.display_name}</span> a donné {a.amount}€ !
+            </div>
+            {a.message && (
+              <div className="donation-alert-message">
+                "{a.message}"
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* ── Premium Emote Overlays ── */}
+      {activeAlerts.filter(a => a.type === 'premium-reaction').map(a => (
+        <div key={a.id} className="live-emote-overlay-stage">
+          <div className="live-premium-emote-alert">
+            {a.item.animation_url && (
+              <img src={a.item.animation_url} alt={a.item.name} className="live-premium-emote-img" />
+            )}
+            <div className="live-premium-emote-user">
+              <span>{a.userDisplayName}</span> envoie {a.item.name} !
+            </div>
+          </div>
+        </div>
+      ))}
+
       {/* ── Floating emoji container ── */}
       <div className="live-emoji-stage" aria-hidden="true">
         {floatingEmojis.map(e => (
@@ -678,13 +897,51 @@ export default function LiveRace({ customSessionId, onClose }) {
             {/* Emoji reactions — live only */}
             {isLive && (
               <div className="live-reactions glass">
-                <h3 className="live-reactions-title">💬 Réagir</h3>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <h3 className="live-reactions-title" style={{ margin: 0 }}>💬 Réagir</h3>
+                  <button className="live-premium-support-btn" onClick={() => { setModalTab('donation'); setShopOpen(true); }}>
+                    💸 Faire un Don
+                  </button>
+                </div>
                 <div className="live-reactions-grid">
                   {EMOJIS.map(emoji => (
                     <button key={emoji} className="live-reaction-btn" onClick={() => sendReaction(emoji)} aria-label={`Réaction ${emoji}`}>
                       {emoji}
                     </button>
                   ))}
+                </div>
+
+                {/* Premium Reactions */}
+                <div className="live-reactions-premium-header">
+                  <span className="live-reactions-premium-title">💎 Animations Premium</span>
+                  <button className="live-premium-support-btn" onClick={() => { setModalTab('shop'); setShopOpen(true); }}>
+                    🛍️ Boutique
+                  </button>
+                </div>
+                <div className="live-reactions-premium-grid">
+                  {shopItems.filter(item => item.type !== 'pack').map(item => {
+                    const isOwned = userPurchases.includes(item.slug) || userPurchases.includes('pack_premium_all');
+                    return (
+                      <button
+                        key={item.id}
+                        className={`live-reaction-btn-premium ${!isOwned ? 'locked' : ''}`}
+                        onClick={() => {
+                          if (isOwned) {
+                            sendPremiumReaction(item);
+                          } else {
+                            setModalTab('shop');
+                            setShopOpen(true);
+                          }
+                        }}
+                        title={isOwned ? `Lancer l'animation ${item.name}` : `Débloquer ${item.name} (${item.price_cents / 100}€)`}
+                      >
+                        {item.emoji || '🔊'}
+                        {!isOwned && (
+                          <span className="live-lock-badge">🔒</span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -707,6 +964,166 @@ export default function LiveRace({ customSessionId, onClose }) {
           />
         )
       })()}
+
+      {/* ── Boutique & SuperChat Modal ── */}
+      {shopOpen && (
+        <div className="premium-modal-overlay" onClick={() => setShopOpen(false)}>
+          <div className="premium-modal glass" onClick={(e) => e.stopPropagation()}>
+            <div className="premium-modal-header">
+              <div className="premium-modal-title-area">
+                <h2>💎 Boutique & SuperChat Live</h2>
+                <p className="premium-modal-subtitle">Soutenez l'événement et animez le direct !</p>
+              </div>
+              <button className="btn btn-ghost" onClick={() => setShopOpen(false)} style={{ padding: '4px 8px', fontSize: '1.2rem', color: 'var(--text-muted)' }}>✕</button>
+            </div>
+
+            <div className="premium-modal-tabs">
+              <button
+                className={`premium-modal-tab ${modalTab === 'shop' ? 'active' : ''}`}
+                onClick={() => setModalTab('shop')}
+              >
+                🛍️ Boutique Emotes
+              </button>
+              <button
+                className={`premium-modal-tab ${modalTab === 'donation' ? 'active' : ''}`}
+                onClick={() => setModalTab('donation')}
+              >
+                💸 Envoyer un Don
+              </button>
+            </div>
+
+            <div className="premium-modal-content">
+              {modalTab === 'shop' && (
+                <div className="premium-shop-grid">
+                  {!authUser && (
+                    <div style={{ padding: '15px', background: 'rgba(255,85,0,0.1)', border: '1px solid var(--accent)', borderRadius: '12px', textAlign: 'center', marginBottom: '15px', color: '#fff' }}>
+                      <p style={{ margin: '0 0 10px 0', fontSize: '0.85rem' }}>💡 Connectez-vous à votre compte pour acheter des emotes premium et les débloquer définitivement.</p>
+                    </div>
+                  )}
+                  {shopItems.map(item => {
+                    const isOwned = userPurchases.includes(item.slug) || userPurchases.includes('pack_premium_all');
+                    const isPack = item.type === 'pack';
+                    return (
+                      <div key={item.id} className={`premium-shop-card ${isOwned ? 'owned' : ''} ${isPack ? 'pack-card' : ''}`}>
+                        <div className="premium-shop-card-emoji">
+                          {item.emoji || '🔊'}
+                        </div>
+                        <div className="premium-shop-card-info">
+                          <h3 className="premium-shop-card-title">
+                            {item.name} {isPack && <span style={{ fontSize: '0.75rem', background: '#ffd700', color: '#000', padding: '2px 6px', borderRadius: '4px', marginLeft: '6px', fontWeight: 'bold' }}>PACK ULTIME</span>}
+                          </h3>
+                          <p className="premium-shop-card-desc">{item.description}</p>
+                        </div>
+                        <div className="premium-shop-card-action">
+                          {isOwned ? (
+                            <span className="premium-shop-owned-badge">✓ Débloqué</span>
+                          ) : (
+                            <>
+                              <span className="premium-shop-price">{item.price_cents / 100}€</span>
+                              {authUser ? (
+                                <div style={{ width: '100%', minWidth: '120px' }}>
+                                  <PayPalButton
+                                    amount={(item.price_cents / 100).toFixed(2)}
+                                    onSuccess={(details, orderId) => handlePremiumPurchaseSuccess(details, orderId, item)}
+                                  />
+                                </div>
+                              ) : (
+                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Connexion requise</span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {modalTab === 'donation' && (
+                <div className="donation-form">
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                    <div>
+                      <label>Pseudo (Affiché à l'écran)</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Rider44"
+                        value={donationPseudo}
+                        onChange={(e) => setDonationPseudo(e.target.value)}
+                        maxLength={25}
+                      />
+                    </div>
+                    <div>
+                      <label>Montant du Don</label>
+                      <div className="donation-input-wrapper">
+                        <input
+                          type="number"
+                          min="1"
+                          placeholder="Montant libre"
+                          value={customAmount}
+                          onChange={(e) => {
+                            setCustomAmount(e.target.value);
+                            setDonationAmount(parseFloat(e.target.value) || 0);
+                          }}
+                        />
+                        <span className="donation-currency-symbol">€</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="donation-amount-grid">
+                    {[5, 10, 20, 50].map(amt => (
+                      <button
+                        key={amt}
+                        type="button"
+                        className={`donation-amount-btn ${donationAmount === amt && !customAmount ? 'active' : ''}`}
+                        onClick={() => {
+                          setDonationAmount(amt);
+                          setCustomAmount('');
+                        }}
+                      >
+                        {amt}€
+                      </button>
+                    ))}
+                  </div>
+
+                  <div>
+                    <label>Message de soutien (S'affichera en direct)</label>
+                    <textarea
+                      placeholder="Votre message personnalisé..."
+                      rows={3}
+                      value={donationMessage}
+                      onChange={(e) => setDonationMessage(e.target.value)}
+                      maxLength={120}
+                    />
+                  </div>
+
+                  <div className="donation-summary-card">
+                    Don de <strong>{donationAmount > 0 ? donationAmount : 0}€</strong> par <strong>{donationPseudo || 'Anonyme'}</strong>
+                  </div>
+
+                  {donationAmount > 0 ? (
+                    <div style={{ marginTop: '10px' }}>
+                      <PayPalButton
+                        amount={donationAmount.toFixed(2)}
+                        onSuccess={(details, orderId) => handleDonationSuccess(details, orderId, donationPseudo, donationMessage, donationAmount)}
+                      />
+                    </div>
+                  ) : (
+                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+                      Indiquez un montant pour faire un don.
+                    </div>
+                  )}
+
+                  <div style={{ marginTop: '15px', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', lineHeight: '1.4' }}>
+                    <p style={{ margin: 0 }}>En effectuant ce don manuel, vous soutenez directement l'événement et l'équipe Mob Y Dick.</p>
+                    <p style={{ margin: '4px 0 0 0' }}>Conformément à la législation, ce don est définitif, volontaire, et ne donne droit à aucun remboursement ultérieur ou contrepartie physique.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   )
 }
