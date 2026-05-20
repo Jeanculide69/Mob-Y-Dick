@@ -1089,7 +1089,8 @@ function LiveVideoBroadcaster({ session, raceSession }) {
   const [isStreaming, setIsStreaming] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState(null)
-  const [otherStreaming, setOtherStreaming] = useState(false) // someone else is streaming
+  const [otherStreaming, setOtherStreaming] = useState(false)
+  const [facingMode, setFacingMode] = useState('environment') // 'environment' = arrière, 'user' = avant
   
   const videoRef = useRef(null)
   const streamRef = useRef(null)
@@ -1171,11 +1172,13 @@ function LiveVideoBroadcaster({ session, raceSession }) {
         throw new Error("🔒 L'accès caméra nécessite une connexion sécurisée (HTTPS).\n\nTon URL actuelle commence par 'http://' — il faut 'https://'.")
       }
 
-      // 1. Try to get camera with simplest possible constraints first
+      // 1. Try to get camera
       let stream
       try {
-        // Start with just { video: true } — maximizes compatibility
-        stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facingMode },
+          audio: false
+        })
       } catch (camErr) {
         console.error('Camera error:', camErr.name, camErr.message)
         if (camErr.name === 'NotAllowedError' || camErr.name === 'PermissionDeniedError') {
@@ -1268,6 +1271,27 @@ function LiveVideoBroadcaster({ session, raceSession }) {
     }
   }
 
+  const switchCamera = async () => {
+    const newMode = facingMode === 'environment' ? 'user' : 'environment'
+    setFacingMode(newMode)
+    try {
+      // Stop current camera track
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop())
+      }
+      // Get new camera
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: newMode },
+        audio: false
+      })
+      streamRef.current = newStream
+      if (videoRef.current) videoRef.current.srcObject = newStream
+    } catch (e) {
+      console.error('Switch camera error:', e)
+      setErrorMsg('Impossible de changer de caméra : ' + e.message)
+    }
+  }
+
   const stopStreaming = async () => {
     if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null }
     if (streamRef.current) { streamRef.current.getTracks().forEach(track => track.stop()); streamRef.current = null }
@@ -1311,14 +1335,30 @@ function LiveVideoBroadcaster({ session, raceSession }) {
               <span style={{ width: '6px', height: '6px', background: '#fff', borderRadius: '50%', animation: 'pulse 1.5s infinite' }} />
               DIFFUSION EN COURS
             </span>
+            <button
+              onClick={switchCamera}
+              style={{ position: 'absolute', top: '10px', right: '10px', background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%', width: '36px', height: '36px', fontSize: '1.2rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10, backdropFilter: 'blur(4px)' }}
+              title="Changer de caméra"
+            >
+              🔄
+            </button>
           </div>
-          <button 
-            className="btn btn-outline" 
-            onClick={stopStreaming}
-            style={{ borderColor: '#ff4444', color: '#ff4444', width: 'fit-content' }}
-          >
-            🛑 Arrêter le Live Vidéo
-          </button>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button 
+              className="btn btn-outline" 
+              onClick={stopStreaming}
+              style={{ borderColor: '#ff4444', color: '#ff4444', width: 'fit-content' }}
+            >
+              🛑 Arrêter le Live
+            </button>
+            <button 
+              className="btn btn-outline" 
+              onClick={switchCamera}
+              style={{ borderColor: '#ffaa00', color: '#ffaa00', width: 'fit-content' }}
+            >
+              🔄 {facingMode === 'environment' ? 'Caméra Avant' : 'Caméra Arrière'}
+            </button>
+          </div>
         </div>
       ) : otherStreaming ? (
         <div>
