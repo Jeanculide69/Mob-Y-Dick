@@ -221,7 +221,11 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
       status: 'pending',
     }])
     setSubmitStatus(error ? 'error' : 'sent')
-    if (!error) await loadAffiliation()
+    if (!error) {
+      await loadAffiliation()
+      // Recharge la liste admin pour que l'admin voie sa propre demande immédiatement
+      if (isAdmin || isModerator) await loadAdminAffiliations()
+    }
     setRequesting(false)
   }
 
@@ -520,25 +524,32 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
             )}
 
             {/* ── Demande d'affiliation ── */}
-            {session && !affiliation && !isAdmin && !isModerator && (
+            {session && !affiliation && (
               <div className="moto-request-block glass">
                 <h3 className="moto-request-title">🔗 Rejoindre ce numéro</h3>
                 <p className="moto-request-desc">
-                  Tu pilotes le <strong>#{motoNumber}</strong> ? Demande à être associé à ce numéro pour personnaliser son profil. Un admin ou modérateur validera ta demande.
+                  Tu pilotes le <strong>#{motoNumber}</strong> ? Demande à être associé à ce numéro pour personnaliser son profil.
+                  {(isAdmin || isModerator)
+                    ? <> En tant qu'admin tu peux <strong>approuver ta propre demande</strong> directement dans le panneau ci-dessous.</>
+                    : <> Un admin ou modérateur validera ta demande.</>
+                  }
                 </p>
                 <textarea
                   className="moto-request-note"
                   value={noteText}
                   onChange={e => setNoteText(e.target.value)}
-                  placeholder="Message optionnel pour l'admin (ex : je pilote ce numéro depuis 2023)"
+                  placeholder="Message optionnel (ex : je pilote ce numéro depuis 2023)"
                   rows={3}
                   maxLength={300}
                 />
                 {submitStatus === 'sent' && (
-                  <div className="moto-request-success">✅ Demande envoyée ! L'équipe va valider ça rapidement.</div>
+                  <div className="moto-request-success">
+                    ✅ Demande enregistrée !
+                    {(isAdmin || isModerator) && ' Approuve-la dans le panneau "Affiliations" ci-dessous.'}
+                  </div>
                 )}
                 {submitStatus === 'error' && (
-                  <div className="moto-request-error">❌ Erreur lors de l'envoi. Réessaye ou contacte un admin.</div>
+                  <div className="moto-request-error">❌ Erreur lors de l'envoi. Réessaye ou vérifie la console.</div>
                 )}
                 {!submitStatus && (
                   <button className="btn btn-primary" onClick={handleRequest} disabled={requesting}>
