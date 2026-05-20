@@ -1,0 +1,340 @@
+/* ═══════════════════════════════════════════════
+   LIVE TEAM DRAWER
+   Panneau glissant : stats + courbe tour par tour
+   ═══════════════════════════════════════════════ */
+
+/* ── Fond (ferme au clic) ── */
+.ltd-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 700;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+  animation: ltdFadeIn 0.2s ease both;
+}
+
+@keyframes ltdFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Panneau principal ── */
+.ltd-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 420px;
+  max-width: 100vw;
+  height: 100dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: 701;
+  padding: 20px 18px 40px;
+  border-radius: 20px 0 0 20px;
+  border-right: none !important;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: ltdSlideIn 0.28s cubic-bezier(.34, 1.4, .64, 1) both;
+}
+
+@keyframes ltdSlideIn {
+  from { transform: translateX(110%); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+
+/* Scrollbar discrète */
+.ltd-panel::-webkit-scrollbar { width: 4px; }
+.ltd-panel::-webkit-scrollbar-thumb { background: rgba(255,85,0,0.3); border-radius: 4px; }
+
+/* ── Header ── */
+.ltd-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.ltd-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.ltd-pos {
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.78rem;
+  font-weight: 900;
+  padding: 3px 9px;
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+
+.ltd-num {
+  font-size: 1.3rem;
+  font-weight: 900;
+  color: var(--accent);
+  flex-shrink: 0;
+}
+
+.ltd-pilots {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ltd-pilot1 {
+  font-weight: 700;
+  font-size: 0.97rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ltd-pilot2 {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+}
+
+.ltd-cat-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: rgba(255, 85, 0, 0.12);
+  border: 1px solid rgba(255, 85, 0, 0.25);
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.ltd-close {
+  background: rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.15s, color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ltd-close:hover {
+  background: rgba(255, 85, 0, 0.15);
+  color: var(--accent);
+}
+
+/* ── Stats ── */
+.ltd-stats-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 7px;
+}
+
+.ltd-stat {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 12px;
+  padding: 10px 6px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  text-align: center;
+}
+
+.ltd-stat-val {
+  font-size: 0.8rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  font-family: monospace;
+  line-height: 1;
+}
+
+.ltd-val-gold  { color: #ffd700; }
+.ltd-val-green { color: #22c55e; }
+.ltd-val-red   { color: #ef4444; }
+
+.ltd-stat-lbl {
+  font-size: 0.62rem;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+}
+
+/* ── Section graphique ── */
+.ltd-chart-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ltd-chart-section-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ltd-chart-hint {
+  font-size: 0.68rem;
+  font-weight: 400;
+  color: var(--text-muted);
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.ltd-chart-wrap {
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 14px;
+  padding: 6px 6px 2px;
+}
+
+.ltd-chart-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.ltd-legend {
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding: 5px 4px 2px;
+}
+
+.ltd-legend-item {
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.ltd-chart-empty {
+  text-align: center;
+  padding: 22px;
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 12px;
+  font-size: 0.85rem;
+}
+
+/* ── Liste des tours ── */
+.ltd-lap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ltd-lap-list-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+}
+
+.ltd-laps {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 260px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.ltd-laps::-webkit-scrollbar { width: 3px; }
+.ltd-laps::-webkit-scrollbar-thumb { background: rgba(255,85,0,0.3); border-radius: 3px; }
+
+.ltd-lap-row {
+  display: grid;
+  grid-template-columns: 32px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.03);
+  transition: background 0.12s;
+}
+
+.ltd-lap-row:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ltd-lap-row--best {
+  background: rgba(255, 215, 0, 0.07) !important;
+  border: 1px solid rgba(255, 215, 0, 0.2);
+}
+
+.ltd-lap-n {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.ltd-lap-t {
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-family: monospace;
+  color: var(--text-primary);
+}
+
+.ltd-lap-t--gold { color: #ffd700; }
+
+.ltd-lap-d {
+  font-size: 0.75rem;
+  font-weight: 700;
+  font-family: monospace;
+  text-align: right;
+}
+
+.ltd-lap-d--fast { color: #22c55e; }
+.ltd-lap-d--slow { color: #ef4444; }
+
+/* ── Row selected highlight in main table ── */
+.live-row-selected {
+  background: rgba(255, 85, 0, 0.08) !important;
+  outline: 1px solid rgba(255, 85, 0, 0.25);
+}
+
+/* ── Curseur pointer sur les lignes cliquables ── */
+.live-row-clickable {
+  cursor: pointer;
+}
+.live-row-clickable:hover td {
+  background: rgba(255, 85, 0, 0.05);
+}
+
+/* ── Mobile : bottom sheet ── */
+@media (max-width: 680px) {
+  .ltd-panel {
+    top: auto;
+    right: 0;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    height: 78dvh;
+    border-radius: 20px 20px 0 0;
+    animation: ltdSlideUp 0.28s cubic-bezier(.34, 1.4, .64, 1) both;
+  }
+
+  @keyframes ltdSlideUp {
+    from { transform: translateY(110%); opacity: 0; }
+    to   { transform: translateY(0);    opacity: 1; }
+  }
+
+  .ltd-stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

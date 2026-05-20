@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../supabaseClient'
+import LiveTeamDrawer from './LiveTeamDrawer'
 import './LiveRace.css'
 
 const EMOJIS = ['🔥', '👏', '🏁', '🏍️', '⚡', '🤙', '😱', '🚀']
@@ -36,6 +37,7 @@ export default function LiveRace({ customSessionId, onClose }) {
   const [announcement, setAnnouncement]     = useState(null)
   const [positionDeltas, setPositionDeltas] = useState({}) // teamId → signed int
   const [expandedRider, setExpandedRider]   = useState(null)
+  const [selectedTeamId, setSelectedTeamId] = useState(null) // drawer latéral
   const [copied, setCopied]                 = useState(false)
   const [teamStatuses, setTeamStatuses]     = useState({}) // teamId → 'DNF' | 'DNS'
 
@@ -460,10 +462,16 @@ export default function LiveRace({ customSessionId, onClose }) {
                         const delta = positionDeltas[r.id]
                         const isBestLap = r.id === bestTeam?.id
                         const isExpanded = expandedRider === r.id
+                        const isSelected = selectedTeamId === r.id
                         const splits = isExpanded ? computeLapSplits([...r.laps].sort((a, b) => a.lap_time_ms - b.lap_time_ms)) : []
                         const minSplit = splits.length ? Math.min(...splits) : null
                         return [
-                          <tr key={r.id} className={`live-row ${i < 3 ? `live-podium-${i + 1}` : ''} ${r.id === highlightedLap ? 'live-row-flash' : ''}`}>
+                          <tr
+                            key={r.id}
+                            className={`live-row live-row-clickable ${i < 3 ? `live-podium-${i + 1}` : ''} ${r.id === highlightedLap ? 'live-row-flash' : ''} ${isSelected ? 'live-row-selected' : ''}`}
+                            onClick={() => setSelectedTeamId(isSelected ? null : r.id)}
+                            title="Cliquer pour voir les temps au tour"
+                          >
                             <td className="live-pos">
                               {i === 0 && <span className="live-medal gold">1</span>}
                               {i === 1 && <span className="live-medal silver">2</span>}
@@ -496,7 +504,7 @@ export default function LiveRace({ customSessionId, onClose }) {
                             <td>
                               <button
                                 className="live-expand-btn"
-                                onClick={() => setExpandedRider(isExpanded ? null : r.id)}
+                                onClick={(e) => { e.stopPropagation(); setExpandedRider(isExpanded ? null : r.id) }}
                                 title={isExpanded ? 'Masquer les tours' : 'Voir tous les tours'}
                               >
                                 {isExpanded ? '▲' : '▼'}
@@ -627,6 +635,21 @@ export default function LiveRace({ customSessionId, onClose }) {
           </div>
         </div>
       </div>
+
+      {/* ── Drawer équipe sélectionnée ── */}
+      {selectedTeamId && (() => {
+        const selIdx  = allRankings.findIndex(r => r.id === selectedTeamId)
+        const selTeam = allRankings[selIdx]
+        if (!selTeam) return null
+        return (
+          <LiveTeamDrawer
+            team={selTeam}
+            allLaps={laps}
+            position={selIdx + 1}
+            onClose={() => setSelectedTeamId(null)}
+          />
+        )
+      })()}
     </section>
   )
 }
