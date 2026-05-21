@@ -442,11 +442,15 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       })
       .subscribe((status) => {
         // En cas d'erreur ou de fermeture du canal, on resynchronise via
-        // un refetch immédiat (le heartbeat 5s prendra le relais ensuite).
+        // un refetch complet (le heartbeat 5s prendra le relais ensuite).
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
           // eslint-disable-next-line no-console
           console.warn('[LiveRace] Realtime channel status:', status, '→ refetch')
           refetchLaps(session.id)
+          // Session : capter started_at / finished_at / status que le socket
+          // mort a peut-être ratés (pre-race flag, fin de course…).
+          supabase.from('race_sessions').select('*').eq('id', session.id).maybeSingle()
+            .then(({ data }) => { if (data) setSession(data) })
         }
       })
     return () => supabase.removeChannel(ch)
@@ -588,24 +592,63 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
     }
   }, [session?.id])
 
-  // ── Heartbeat de secours : re-fetch les laps toutes les 5s pendant un live ──
-  // Garde-fou si le socket Realtime est silencieusement mort. 5s est un bon
-  // compromis pendant un live de chronométrage (vs 15s qui laissait trop
-  // de retard côté viewer PC quand le chronométreur saisissait sur mobile).
+  // ── Heartbeat de secours : re-fetch session + teams + laps toutes les 5s ──
+  // Garde-fou si le socket Realtime est silencieusement mort (fréquent sur
+  // mobile après que l'onglet ait été en arrière-plan ou après une longue
+  // attente pre-race). Couvre les 3 transitions critiques côté viewer :
+  //   - pre-race → race : started_at passe de null → date (flag damier disparaît)
+  //   - race → finished  : status passe live → finished + finished_at posé
+  //   - update teams     : ajout/retrait d'une équipe par l'orga
+  //
+  // 5s est un bon compromis sur la qualité de l'expérience live (vs 15s qui
+  // laissait trop de retard côté viewer PC quand le chronométreur saisissait
+  // sur mobile). Actif dès qu'on a une session, peu importe son status :
+  // sinon les transitions n'étaient pas capturées (avant : limité à
+  // status='live', donc on ratait le passage live → finished).
   useEffect(() => {
-    if (!session?.id || session?.status !== 'live') return
-    const interval = setInterval(() => {
+    if (!session?.id) return
+    const sid = session.id
+    const tick = () => {
+      // 1. Session : catches started_at, finished_at, status, live_stream_active
       supabase
-        .from('race_laps')
-        .select('*')
-        .eq('session_id', session.id)
+        .from('race_sessions').select('*').eq('id', sid).maybeSingle()
+        .then(({ data }) => {
+          if (!data) return
+          setSession(prev => {
+            // Évite re-render inutile si rien n'a changé (compare champs critiques)
+            if (prev
+              && prev.status === data.status
+              && prev.started_at === data.started_at
+              && prev.finished_at === data.finished_at
+              && prev.live_stream_active === data.live_stream_active) return prev
+            return data
+          })
+        })
+
+      // 2. Teams : nouvelle équipe ajoutée, ou nom/numéro mis à jour
+      supabase
+        .from('race_teams').select('*').eq('session_id', sid).order('moto_number')
+        .then(({ data }) => {
+          if (!data) return
+          setTeams(prev => {
+            if (prev.length !== data.length) return data
+            const prevById = new Map(prev.map(t => [t.id, t]))
+            for (const t of data) {
+              const old = prevById.get(t.id)
+              if (!old || old.moto_number !== t.moto_number || old.pilot_1_name !== t.pilot_1_name
+                  || old.category !== t.category) return data
+            }
+            return prev
+          })
+        })
+
+      // 3. Laps : couvert avant, on garde la diff par set d'IDs
+      supabase
+        .from('race_laps').select('*').eq('session_id', sid)
         .order('recorded_at', { ascending: false })
         .then(({ data }) => {
           if (!data) return
           setLaps(prev => {
-            // Mise à jour si cardinalité différente, OU si le set d'IDs
-            // a bougé (couvre les DELETE qui gardent la même cardinalité
-            // après un insert simultané).
             if (prev.length !== data.length) return data
             const prevIds = new Set(prev.map(l => l.id))
             for (const l of data) {
@@ -614,9 +657,10 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
             return prev
           })
         })
-    }, 5000)
+    }
+    const interval = setInterval(tick, 5000)
     return () => clearInterval(interval)
-  }, [session?.id, session?.status])
+  }, [session?.id])
 
   // ── Track position changes when laps update ──
   const getRankingsForAll = useCallback(() => {
