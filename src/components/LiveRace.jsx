@@ -7,7 +7,7 @@ import StripePurchaseButton from './StripePurchaseButton'
 import RaceFlagOverlay from './RaceFlagOverlay'
 import { playPremiumSound, playDonationSound, playRaceSignalSound, playAnnouncementSound } from '../utils/soundEffects'
 import { playPremiumEffects, playDonationSparks, SLUG_ANIM_CLASS, MEDIA_OVERRIDES } from '../utils/premiumEmoteEffects'
-import { speakDonation, warmUpTTS, isDonationTTSEnabled, setDonationTTSEnabled } from '../utils/donationTTS'
+import { speakDonation, warmUpTTS, isDonationTTSEnabled, setDonationTTSEnabled, speakAnnouncement } from '../utils/donationTTS'
 import { useToast } from './Toast'
 import './LiveRace.css'
 
@@ -530,6 +530,8 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       .on('broadcast', { event: 'announcement' }, ({ payload }) => {
         setAnnouncement(payload.text)
         playAnnouncementSound()
+        // Délai de 1.5s pour laisser la petite mélodie "ding-dong" se finir
+        setTimeout(() => speakAnnouncement(payload.text), 1500)
         setTimeout(() => setAnnouncement(null), 12000)
       })
       .on('broadcast', { event: 'team-status' }, ({ payload }) => {

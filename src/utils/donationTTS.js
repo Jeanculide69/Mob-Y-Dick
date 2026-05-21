@@ -51,6 +51,15 @@ const pickFrenchVoice = () => {
       || null
 }
 
+/** Cherche une voix française masculine (Thomas sur Mac, Paul sur Windows). */
+const pickFrenchMaleVoice = () => {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return null
+  const voices = window.speechSynthesis.getVoices()
+  const frenchVoices = voices.filter(v => v.lang?.startsWith('fr'))
+  const male = frenchVoices.find(v => /(paul|thomas|nicolas|claude|bernard|michel)/i.test(v.name))
+  return male || frenchVoices[0] || null
+}
+
 /** Sanitize le message pour la TTS : retire URL, emoji bruyants, longueur cap. */
 const cleanForTTS = (text) => {
   if (!text) return ''
@@ -110,6 +119,32 @@ export const speakDonation = (d, opts = {}) => {
 
   const frenchVoice = pickFrenchVoice()
   if (frenchVoice) utterance.voice = frenchVoice
+
+  try { window.speechSynthesis.speak(utterance) }
+  catch (e) { console.warn('[TTS] speak failed', e) }
+}
+
+/**
+ * Lit à voix haute une annonce (voix masculine, grave).
+ * @param {string} text - Le texte de l'annonce
+ */
+export const speakAnnouncement = (text) => {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return
+  if (!text) return
+
+  const cleaned = cleanForTTS(text)
+  if (!cleaned) return
+
+  try { window.speechSynthesis.cancel() } catch { /* ignore */ }
+
+  const utterance = new SpeechSynthesisUtterance(`Nouvelle annonce organisateur : ${cleaned}`)
+  utterance.lang = 'fr-FR'
+  utterance.rate = 0.95 // Un peu plus lent, plus officiel
+  utterance.pitch = 0.6 // Pitch plus bas pour simuler une voix d'homme même sur la voix par défaut
+  utterance.volume = 1.0
+
+  const maleVoice = pickFrenchMaleVoice()
+  if (maleVoice) utterance.voice = maleVoice
 
   try { window.speechSynthesis.speak(utterance) }
   catch (e) { console.warn('[TTS] speak failed', e) }
