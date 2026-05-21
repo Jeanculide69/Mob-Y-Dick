@@ -138,6 +138,12 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
     }
   }, [isLiveStreamActive, session?.id])
 
+  // Ref qui se met à true dès qu'on a vu la session en status='live'.
+  // Utilisé pour décider si l'overlay drapeau post-race doit apparaître
+  // (= seulement pour ceux qui ont vu la transition live → finished,
+  // pas pour les visiteurs qui consultent des résultats archivés).
+  const sawLiveRef = useRef(false)
+
   // ── Premium Shop & Alert Refs ──
   const shopItemsRef = useRef([])
   useEffect(() => {
@@ -538,6 +544,13 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
   useEffect(() => { loadLiveSession() }, [customSessionId])
 
+  // Reset le flag "vu en live" quand on change de session : sinon naviguer
+  // depuis une course live vers une course archivée déclencherait à tort
+  // l'overlay post-race sur l'archive.
+  useEffect(() => {
+    sawLiveRef.current = false
+  }, [customSessionId])
+
   // ── Resync au retour de l'arrière-plan (mobile) ──
   // Quand l'onglet est suspendu (changement d'app, écran éteint, etc.),
   // Supabase Realtime peut perdre le socket et rater les INSERT. À la
@@ -753,8 +766,21 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   //    et de started_at / finished_at de la session.
   const isPreRace  = session?.status === 'live'
                      && !session?.started_at
-  const isPostRace = session?.status === 'finished'
-                     || session?.status === 'published'
+  // Post-race overlay = uniquement si l'utilisateur a vu la course passer
+  // de 'live' à 'finished' pendant qu'il regardait (= il était là en
+  // temps réel et mérite l'écran de clôture + countdown 5min).
+  //
+  // Si la session est DÉJÀ finished/published au mount (= visiteur qui
+  // clique "🏆 Résultats" sur une course archivée), on saute l'overlay :
+  // il veut voir les classements, pas un drapeau qui le redirige vers
+  // l'accueil quand le countdown a expiré.
+  //
+  // `sawLiveRef` (déclaré en haut) est posé à true dès qu'on observe
+  // status='live' lors d'un render. Si on arrive directement sur un
+  // status finished/published, il reste à false → pas d'overlay.
+  if (session?.status === 'live') sawLiveRef.current = true
+  const isPostRace = sawLiveRef.current
+                     && (session?.status === 'finished' || session?.status === 'published')
 
   return (
     <section className="section page-top live-section">
