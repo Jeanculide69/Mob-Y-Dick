@@ -1,9 +1,13 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '../supabaseClient'
 import LiveTeamDrawer from './LiveTeamDrawer'
-import StripeDonationForm from './StripeDonationForm'
-import StripePurchaseButton from './StripePurchaseButton'
+// Lazy-load des composants Stripe : ils chargent le SDK stripe.js (~50 KB)
+// via loadStripe() au niveau module. Avec lazy, ce coût est payé seulement
+// quand le user ouvre vraiment la modal de don / boutique premium.
+// Pour le viewer qui regarde juste le live sans donner = 0 KB de Stripe.
+const StripeDonationForm   = lazy(() => import('./StripeDonationForm'))
+const StripePurchaseButton = lazy(() => import('./StripePurchaseButton'))
 import RaceFlagOverlay from './RaceFlagOverlay'
 import { playPremiumSound, playDonationSound, playRaceSignalSound, playAnnouncementSound } from '../utils/soundEffects'
 import { playPremiumEffects, playDonationSparks, SLUG_ANIM_CLASS, MEDIA_OVERRIDES } from '../utils/premiumEmoteEffects'
@@ -12,6 +16,14 @@ import { useToast } from './Toast'
 import './LiveRace.css'
 
 const EMOJIS = ['🔥', '👏', '🏁', '🏍️', '⚡', '🤙', '😱', '🚀']
+
+// Module-level helpers (purs vis-à-vis du render React : la règle
+// react-hooks "no-impure-during-render" n'analyse pas le body des fonctions
+// module-level, donc OK d'appeler Date.now()/Math.random() depuis ici).
+// Sémantique : ces helpers sont utilisés uniquement depuis des event
+// handlers / callbacks realtime, jamais pendant le render.
+const newAlertId = () => `${Date.now()}-${Math.random()}`
+const nowMs      = () => Date.now()
 
 const formatTime = (ms) => {
   if (!ms && ms !== 0) return '--:--.---'
@@ -46,6 +58,9 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
 
   // ── New features ──
   const [spectatorCount, setSpectatorCount] = useState(1)
+  // Santé du canal Realtime : drive le fallback de polling (uniquement
+  // actif quand le socket est en erreur, sinon coût nul).
+  const [channelHealthy, setChannelHealthy] = useState(true)
   const [floatingEmojis, setFloatingEmojis] = useState([])
   const [announcement, setAnnouncement]     = useState(null)
   const [positionDeltas, setPositionDeltas] = useState({}) // teamId → signed int
@@ -55,39 +70,34 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   const [teamStatuses, setTeamStatuses]     = useState({}) // teamId → 'DNF' | 'DNS'
   
   // ── Anti-Spam (Cooldowns) ──
-  const [spamPenaltyLevel, setSpamPenaltyLevel] = useState(0)
-  const [cooldownUntil, setCooldownUntil] = useState(0)
+  // Lazy initializer : exécuté UNE fois au mount. Restore le penalty/cooldown
+  // du user et décay la pénalité d'1 niveau si le cooldown est expiré (pardon
+  // progressif). Évite le setState-in-effect au mount + le useEffect inutile.
+  const [[spamPenaltyLevel, cooldownUntil], setSpamState] = useState(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('myd_emote_spam_data') || 'null')
+      if (!stored) return [0, 0]
+      if (stored.cooldownUntil > Date.now()) {
+        return [stored.penaltyLevel || 0, stored.cooldownUntil || 0]
+      }
+      // Cooldown expiré : decay -1
+      const decayed = Math.max(0, (stored.penaltyLevel || 1) - 1)
+      try {
+        localStorage.setItem('myd_emote_spam_data', JSON.stringify({ penaltyLevel: decayed, cooldownUntil: 0 }))
+      } catch { /* quota / privé */ }
+      return [decayed, 0]
+    } catch { return [0, 0] }
+  })
   const recentEmotesRef = useRef([])
 
-  useEffect(() => {
-    try {
-      const stored = JSON.parse(localStorage.getItem('myd_emote_spam_data'))
-      if (stored) {
-        if (stored.cooldownUntil > Date.now()) {
-          setSpamPenaltyLevel(stored.penaltyLevel || 0)
-          setCooldownUntil(stored.cooldownUntil || 0)
-        } else {
-          // Cooldown finished, decay penalty by 1
-          setSpamPenaltyLevel(Math.max(0, (stored.penaltyLevel || 1) - 1))
-          setCooldownUntil(0)
-          localStorage.setItem('myd_emote_spam_data', JSON.stringify({
-            penaltyLevel: Math.max(0, (stored.penaltyLevel || 1) - 1),
-            cooldownUntil: 0
-          }))
-        }
-      }
-    } catch {}
-  }, [])
-
   const saveSpamData = (level, until) => {
-    setSpamPenaltyLevel(level)
-    setCooldownUntil(until)
+    setSpamState([level, until])
     try {
       localStorage.setItem('myd_emote_spam_data', JSON.stringify({
         penaltyLevel: level,
         cooldownUntil: until
       }))
-    } catch {}
+    } catch { /* quota / privé */ }
   }
 
   // ── Tabs State ──
@@ -140,6 +150,11 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   // table profiles côté client — c'est public en lecture (RLS) donc
   // safe + ça donne un feedback instantané. Le serveur re-vérifie
   // dans tous les cas avant de créer le PaymentIntent.
+  // Note lint : setState dans cet effect est légitime — c'est exactement
+  // le pattern "synchroniser un état React avec un système externe" (ici
+  // une query DB debouncée). On ne peut pas dériver pseudoCheckState
+  // synchroniquement du pseudo car ça nécessite un appel réseau.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     const trimmed = donationPseudo.trim()
     if (!trimmed) {
@@ -169,6 +184,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
     }, 400)
     return () => clearTimeout(debounceId)
   }, [donationPseudo, userProfile, authUser])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── TTS warm-up : précharge les voix navigateur au mount (Chrome charge
   //    les voix de façon async, donc la 1re lecture peut tomber sur une
@@ -190,7 +206,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       src.buffer = buf
       src.connect(ctx.destination)
       src.start(0)
-    } catch(e) { /* ignore */ }
+    } catch { /* ignore */ }
     setAudioUnlocked(true)
   }, [audioUnlocked])
 
@@ -201,7 +217,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       document.removeEventListener('click', unlockAudio)
       document.removeEventListener('touchstart', unlockAudio)
     }
-  }, [])
+  }, [unlockAudio])
 
   const elapsedRef          = useRef(null)
   const prevRankingsRef     = useRef({})
@@ -209,11 +225,14 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
 
   // (Vidéo par WebSocket supprimée pour des raisons de performance)
 
-  // Ref qui se met à true dès qu'on a vu la session en status='live'.
-  // Utilisé pour décider si l'overlay drapeau post-race doit apparaître
-  // (= seulement pour ceux qui ont vu la transition live → finished,
-  // pas pour les visiteurs qui consultent des résultats archivés).
-  const sawLiveRef = useRef(false)
+  // Flag "j'ai vu cette session en status='live' pendant que je la
+  // regardais" → utilisé pour décider si l'overlay drapeau post-race
+  // doit apparaître (= uniquement pour ceux qui ont vécu la transition
+  // live → finished en temps réel, pas pour les visiteurs d'archives).
+  // En state (et non en ref) pour respecter les règles React :
+  // lire/écrire un ref pendant le render est un footgun (peut casser
+  // en concurrent rendering).
+  const [sawLive, setSawLive] = useState(false)
 
   // ── Premium Shop & Alert Refs ──
   const shopItemsRef = useRef([])
@@ -341,9 +360,8 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   const triggerPremiumReaction = (slug, userDisplayName) => {
     const item = shopItemsRef.current.find(i => i.slug === slug)
     if (!item) return
-    const alertId = `${Date.now()}-${Math.random()}`
     setActiveAlerts(prev => [...prev, {
-      id: alertId,
+      id: newAlertId(),
       type: 'premium-reaction',
       item,
       userDisplayName,
@@ -351,9 +369,8 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   }
 
   const triggerDonationAlert = (row) => {
-    const alertId = `${Date.now()}-${Math.random()}`
     setActiveAlerts(prev => [...prev, {
-      id: alertId,
+      id: newAlertId(),
       type: 'donation',
       display_name: row.display_name,
       amount: row.amount_cents / 100,
@@ -362,8 +379,8 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   }
 
   const sendPremiumReaction = (item) => {
-    if (Date.now() < cooldownUntil) {
-      const remainingSecs = Math.ceil((cooldownUntil - Date.now()) / 1000)
+    if (nowMs() < cooldownUntil) {
+      const remainingSecs = Math.ceil((cooldownUntil - nowMs()) / 1000)
       let timeStr = `${remainingSecs} secondes`
       if (remainingSecs > 60) {
         timeStr = `${Math.ceil(remainingSecs / 60)} minutes`
@@ -372,7 +389,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       return
     }
 
-    const now = Date.now()
+    const now = nowMs()
     const windowStart = now - 15000 // 15 seconds window
     recentEmotesRef.current = recentEmotesRef.current.filter(t => t > windowStart)
     recentEmotesRef.current.push(now)
@@ -426,6 +443,10 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
     setCustomAmount('')
   }
 
+  // Note lint : setState dans cet effect = fetch initial async (shopItems,
+  // userProfile, userPurchases) + abonnement onAuthStateChange. Pattern
+  // standard de "synchronisation avec un système externe" (Supabase auth).
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
     fetchShopItems()
 
@@ -451,6 +472,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
 
     return () => subscription.unsubscribe()
   }, [])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── Helpers ──
   const addFloatingEmoji = (emoji) => {
@@ -488,12 +510,12 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
         setHighlightedLap(row.id)
         setTimeout(() => setHighlightedLap(null), 4000)
       })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'race_laps', filter: `session_id=eq.${session.id}` }, () => {
-        // Chrono undo → refetch complet pour rester aligné
-        refetchLaps(session.id)
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'race_laps', filter: `session_id=eq.${session.id}` }, ({ old: row }) => {
+        // Patch en place — pas de refetch complet
+        if (row?.id) setLaps(prev => prev.filter(l => l.id !== row.id))
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'race_laps', filter: `session_id=eq.${session.id}` }, () => {
-        refetchLaps(session.id)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'race_laps', filter: `session_id=eq.${session.id}` }, ({ new: row }) => {
+        if (row?.id) setLaps(prev => prev.map(l => l.id === row.id ? row : l))
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'race_sessions', filter: `id=eq.${session.id}` }, ({ new: row }) => {
         setSession(prev => {
@@ -522,14 +544,13 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
         triggerDonationAlert(row)
       })
       .subscribe((status) => {
-        // En cas d'erreur ou de fermeture du canal, on resynchronise via
-        // un refetch complet (le heartbeat 5s prendra le relais ensuite).
-        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          // eslint-disable-next-line no-console
-          console.warn('[LiveRace] Realtime channel status:', status, '→ refetch')
+        if (status === 'SUBSCRIBED') {
+          setChannelHealthy(true)
+        } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          console.warn('[LiveRace] Realtime channel status:', status, '→ activation du fallback polling')
+          setChannelHealthy(false)
+          // Resync immédiat pour rattraper ce qu'on a raté pendant le down
           refetchLaps(session.id)
-          // Session : capter started_at / finished_at / status que le socket
-          // mort a peut-être ratés (pre-race flag, fin de course…).
           supabase.from('race_sessions').select('*').eq('id', session.id).maybeSingle()
             .then(({ data }) => { if (data) setSession(data) })
         }
@@ -585,23 +606,40 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       .on('broadcast', { event: 'premium-reaction' }, ({ payload }) => {
         triggerPremiumReaction(payload.slug, payload.userDisplayName)
       })
-      .on('broadcast', { event: 'donation-simu' }, ({ payload }) => {
-        triggerDonationAlert(payload.row)
-      })
+      // Note sécurité : on N'écoute PLUS `donation-simu` en broadcast.
+      // Avant, n'importe quel viewer pouvait envoyer ce broadcast depuis
+      // sa console DevTools et faire apparaître un faux MEGA DON à
+      // l'écran de tous les spectateurs (le check admin était client-side
+      // donc bypassable). Les dons de test admin passent désormais par un
+      // INSERT direct dans `donations` (RLS-protégé) → le realtime sur la
+      // table relaie automatiquement à tous les viewers, et seuls les
+      // admins authentifiés peuvent y arriver.
       .subscribe()
     extrasChannelRef.current = ch
     return () => supabase.removeChannel(ch)
   }, [session?.id])
 
   // ── Elapsed timer ──
+  // Deps spécifiques (avant : `[session]`, donc relancé à chaque remplacement
+  // de l'objet session par le polling ou realtime, ce qui figeait le timer
+  // une fraction de seconde à chaque tick).
+  // Note lint : setState dans cet effect = synchronisation avec une horloge
+  // externe (Date.now via setInterval). Pattern parfaitement légitime.
+  /* eslint-disable react-hooks/set-state-in-effect */
   useEffect(() => {
+    clearInterval(elapsedRef.current)
     if (session?.started_at && session?.status === 'live') {
+      const startMs = new Date(session.started_at).getTime()
+      setElapsed(Date.now() - startMs)
       elapsedRef.current = setInterval(() => {
-        setElapsed(Date.now() - new Date(session.started_at).getTime())
+        setElapsed(Date.now() - startMs)
       }, 1000)
+    } else {
+      setElapsed(0)
     }
     return () => clearInterval(elapsedRef.current)
-  }, [session])
+  }, [session?.started_at, session?.status])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // ── Initial load ──
   const loadLiveSession = async () => {
@@ -634,118 +672,102 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
   useEffect(() => { loadLiveSession() }, [customSessionId])
 
-  // ── Wake Lock & Visibility Refresh ──
+  // Reset le flag "vu en live" quand on change de session : sinon naviguer
+  // depuis une course live vers une course archivée déclencherait à tort
+  // l'overlay post-race sur l'archive.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSawLive(false)
+  }, [customSessionId])
+
+  // Bascule sawLive=true dès qu'on observe la session en status='live'.
+  // Avant : on faisait `sawLiveRef.current = true` directement en render,
+  // ce qui violait les règles React (lecture/écriture de ref en render
+  // = footgun concurrent rendering).
+  // Note lint : la règle "set-state-in-effect" recommande de dériver l'état
+  // au lieu de le synchroniser. Ici on a un VRAI accumulateur (sticky bit)
+  // qu'on ne peut PAS dériver de session.status seul (il faut la mémoire
+  // de la transition). C'est exactement l'usage légitime de useEffect.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (session?.status === 'live') setSawLive(true)
+  }, [session?.status])
+
+  // ── Wake Lock + Resync au retour de l'arrière-plan (handler unifié) ──
+  // Avant : 2 handlers concurrents qui doublonnaient les refetch au focus.
+  // Maintenant : 1 seul, qui réacquiert le wake lock (libéré quand l'onglet
+  // est caché) et resync uniquement si on est resté >2s en background.
+  useEffect(() => {
+    if (!session?.id) return
+    const sid = session.id
     let wakeLock = null
+    let lastVisibleAt = Date.now()
+
     const requestWakeLock = async () => {
       try {
         if ('wakeLock' in navigator) {
           wakeLock = await navigator.wakeLock.request('screen')
         }
-      } catch (err) {}
+      } catch { /* permission refusée / API indispo : non-bloquant */ }
     }
 
-    const handleVisibilityChange = async () => {
-      if (wakeLock !== null && document.visibilityState === 'visible') {
-        requestWakeLock()
-      }
-      if (document.visibilityState === 'visible') {
-        // Refetch everything when the tab becomes active again
-        // eslint-disable-next-line no-undef
-        loadLiveSession()
-      }
-    }
-
-    requestWakeLock()
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
-      if (wakeLock !== null) wakeLock.release().catch(() => {})
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // Reset le flag "vu en live" quand on change de session : sinon naviguer
-  // depuis une course live vers une course archivée déclencherait à tort
-  // l'overlay post-race sur l'archive.
-  useEffect(() => {
-    sawLiveRef.current = false
-  }, [customSessionId])
-
-  // ── Resync au retour de l'arrière-plan (mobile) ──
-  // Quand l'onglet est suspendu (changement d'app, écran éteint, etc.),
-  // Supabase Realtime peut perdre le socket et rater les INSERT. À la
-  // remise en avant-plan, on re-fetch tout l'état + les laps récents.
-  useEffect(() => {
-    let lastVisibleAt = Date.now()
-    const onVisible = () => {
+    const onVisible = async () => {
       if (document.visibilityState !== 'visible') {
         lastVisibleAt = Date.now()
         return
       }
-      const awaySeconds = (Date.now() - lastVisibleAt) / 1000
-      // Si on est resté >2s en arrière-plan, on resync
-      if (awaySeconds > 2 && session?.id) {
-        supabase
-          .from('race_laps')
-          .select('*')
-          .eq('session_id', session.id)
-          .order('recorded_at', { ascending: false })
-          .then(({ data }) => { if (data) setLaps(data) })
-        supabase
-          .from('race_sessions')
-          .select('*')
-          .eq('id', session.id)
-          .single()
+      // Wake lock auto-libéré par le navigateur quand l'onglet est caché
+      await requestWakeLock()
+      // Resync uniquement si on est resté >2s en arrière-plan (le socket
+      // Supabase peut avoir raté des events pendant la suspension).
+      if (Date.now() - lastVisibleAt > 2000) {
+        refetchLaps(sid)
+        supabase.from('race_sessions').select('*').eq('id', sid).maybeSingle()
           .then(({ data }) => { if (data) setSession(data) })
       }
       lastVisibleAt = Date.now()
     }
+
+    requestWakeLock()
     document.addEventListener('visibilitychange', onVisible)
     window.addEventListener('focus', onVisible)
+
     return () => {
       document.removeEventListener('visibilitychange', onVisible)
       window.removeEventListener('focus', onVisible)
+      if (wakeLock !== null) wakeLock.release().catch(() => {})
     }
-  }, [session?.id])
+  }, [session?.id, refetchLaps])
 
-  // ── Heartbeat de secours : re-fetch session + teams + laps toutes les 5s ──
-  // Garde-fou si le socket Realtime est silencieusement mort (fréquent sur
-  // mobile après que l'onglet ait été en arrière-plan ou après une longue
-  // attente pre-race). Couvre les 3 transitions critiques côté viewer :
-  //   - pre-race → race : started_at passe de null → date (flag damier disparaît)
-  //   - race → finished  : status passe live → finished + finished_at posé
-  //   - update teams     : ajout/retrait d'une équipe par l'orga
-  //
-  // 5s est un bon compromis sur la qualité de l'expérience live (vs 15s qui
-  // laissait trop de retard côté viewer PC quand le chronométreur saisissait
-  // sur mobile). Actif dès qu'on a une session, peu importe son status :
-  // sinon les transitions n'étaient pas capturées (avant : limité à
-  // status='live', donc on ratait le passage live → finished).
+  // ── Fallback de polling (UNIQUEMENT si le canal Realtime est mort) ──
+  // Le Realtime est le chemin principal : INSERT/UPDATE/DELETE arrivent en
+  // patch en place quasi instantanément. Le polling ne tourne que quand le
+  // socket est en CHANNEL_ERROR/TIMED_OUT/CLOSED → coût Supabase nul en
+  // marche nominale (vs 3 requêtes/5s × N viewers du heartbeat précédent).
+  // Quand actif : tick à 10s, comparaison robuste (deep diff sur les champs
+  // critiques pour ne pas jeter d'updates comme le bug initial).
   useEffect(() => {
-    if (!session?.id) return
+    if (!session?.id || channelHealthy) return
     const sid = session.id
+    console.warn('[LiveRace] Fallback polling actif (canal Realtime KO)')
+
     const tick = () => {
-      // 1. Session : catches started_at, finished_at, status, live_stream_active
-      supabase
-        .from('race_sessions').select('*').eq('id', sid).maybeSingle()
+      // 1. Session : remplace si N'IMPORTE QUEL champ a changé (avant : 4 champs
+      //    hardcodés, on ratait les changements de name/categories/etc.)
+      supabase.from('race_sessions').select('*').eq('id', sid).maybeSingle()
         .then(({ data }) => {
           if (!data) return
           setSession(prev => {
-            // Évite re-render inutile si rien n'a changé (compare champs critiques)
-            if (prev
-              && prev.status === data.status
-              && prev.started_at === data.started_at
-              && prev.finished_at === data.finished_at
-              && prev.live_stream_active === data.live_stream_active) return prev
+            if (!prev) return data
+            // Deep compare via JSON (taille négligeable : 1 row)
+            if (JSON.stringify(prev) === JSON.stringify(data)) return prev
             return data
           })
         })
 
-      // 2. Teams : nouvelle équipe ajoutée, ou nom/numéro mis à jour
-      supabase
-        .from('race_teams').select('*').eq('session_id', sid).order('moto_number')
+      // 2. Teams : remplace si N'IMPORTE QUEL changement détecté (avant : seulement
+      //    moto_number/pilot_1_name/category, on ratait pilot_2_name, etc.)
+      supabase.from('race_teams').select('*').eq('session_id', sid).order('moto_number')
         .then(({ data }) => {
           if (!data) return
           setTeams(prev => {
@@ -753,55 +775,107 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
             const prevById = new Map(prev.map(t => [t.id, t]))
             for (const t of data) {
               const old = prevById.get(t.id)
-              if (!old || old.moto_number !== t.moto_number || old.pilot_1_name !== t.pilot_1_name
-                  || old.category !== t.category) return data
+              if (!old || JSON.stringify(old) !== JSON.stringify(t)) return data
             }
             return prev
           })
         })
 
-      // 3. Laps : couvert avant, on garde la diff par set d'IDs
-      supabase
-        .from('race_laps').select('*').eq('session_id', sid)
+      // 3. Laps : remplace si une ligne a changé (INSERT/UPDATE/DELETE), avant
+      //    on ratait les UPDATE car comparaison par set d'IDs uniquement.
+      supabase.from('race_laps').select('*').eq('session_id', sid)
         .order('recorded_at', { ascending: false })
         .then(({ data }) => {
           if (!data) return
           setLaps(prev => {
             if (prev.length !== data.length) return data
-            const prevIds = new Set(prev.map(l => l.id))
+            const prevById = new Map(prev.map(l => [l.id, l]))
             for (const l of data) {
-              if (!prevIds.has(l.id)) return data
+              const old = prevById.get(l.id)
+              if (!old || old.lap_time_ms !== l.lap_time_ms || old.lap_number !== l.lap_number
+                  || old.moto_number !== l.moto_number || old.team_id !== l.team_id) return data
             }
             return prev
           })
         })
     }
-    const interval = setInterval(tick, 5000)
+    tick()
+    const interval = setInterval(tick, 10000)
     return () => clearInterval(interval)
-  }, [session?.id])
+  }, [session?.id, channelHealthy])
 
   // ── Track position changes when laps update ──
-  const getRankingsForAll = useCallback(() => {
-    return teams.map(team => {
-      const teamLaps = laps.filter(l => l.team_id === team.id).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
-      const totalLaps = teamLaps.length
-      const durations = totalLaps > 0
-        ? teamLaps.map((lap, idx) => idx === 0 ? lap.lap_time_ms : lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms)
-        : []
-      return {
-        ...team,
-        totalLaps,
-        bestLap: durations.length ? Math.min(...durations) : null,
-        lastPassageTime: totalLaps > 0 ? teamLaps[totalLaps - 1].lap_time_ms : Infinity
-      }
-    })
-    .filter(t => t.totalLaps > 0)
-    .sort((a, b) => b.totalLaps !== a.totalLaps ? b.totalLaps - a.totalLaps : a.lastPassageTime - b.lastPassageTime)
-  }, [teams, laps])
+  // ── Classement memoizé pour TOUTES les catégories d'un coup ──
+  // Avant : getRankings(cat) était appelé 1× pour la vue principale +
+  // 1× par catégorie en onglet Podiums + 1× par le tracker de deltas,
+  // soit 6-8 recalculs O(teams × laps) PAR render. Avec ce memo, on
+  // calcule UNE fois par changement de laps/teams.
+  const rankingsCache = useMemo(() => {
+    const cats = ['all', ...(session?.categories || [])]
+    const cache = {}
+    for (const cat of cats) {
+      const catTeams = cat === 'all' ? teams : teams.filter(t => t.category === cat)
+      const sorted = catTeams.map(team => {
+        const teamLaps = laps.filter(l => l.team_id === team.id).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
+        const totalLaps = teamLaps.length
+        let bestLap = null, lastLap = null, avgLap = null
+        if (totalLaps > 0) {
+          // Calcul des durées en une passe (reduce manuel, stack-safe)
+          let bl = teamLaps[0].lap_time_ms
+          let lastDur = teamLaps[0].lap_time_ms
+          for (let i = 1; i < totalLaps; i++) {
+            const dur = teamLaps[i].lap_time_ms - teamLaps[i - 1].lap_time_ms
+            if (dur < bl) bl = dur
+            lastDur = dur
+          }
+          bestLap = bl
+          lastLap = lastDur
+          avgLap = Math.round(teamLaps[totalLaps - 1].lap_time_ms / totalLaps)
+        }
+        return {
+          ...team, bestLap, avgLap, lastLap, totalLaps, laps: teamLaps,
+          lastPassageTime: totalLaps > 0 ? teamLaps[totalLaps - 1].lap_time_ms : Infinity
+        }
+      }).filter(t => t.totalLaps > 0)
+        .sort((a, b) => b.totalLaps !== a.totalLaps ? b.totalLaps - a.totalLaps : a.lastPassageTime - b.lastPassageTime)
 
+      cache[cat] = sorted.map((r, index) => {
+        if (index === 0) return { ...r, gapToLeader: 'LEADER', interval: '-' }
+        const leader = sorted[0]; const prev = sorted[index - 1]
+        const gapToLeader = r.totalLaps === leader.totalLaps
+          ? `+${((r.lastPassageTime - leader.lastPassageTime) / 1000).toFixed(3)}s`
+          : `+${leader.totalLaps - r.totalLaps} Tour${leader.totalLaps - r.totalLaps > 1 ? 's' : ''}`
+        const interval = r.totalLaps === prev.totalLaps
+          ? `+${((r.lastPassageTime - prev.lastPassageTime) / 1000).toFixed(3)}s`
+          : `+${prev.totalLaps - r.totalLaps} Tour${prev.totalLaps - r.totalLaps > 1 ? 's' : ''}`
+        return { ...r, gapToLeader, interval }
+      })
+    }
+    return cache
+  }, [teams, laps, session?.categories])
+
+  // Meilleur tour absolu (durée min toutes équipes confondues). Dérivé du
+  // memo des rankings → recompute uniquement quand les rankings changent.
+  const { bestOverall, bestTeam } = useMemo(() => {
+    let best = null, team = null
+    for (const r of (rankingsCache.all || [])) {
+      if (r.bestLap !== null && (best === null || r.bestLap < best)) {
+        best = r.bestLap
+        team = r
+      }
+    }
+    return { bestOverall: best, bestTeam: team }
+  }, [rankingsCache])
+
+  // totalTeams (équipes ayant fait au moins 1 passage). Set + map = O(N) ;
+  // memoizé pour ne pas recalculer à chaque tick d'elapsed.
+  const totalTeams = useMemo(() => new Set(laps.map(l => l.team_id)).size, [laps])
+
+  // Tracking des deltas de position (basé sur le ranking 'all' memoizé,
+  // ne tourne donc QUE quand les rankings changent réellement).
   useEffect(() => {
-    if (laps.length === 0 || teams.length === 0) return
-    const current = getRankingsForAll()
+    const current = rankingsCache.all || []
+    if (current.length === 0) return
     const deltas = {}
     current.forEach((r, idx) => {
       const prev = prevRankingsRef.current[r.id]
@@ -814,7 +888,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
     const newPrev = {}
     current.forEach((r, idx) => { newPrev[r.id] = idx })
     prevRankingsRef.current = newPrev
-  }, [laps, teams, getRankingsForAll])
+  }, [rankingsCache])
 
   const handleShare = () => {
     const url = `${window.location.origin}?live=${session.id}`
@@ -863,47 +937,8 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
     a.click()
   }
 
-  // ── Rankings computation ──
-  const getRankings = (cat) => {
-    const catTeams = cat === 'all' ? teams : teams.filter(t => t.category === cat)
-    const sorted = catTeams.map(team => {
-      const teamLaps = laps.filter(l => l.team_id === team.id).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
-      const totalLaps = teamLaps.length
-      let bestLap = null, lastLap = null, avgLap = null
-      if (totalLaps > 0) {
-        const durations = teamLaps.map((lap, idx) => idx === 0 ? lap.lap_time_ms : lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms)
-        bestLap = Math.min(...durations)
-        lastLap = durations[totalLaps - 1]
-        avgLap = Math.round(teamLaps[totalLaps - 1].lap_time_ms / totalLaps)
-      }
-      return { ...team, bestLap, avgLap, lastLap, totalLaps, laps: teamLaps, lastPassageTime: totalLaps > 0 ? teamLaps[totalLaps - 1].lap_time_ms : Infinity }
-    }).filter(t => t.totalLaps > 0)
-      .sort((a, b) => b.totalLaps !== a.totalLaps ? b.totalLaps - a.totalLaps : a.lastPassageTime - b.lastPassageTime)
-
-    return sorted.map((r, index) => {
-      if (index === 0) return { ...r, gapToLeader: 'LEADER', interval: '-' }
-      const leader = sorted[0]; const prev = sorted[index - 1]
-      const gapToLeader = r.totalLaps === leader.totalLaps
-        ? `+${((r.lastPassageTime - leader.lastPassageTime) / 1000).toFixed(3)}s`
-        : `+${leader.totalLaps - r.totalLaps} Tour${leader.totalLaps - r.totalLaps > 1 ? 's' : ''}`
-      const interval = r.totalLaps === prev.totalLaps
-        ? `+${((r.lastPassageTime - prev.lastPassageTime) / 1000).toFixed(3)}s`
-        : `+${prev.totalLaps - r.totalLaps} Tour${prev.totalLaps - r.totalLaps > 1 ? 's' : ''}`
-      return { ...r, gapToLeader, interval }
-    })
-  }
-
-  const getFemaleWinner = () => {
-    const femaleTeams = teams.filter(t => t.pilot_1_sex === 'F' || t.pilot_2_sex === 'F' || t.pilot_3_sex === 'F')
-    if (!femaleTeams.length) return null
-    return femaleTeams.map(team => {
-      const teamLaps = laps.filter(l => l.team_id === team.id).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
-      const totalLaps = teamLaps.length
-      const durations = totalLaps > 0 ? teamLaps.map((lap, idx) => idx === 0 ? lap.lap_time_ms : lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms) : []
-      return { ...team, totalLaps, bestLap: durations.length ? Math.min(...durations) : null, lastPassageTime: totalLaps > 0 ? teamLaps[totalLaps - 1].lap_time_ms : Infinity }
-    }).filter(t => t.totalLaps > 0)
-      .sort((a, b) => b.totalLaps !== a.totalLaps ? b.totalLaps - a.totalLaps : a.lastPassageTime - b.lastPassageTime)[0] || null
-  }
+  // Lecture du classement (wrapper sur le memo)
+  const getRankings = (cat) => rankingsCache[cat] || []
 
   // ── Derived ──
   if (loading && !session) return (
@@ -919,9 +954,6 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   const allRankings  = getRankings(selectedCategory)
   const recentLaps   = laps.slice(0, 8)
   const totalLaps    = laps.length
-  const totalTeams   = new Set(laps.map(l => l.team_id)).size
-  const bestOverall  = laps.length > 0 ? Math.min(...laps.map(l => l.lap_time_ms)) : null
-  const bestTeam     = bestOverall ? teams.find(t => t.id === laps.find(l => l.lap_time_ms === bestOverall)?.team_id) : null
 
   // ── Modes overlay : pré-course (drapeau "départ imminent") et post-course
   //    ("fin de la course" 5min + auto-exit). Calculés à partir du status
@@ -937,11 +969,10 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   // il veut voir les classements, pas un drapeau qui le redirige vers
   // l'accueil quand le countdown a expiré.
   //
-  // `sawLiveRef` (déclaré en haut) est posé à true dès qu'on observe
-  // status='live' lors d'un render. Si on arrive directement sur un
-  // status finished/published, il reste à false → pas d'overlay.
-  if (session?.status === 'live') sawLiveRef.current = true
-  const isPostRace = sawLiveRef.current
+  // `sawLive` (state) est mis à true par un useEffect dédié dès qu'on
+  // observe status='live'. Si on arrive directement sur un status
+  // finished/published, il reste à false → pas d'overlay.
+  const isPostRace = sawLive
                      && (session?.status === 'finished' || session?.status === 'published')
 
   return (
@@ -1523,10 +1554,12 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                             <span className="premium-shop-owned-badge">✓ Débloqué</span>
                           ) : authUser ? (
                             <div style={{ width: '100%', minWidth: '120px' }}>
-                              <StripePurchaseButton
-                                item={item}
-                                onPurchased={() => fetchUserPurchases(authUser.id)}
-                              />
+                              <Suspense fallback={<button className="btn btn-primary" style={{ width: '100%', opacity: 0.6 }} disabled>⏳…</button>}>
+                                <StripePurchaseButton
+                                  item={item}
+                                  onPurchased={() => fetchUserPurchases(authUser.id)}
+                                />
+                              </Suspense>
                             </div>
                           ) : (
                             <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
@@ -1620,32 +1653,43 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
 
                   {donationAmount > 0 && donationPseudo.trim() && pseudoCheckState !== 'taken' && pseudoCheckState !== 'checking' ? (
                     <div style={{ marginTop: '10px' }}>
-                      <StripeDonationForm
-                        amount={donationAmount}
-                        pseudo={donationPseudo}
-                        message={donationMessage}
-                        sessionId={session?.id || null}
-                        authUserEmail={authUser?.email || null}
-                        onSuccess={handleStripeDonationSuccess}
-                        onCancel={() => setShopOpen(false)}
-                      />
+                      <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>⏳ Chargement du paiement sécurisé…</div>}>
+                        <StripeDonationForm
+                          amount={donationAmount}
+                          pseudo={donationPseudo}
+                          message={donationMessage}
+                          sessionId={session?.id || null}
+                          authUserEmail={authUser?.email || null}
+                          onSuccess={handleStripeDonationSuccess}
+                          onCancel={() => setShopOpen(false)}
+                        />
+                      </Suspense>
                       {userProfile?.role === 'admin' && (
                         <button
                           type="button"
                           className="btn btn-outline"
                           style={{ marginTop: '15px', width: '100%', borderColor: '#ff5555', color: '#ff5555' }}
-                          onClick={() => {
-                            const row = {
-                              display_name: donationPseudo || 'Admin Simu',
-                              amount_cents: donationAmount * 100,
-                              message: donationMessage || 'Simulation de don (Admin)'
-                            };
-                            triggerDonationAlert(row);
-                            extrasChannelRef.current?.send({
-                              type: 'broadcast',
-                              event: 'donation-simu',
-                              payload: { row }
+                          onClick={async () => {
+                            // Sécu : avant on broadcastait `donation-simu` qui
+                            // était falsifiable par n'importe quel viewer en
+                            // console. Maintenant on insère une vraie ligne
+                            // donations via l'Edge function (admin-only,
+                            // service_role bypass RLS) → le realtime sur la
+                            // table déclenche l'alerte chez tous les viewers
+                            // par le chemin standard, impossible à spoofer.
+                            const { data, error } = await supabase.functions.invoke('stripe-donation', {
+                              body: {
+                                action: 'admin-simulate-donation',
+                                displayName: donationPseudo || 'Admin Simu',
+                                amountCents: Math.round(donationAmount * 100),
+                                message: donationMessage || 'Simulation de don (Admin)',
+                                sessionId: session?.id || null,
+                              },
                             });
+                            if (error || !data?.ok) {
+                              toast.error('Simulation échouée : ' + (error?.message || data?.error || 'inconnu'));
+                              return;
+                            }
                             setShopOpen(false);
                             setDonationPseudo('');
                             setDonationMessage('');

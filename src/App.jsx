@@ -9,8 +9,9 @@ import RiderPage from './components/RiderPage'
 import VideoBackgroundDual from './components/VideoBackgroundDual'
 import LiveRace from './components/LiveRace'
 import MotoPage from './components/MotoPage'
-import PayPalButton from './components/PayPalButton'
-import StripeOrderCheckout from './components/StripeOrderCheckout'
+// StripeOrderCheckout lazy-loaded (Stripe SDK ~50 KB, seulement utilisé
+// dans le flow boutique → pas de raison de bundler en eager).
+const StripeOrderCheckout = lazy(() => import('./components/StripeOrderCheckout'))
 // ─── Code-splitting : composants chargés à la demande ───
 // Tout ce qui est admin (gestion users/emotes/dons) ou orga (course setup,
 // chronométrage) ne sert qu'à une minorité d'utilisateurs. Pas la peine
@@ -57,7 +58,6 @@ const GoogleAd = ({ slot = '1234567890', format = 'auto', style = { display: 'bl
         pushed = true
       } catch (e) {
         console.warn('Google AdSense push failed', e)
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setAdError(true)
       }
     }
@@ -149,7 +149,6 @@ const SidebarAd = ({ side = 'left', navigate }) => {
         (window.adsbygoogle || []).push({})
         pushed = true
       } catch {
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setAdError(true)
       }
     }
@@ -1262,11 +1261,6 @@ function App() {
       return list
     }
     return BIKES_LIST
-  }
-
-  const getPayPalLink = (product) => {
-    const numericPrice = product.price.replace(/[^0-9]/g, '')
-    return `https://paypal.me/CorentinCARTIER/${numericPrice}`
   }
 
   return (
@@ -2393,7 +2387,7 @@ function App() {
 
               <h3 className="text-accent" style={{fontSize:'1rem', marginTop:'20px'}}>4. Règlement des Litiges & Paiements</h3>
               <p>
-                Les transactions financières s'effectuent de manière externe et sécurisée via la plateforme PayPal ou Stripe. Mob Y Dick n'enregistre aucune information bancaire sur ses propres serveurs. En cas de litige, nous vous invitons à contacter notre équipe via nos réseaux sociaux afin de trouver une solution amiable.
+                Les transactions financières s'effectuent de manière externe et sécurisée via la plateforme Stripe. Mob Y Dick n'enregistre aucune information bancaire sur ses propres serveurs. En cas de litige, nous vous invitons à contacter notre équipe via nos réseaux sociaux afin de trouver une solution amiable.
               </p>
 
               <button className="btn btn-primary" style={{width:'100%', marginTop:'24px'}} onClick={() => setShowLegalModal(false)}>J'ai compris et j'accepte</button>
@@ -2534,12 +2528,14 @@ function App() {
                   <p className="checkout-warning-text" style={{ marginBottom: '15px' }}>⚠️ Procède au règlement sécurisé ci-dessous pour enregistrer et valider ta commande immédiatement.</p>
 
                   <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <StripeOrderCheckout
-                      product={checkoutProduct}
-                      checkoutData={checkoutData}
-                      onSuccess={handleCheckoutPaymentSuccess}
-                      onCancel={() => setCheckoutStep(1)}
-                    />
+                    <Suspense fallback={<LazyLoader />}>
+                      <StripeOrderCheckout
+                        product={checkoutProduct}
+                        checkoutData={checkoutData}
+                        onSuccess={handleCheckoutPaymentSuccess}
+                        onCancel={() => setCheckoutStep(1)}
+                      />
+                    </Suspense>
                   </div>
                 </div>
               )}

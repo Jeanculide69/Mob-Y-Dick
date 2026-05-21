@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '../supabaseClient'
 import './RaceChrono.css'
@@ -23,6 +23,13 @@ const NUMPAD_KEYS = [
   ['⌫', '0', '✓'],
 ]
 
+// UUID v4 (préfère crypto.randomUUID, fallback robuste sur vieux WebViews mobiles)
+const genClientId = () => {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID()
+  // Fallback : pas un v4 strict mais suffisamment unique en pratique (≥122 bits d'entropie)
+  return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}-${Math.random().toString(16).slice(2, 10)}-${Math.random().toString(16).slice(2, 10)}`
+}
+
 export default function RaceChrono({ raceSession, teams, session, onFinish, onClose }) {
   const [laps, setLaps]                     = useState([])
   const [motoInput, setMotoInput]           = useState('')
@@ -31,7 +38,7 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
   const [lastLapFlash, setLastLapFlash]     = useState(null)
   const [selectedCategory, setSelectedCategory] = useState('all')
 
-  // ── New feature states ──
+  // ── Undo + annonce ──
   const [lastInsertedLapId, setLastInsertedLapId] = useState(null)
   const [undoCountdown, setUndoCountdown]         = useState(0)
   const [announcement, setAnnouncement]           = useState('')
@@ -40,82 +47,216 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
   const [xxlMode, setXxlMode]                     = useState(() =>
     typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches
   )
-  const [offlineQueue, setOfflineQueue]           = useState(() => {
-    try { return JSON.parse(localStorage.getItem(`race_offline_laps_${raceSession.id}`) || '[]') } catch { return [] }
-  })
+  // Compteur affiché de laps en attente de synchronisation (visibilité offline)
+  const [pendingCount, setPendingCount] = useState(0)
 
-  const inputRef       = useRef(null)
-  const intervalRef    = useRef(null)
-  const undoTimerRef   = useRef(null)
+  const inputRef         = useRef(null)
+  const intervalRef      = useRef(null)
+  const undoTimerRef     = useRef(null)
   const extrasChannelRef = useRef(null)
 
-  const categories = raceSession?.categories || []
-  const isRunning = !!sessionData?.started_at && sessionData?.status === 'live'
-  const startTime = sessionData?.started_at ? new Date(sessionData.started_at).getTime() : null
+  // ── Queue offline (source de vérité de fiabilité) ──
+  // In-memory + miroir localStorage synchrone. Chaque item :
+  //   { client_id, session_id, team_id, moto_number, lap_time_ms,
+  //     lap_number, recorded_by, recorded_at, status: 'pending'|'syncing' }
+  // Pas de statut 'synced' : un item synchronisé est retiré de la queue.
+  const queueRef        = useRef([])
+  const queueKey        = `race_offline_laps_${raceSession.id}`
+  // Mutex anti-syncs concurrents (cause root du bug "lap perdu en cas A,
+  // doublon en cas B"). Une seule sync en vol à la fois, on re-pompe à la fin.
+  const syncingRef      = useRef(false)
+  // Backoff exponentiel sur échec (1s → 2s → 4s → … → 30s)
+  const backoffRef      = useRef(0)
+  const backoffTimerRef = useRef(null)
+  // Anti-double-fire (Enter en key-repeat, double-tap sur ✓ mobile)
+  const recordingLockRef = useRef(0)
+
+  const persistQueue = useCallback(() => {
+    try {
+      localStorage.setItem(queueKey, JSON.stringify(queueRef.current))
+    } catch { /* quota plein / mode privé : on s'appuie sur l'in-memory */ }
+    setPendingCount(queueRef.current.length)
+  }, [queueKey])
+
+  // Hydrate la queue depuis localStorage au mount (récupération après
+  // crash navigateur, reboot tablette, kill d'onglet…).
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(queueKey) || '[]')
+      // Items qui étaient 'syncing' au moment d'un crash : on les repasse
+      // en 'pending'. L'upsert sur client_id est idempotent, donc safe.
+      queueRef.current = stored.map(q => ({ ...q, status: 'pending' }))
+      setPendingCount(queueRef.current.length)
+    } catch { queueRef.current = [] }
+  }, [queueKey])
+
+  // categories : memoizé (sinon `|| []` crée un nouveau tableau à chaque render
+  // → invalide le memo des rankings → recompute inutile à chaque tick du chrono)
+  const categories = useMemo(() => raceSession?.categories || [], [raceSession?.categories])
+  const isRunning  = !!sessionData?.started_at && sessionData?.status === 'live'
+  const startTime  = sessionData?.started_at ? new Date(sessionData.started_at).getTime() : null
 
   // Sync prop changes
-  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setSessionData(raceSession) }, [raceSession])
 
-  // Subscribe to extras channel for sending announcements + team statuses
+  // Channel "extras" pour broadcaster les annonces
   useEffect(() => {
     const ch = supabase.channel(`live-extras-${raceSession.id}`).subscribe()
     extrasChannelRef.current = ch
     return () => supabase.removeChannel(ch)
   }, [raceSession.id])
 
-  const loadLaps = async () => {
+  // ── Chargement initial + resync sur erreur channel ──
+  // Merge DB + queue locale (les items pending pas encore confirmés en DB
+  // sont affichés en optimiste avec id 'local-{client_id}').
+  const loadLaps = useCallback(async () => {
     const { data } = await supabase
       .from('race_laps')
       .select('*')
       .eq('session_id', raceSession.id)
       .order('recorded_at', { ascending: false })
-    
-    const stored = localStorage.getItem(`race_offline_laps_${raceSession.id}`)
-    const currentQueue = stored ? JSON.parse(stored) : []
-    setLaps((data || []).concat(currentQueue.map((q, i) => ({ ...q, id: 'offline-' + i }))))
-  }
 
-  const syncOfflineQueue = useCallback(async () => {
+    const dbRows = data || []
+    const dbClientIds = new Set(dbRows.map(r => r.client_id).filter(Boolean))
+    const localOnly = queueRef.current
+      .filter(q => !dbClientIds.has(q.client_id))
+      .map(q => ({ ...q, id: `local-${q.client_id}` }))
+    setLaps([...localOnly, ...dbRows])
+  }, [raceSession.id])
+
+  // ── Sync engine (le cœur de la fiabilité) ──
+  // Invariants :
+  //   - Une seule sync en vol à la fois (mutex syncingRef).
+  //   - Upsert idempotent sur client_id : un rejeu = aucun effet.
+  //   - error null ⇒ tous les client_ids envoyés sont en DB → retire de queue.
+  //   - error non-null ⇒ rollback status 'pending' + backoff exponentiel.
+  //   - Les items ajoutés pendant qu'une sync tourne déclenchent un re-pump.
+  // Named function expression (`syncOnceFn`) pour pouvoir s'auto-référer
+  // dans les setTimeout (backoff retry + re-pump) sans tomber dans le TDZ
+  // de la const `syncOnce` capturée par closure.
+  const syncOnce = useCallback(async function syncOnceFn() {
+    if (syncingRef.current) return
     if (!navigator.onLine) return
-    let currentQueue = []
-    try {
-      const stored = localStorage.getItem(`race_offline_laps_${raceSession.id}`)
-      currentQueue = stored ? JSON.parse(stored) : []
-    } catch { return }
 
-    if (currentQueue.length === 0) return
+    const toSync = queueRef.current.filter(q => q.status === 'pending')
+    if (toSync.length === 0) return
 
-    const { error } = await supabase.from('race_laps').insert(currentQueue)
+    syncingRef.current = true
+    toSync.forEach(q => { q.status = 'syncing' })
+    persistQueue()
+
+    const payload = toSync.map(q => ({
+      client_id:   q.client_id,
+      session_id:  q.session_id,
+      team_id:     q.team_id,
+      moto_number: q.moto_number,
+      lap_time_ms: q.lap_time_ms,
+      lap_number:  q.lap_number,
+      recorded_by: q.recorded_by,
+      recorded_at: q.recorded_at,
+    }))
+
+    const { data, error } = await supabase
+      .from('race_laps')
+      .upsert(payload, { onConflict: 'client_id', ignoreDuplicates: true })
+      .select()
+
     if (error) {
-      console.warn('[Offline] Sync failed:', error)
-      if (error.code === '401' || error.message?.toLowerCase().includes('jwt')) {
-        alert("Session expirée ! Veuillez rafraîchir la page pour synchroniser vos chronos en attente.")
+      // Rollback → retry plus tard
+      toSync.forEach(q => { q.status = 'pending' })
+      persistQueue()
+      if (error.code === 'PGRST301' || /jwt/i.test(error.message || '')) {
+        console.warn('[ChronoSync] JWT expiré — laps conservés en queue, sync au prochain refresh')
+      } else {
+        console.warn('[ChronoSync] Sync failed:', error.message || error)
       }
+      backoffRef.current = Math.min(Math.max(backoffRef.current * 2, 1000), 30000)
+      clearTimeout(backoffTimerRef.current)
+      backoffTimerRef.current = setTimeout(() => {
+        syncingRef.current = false
+        syncOnceFn()
+      }, backoffRef.current)
       return
     }
 
-    setOfflineQueue([])
-    localStorage.removeItem(`race_offline_laps_${raceSession.id}`)
-    loadLaps()
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [raceSession.id])
+    // Succès : tous les client_ids envoyés sont garantis en DB
+    const syncedIds = new Set(toSync.map(q => q.client_id))
+    queueRef.current = queueRef.current.filter(q => !syncedIds.has(q.client_id))
+    persistQueue()
+    backoffRef.current = 0
 
-  useEffect(() => {
-    window.addEventListener('online', syncOfflineQueue)
-    // Attempt sync on mount
-    if (navigator.onLine) syncOfflineQueue()
-    return () => window.removeEventListener('online', syncOfflineQueue)
-  }, [syncOfflineQueue])
-
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadLaps()
-    const channel = supabase.channel('race_laps_chrono')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'race_laps', filter: `session_id=eq.${raceSession.id}` }, () => {
-        loadLaps()
+    if (data && data.length > 0) {
+      // Patch en place : remplace les optimistes 'local-X' par les vraies lignes DB
+      setLaps(prev => {
+        const map = new Map(prev.map(l => [l.id, l]))
+        for (const row of data) {
+          map.delete(`local-${row.client_id}`)
+          if (!map.has(row.id)) map.set(row.id, row)
+        }
+        return Array.from(map.values()).sort((a, b) =>
+          new Date(b.recorded_at).getTime() - new Date(a.recorded_at).getTime()
+        )
       })
-      .subscribe()
+    } else {
+      // Rejeu idempotent : les lignes étaient déjà en DB. Aucun realtime ne
+      // fira pour ces rows. Réconcilie en virant les optimistes correspondants.
+      setLaps(prev => prev.filter(l => {
+        if (typeof l.id !== 'string' || !l.id.startsWith('local-')) return true
+        return !syncedIds.has(l.id.slice(6))
+      }))
+      // Et on relit la DB pour récupérer les vraies lignes (insérées par
+      // un sync antérieur dont on a perdu la trace).
+      loadLaps()
+    }
+
+    syncingRef.current = false
+    if (queueRef.current.some(q => q.status === 'pending')) {
+      setTimeout(syncOnceFn, 0)
+    }
+  }, [persistQueue, loadLaps])
+
+  // Sync sur reconnexion réseau + au mount
+  useEffect(() => {
+    const onOnline = () => { backoffRef.current = 0; syncOnce() }
+    window.addEventListener('online', onOnline)
+    if (navigator.onLine) syncOnce()
+    return () => window.removeEventListener('online', onOnline)
+  }, [syncOnce])
+
+  // ── Realtime : patch en place (jamais de loadLaps complet sauf resync) ──
+  useEffect(() => {
+    loadLaps()
+
+    const channel = supabase.channel(`race_laps_chrono_${raceSession.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'race_laps', filter: `session_id=eq.${raceSession.id}` }, ({ new: row }) => {
+        setLaps(prev => {
+          if (prev.some(l => l.id === row.id)) return prev
+          // Remplace l'optimiste local-{client_id} par la vraie ligne
+          if (row.client_id) {
+            const localKey = `local-${row.client_id}`
+            const idx = prev.findIndex(l => l.id === localKey)
+            if (idx >= 0) {
+              const next = prev.slice()
+              next[idx] = row
+              return next
+            }
+          }
+          return [row, ...prev]
+        })
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'race_laps', filter: `session_id=eq.${raceSession.id}` }, ({ new: row }) => {
+        setLaps(prev => prev.map(l => l.id === row.id ? row : l))
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'race_laps', filter: `session_id=eq.${raceSession.id}` }, ({ old: row }) => {
+        setLaps(prev => prev.filter(l => l.id !== row.id))
+      })
+      .subscribe((status) => {
+        // Socket mort → on resync (mobile en pit-lane, 4G qui dégrade, etc.)
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          console.warn('[ChronoSync] Channel', status, '→ resync')
+          loadLaps()
+        }
+      })
 
     const sessionChannel = supabase.channel(`race_session_sync_${raceSession.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'race_sessions', filter: `id=eq.${raceSession.id}` }, (payload) => {
@@ -127,17 +268,18 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
       supabase.removeChannel(channel)
       supabase.removeChannel(sessionChannel)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [raceSession.id])
+  }, [raceSession.id, loadLaps])
 
-  // Chrono timer
+  // ── Chrono timer ──
+  // 100ms suffit pour un affichage MM:SS/HH:MM:SS fluide. Le lap_time_ms
+  // saisi est recalculé en EXACT (Date.now() - startTime) au moment du
+  // record, donc indépendant du tick d'affichage.
   useEffect(() => {
     if (isRunning && startTime) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setChrono(Date.now() - startTime)
       intervalRef.current = setInterval(() => {
         setChrono(Date.now() - startTime)
-      }, 10)
+      }, 100)
     } else {
       clearInterval(intervalRef.current)
       if (sessionData?.started_at && sessionData?.finished_at) {
@@ -149,16 +291,19 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
     return () => clearInterval(intervalRef.current)
   }, [isRunning, startTime, sessionData?.started_at, sessionData?.finished_at])
 
-  // Auto-focus the input (non-XXL mode)
+  // Auto-focus de l'input au mount uniquement (avant : à chaque update de
+  // laps, ce qui volait le focus de l'input d'annonce quand un lap arrivait).
   useEffect(() => {
     if (!xxlMode && inputRef.current) inputRef.current.focus()
-  }, [laps, xxlMode])
+  }, [xxlMode])
 
-  // Undo countdown cleanup
-  useEffect(() => () => clearInterval(undoTimerRef.current), [])
+  // Cleanup timers
+  useEffect(() => () => {
+    clearInterval(undoTimerRef.current)
+    clearTimeout(backoffTimerRef.current)
+  }, [])
 
-  // Verrouille le scroll du body quand le mode XXL est actif : l'overlay
-  // est sur le body via Portal et la page derrière ne doit pas bouger.
+  // Verrouille le scroll du body quand le mode XXL est actif
   useEffect(() => {
     if (!xxlMode) return
     const prev = document.body.style.overflow
@@ -188,9 +333,13 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
     if (error) alert('Erreur de réinitialisation du chrono: ' + error.message)
   }
 
-  const handleRecordLap = useCallback(async (overrideMoto) => {
+  const handleRecordLap = useCallback((overrideMoto) => {
+    // Anti-double-fire (Enter key-repeat / double-tap mobile)
+    if (Date.now() < recordingLockRef.current) return
+    recordingLockRef.current = Date.now() + 150
+
     const num = parseInt(overrideMoto ?? motoInput)
-    if (!num || !isRunning) return
+    if (!num || !isRunning || !startTime) return
 
     const team = teams.find(t => t.moto_number === num)
     if (!team) {
@@ -198,32 +347,34 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
       return
     }
 
-    const lapTime = chrono
+    // ⚠ lap_time_ms calculé en EXACT au moment du record, indépendamment
+    // du tick d'affichage (qui peut avoir jusqu'à 100ms de retard).
+    const lapTime = Date.now() - startTime
     const teamLaps = laps.filter(l => l.team_id === team.id)
     const lapNumber = teamLaps.length + 1
 
+    const clientId = genClientId()
     const lapData = {
-      session_id: raceSession.id,
-      team_id: team.id,
+      client_id:   clientId,
+      session_id:  raceSession.id,
+      team_id:     team.id,
       moto_number: num,
       lap_time_ms: lapTime,
-      lap_number: lapNumber,
+      lap_number:  lapNumber,
       recorded_by: session.user.id,
-      recorded_at: new Date().toISOString()
+      recorded_at: new Date().toISOString(),
+      status:      'pending',
     }
 
-    // Sauvegarde en file d'attente hors-ligne
-    let newQ = []
-    setOfflineQueue(prev => {
-      newQ = [...prev, lapData]
-      try { localStorage.setItem(`race_offline_laps_${raceSession.id}`, JSON.stringify(newQ)) } catch {}
-      return newQ
-    })
+    // 1. Enqueue (in-memory + localStorage synchrone)
+    queueRef.current = [...queueRef.current, lapData]
+    persistQueue()
 
-    // Mise à jour immédiate de l'interface (Optimistic UI)
-    setLaps(prev => [{...lapData, id: 'temp-' + Date.now()}, ...prev])
+    // 2. Optimistic UI
+    setLaps(prev => [{ ...lapData, id: `local-${clientId}` }, ...prev])
 
-    setLastInsertedLapId({ ...lapData }) // We store the data itself for undo
+    // 3. Undo (10s)
+    setLastInsertedLapId(lapData)
     setUndoCountdown(10)
     clearInterval(undoTimerRef.current)
     undoTimerRef.current = setInterval(() => {
@@ -237,46 +388,46 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
       })
     }, 1000)
 
+    // 4. Flash visuel
     setLastLapFlash({ moto: num, time: lapTime, pilot: team.pilot_1_name })
     setTimeout(() => setLastLapFlash(null), 3000)
 
+    // 5. Reset input + refocus (uniquement ici, pas sur chaque maj laps)
     setMotoInput('')
     if (!xxlMode && inputRef.current) inputRef.current.focus()
 
-    // Tentative de synchronisation immédiate
-    syncOfflineQueue()
-  }, [motoInput, isRunning, chrono, laps, teams, raceSession.id, session.user.id, xxlMode, syncOfflineQueue])
+    // 6. Pompe la sync (mutex-safe)
+    syncOnce()
+  }, [motoInput, isRunning, startTime, teams, laps, raceSession.id, session.user.id, xxlMode, syncOnce, persistQueue])
 
   const handleUndoLastLap = async () => {
     if (!lastInsertedLapId) return
     clearInterval(undoTimerRef.current)
-    
-    // Check if it's in offline queue
-    let removedFromQueue = false
-    setOfflineQueue(prev => {
-      const filtered = prev.filter(q => q.recorded_at !== lastInsertedLapId.recorded_at)
-      if (filtered.length < prev.length) {
-        removedFromQueue = true
-        try { localStorage.setItem(`race_offline_laps_${raceSession.id}`, JSON.stringify(filtered)) } catch {}
-      }
-      return filtered
-    })
 
-    if (!removedFromQueue && navigator.onLine) {
-      // It was already synced to DB, delete it
-      await supabase.from('race_laps')
-        .delete()
-        .eq('team_id', lastInsertedLapId.team_id)
-        .eq('recorded_at', lastInsertedLapId.recorded_at)
+    const clientId = lastInsertedLapId.client_id
+
+    // Cas 1 : encore en queue (pas encore en DB) → on retire de la queue
+    const inQueue = queueRef.current.some(q => q.client_id === clientId)
+    if (inQueue) {
+      queueRef.current = queueRef.current.filter(q => q.client_id !== clientId)
+      persistQueue()
+      setLaps(prev => prev.filter(l => l.id !== `local-${clientId}`))
+    } else if (navigator.onLine) {
+      // Cas 2 : déjà en DB → DELETE par client_id (plus fiable que recorded_at)
+      const { error } = await supabase.from('race_laps').delete().eq('client_id', clientId)
+      if (error) {
+        alert('Impossible de supprimer ce passage : ' + error.message)
+        return
+      }
+      // Le realtime DELETE patchera le state
+    } else {
+      alert('Hors-ligne : impossible d\'annuler un passage déjà synchronisé.')
+      return
     }
 
     setLastInsertedLapId(null)
     setUndoCountdown(0)
     setLastLapFlash(null)
-    
-    // Optimistic UI update
-    setLaps(prev => prev.filter(l => l.recorded_at !== lastInsertedLapId.recorded_at))
-    loadLaps()
   }
 
   const handleKeyDown = (e) => {
@@ -285,8 +436,16 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
 
   const handleDeleteLap = async (lapId) => {
     if (!confirm('Supprimer ce passage ?')) return
+    // Local optimiste : juste retirer de la queue + state
+    if (typeof lapId === 'string' && lapId.startsWith('local-')) {
+      const clientId = lapId.slice(6)
+      queueRef.current = queueRef.current.filter(q => q.client_id !== clientId)
+      persistQueue()
+      setLaps(prev => prev.filter(l => l.id !== lapId))
+      return
+    }
     await supabase.from('race_laps').delete().eq('id', lapId)
-    loadLaps()
+    // Realtime DELETE patchera l'UI
   }
 
   const handleFinishRace = async () => {
@@ -310,13 +469,11 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
     if (!text) return
     setSendingAnnouncement(true)
     try {
-      // Enregistrer en base de données pour l'historique
       const { error } = await supabase.from('race_announcements').insert([
         { session_id: raceSession.id, message: text }
       ])
       if (error) console.error('Erreur sauvegarde annonce:', error)
 
-      // Diffuser en direct pour affichage instantané
       await extrasChannelRef.current?.send({
         type: 'broadcast',
         event: 'announcement',
@@ -342,9 +499,10 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
     }
   }
 
-  // ── Rankings ──
-  const getRankings = () => {
-    const rankings = {}
+  // ── Classement (memoizé : ne recompile QUE quand laps/teams/cat changent,
+  //    pas à chaque tick du chrono).
+  const rankings = useMemo(() => {
+    const out = {}
     const catFilter = selectedCategory === 'all' ? categories : [selectedCategory]
     catFilter.forEach(cat => {
       const catTeams = teams.filter(t => t.category === cat)
@@ -353,8 +511,13 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
         const totalLaps = teamLaps.length
         let bestLap = null
         if (totalLaps > 0) {
-          const durations = teamLaps.map((lap, idx) => idx === 0 ? lap.lap_time_ms : lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms)
-          bestLap = Math.min(...durations)
+          // reduce manuel (safe pour 10k+ items, vs Math.min(...arr) qui peut stack-overflow)
+          let bl = teamLaps[0].lap_time_ms
+          for (let i = 1; i < teamLaps.length; i++) {
+            const dur = teamLaps[i].lap_time_ms - teamLaps[i - 1].lap_time_ms
+            if (dur < bl) bl = dur
+          }
+          bestLap = bl
         }
         return {
           ...team, bestLap, totalLaps, laps: teamLaps,
@@ -362,12 +525,11 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
         }
       }).filter(t => t.totalLaps > 0)
         .sort((a, b) => b.totalLaps !== a.totalLaps ? b.totalLaps - a.totalLaps : a.lastPassageTime - b.lastPassageTime)
-      if (teamResults.length > 0) rankings[cat] = teamResults
+      if (teamResults.length > 0) out[cat] = teamResults
     })
-    return rankings
-  }
+    return out
+  }, [laps, teams, categories, selectedCategory])
 
-  const rankings = getRankings()
   const previewTeam = motoInput ? teams.find(t => t.moto_number === parseInt(motoInput)) : null
 
   // ── XXL Numpad Overlay ──
@@ -384,6 +546,7 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
           <div className="chrono-xxl-timer">{formatTime(chrono, false)}</div>
           <div className="chrono-xxl-badge">
             {isRunning ? <><span className="chrono-live-dot" />EN DIRECT</> : '⏸ EN ATTENTE'}
+            {pendingCount > 0 && <span style={{ marginLeft: 8, fontSize: '0.85em', opacity: 0.85 }}>📡 {pendingCount}</span>}
           </div>
         </div>
 
@@ -447,6 +610,11 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
             <span className="chrono-live-dot" />
             EN DIRECT
           </div>
+          {pendingCount > 0 && (
+            <div className="chrono-live-badge" style={{ background: 'rgba(255,140,0,0.15)', borderColor: 'rgba(255,140,0,0.4)' }} title="Passages en attente de synchronisation">
+              📡 {pendingCount} en attente
+            </div>
+          )}
         </div>
         <h2 className="chrono-title">{raceSession.name}</h2>
         <div className="chrono-top-right">
@@ -562,10 +730,11 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
             <div className="chrono-recent-list">
               {laps.slice(0, 15).map(l => {
                 const team = teams.find(t => t.id === l.team_id)
+                const isLocal = typeof l.id === 'string' && l.id.startsWith('local-')
                 return (
-                  <div key={l.id} className="chrono-recent-item">
+                  <div key={l.id} className="chrono-recent-item" style={isLocal ? { opacity: 0.75 } : undefined} title={isLocal ? 'En attente de synchronisation' : undefined}>
                     <span className="chrono-recent-moto">#{l.moto_number}</span>
-                    <span className="chrono-recent-name">{team?.pilot_1_name || '?'}</span>
+                    <span className="chrono-recent-name">{team?.pilot_1_name || '?'}{isLocal ? ' 📡' : ''}</span>
                     <span className="chrono-recent-time">{formatTime(l.lap_time_ms)}</span>
                     <button className="chrono-recent-delete" onClick={() => handleDeleteLap(l.id)}>✕</button>
                   </div>

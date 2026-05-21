@@ -1,26 +1,43 @@
 /**
  * stripe-donation — Supabase Edge Function
  *
- * Crée et finalise un don via Stripe Payment Intents.
+ * Crée et finalise tout paiement Stripe (dons / achats premium / commandes
+ * boutique). Gère AUSSI les webhooks Stripe (anti-perte de paiement).
  *
- * Deux actions :
- *   - action: 'create-intent' → crée un PaymentIntent côté Stripe et
- *     retourne le client_secret au front, qui confirme la carte via
- *     stripe.confirmCardPayment().
- *   - action: 'finalize' → re-vérifie le PaymentIntent côté serveur
- *     (status='succeeded' + montant cohérent) et insère le don dans la
- *     table donations via service_role (bypass RLS).
+ * ─── Actions front (POST JSON avec `action`) ───
+ *   - create-intent             → PaymentIntent don
+ *   - finalize                  → finalise un don (post confirmCardPayment)
+ *   - create-purchase-intent    → PaymentIntent achat emote premium
+ *   - finalize-purchase         → finalise un achat
+ *   - create-order-intent       → PaymentIntent commande boutique
+ *   - finalize-order            → finalise une commande
+ *   - admin-simulate-donation   → simu admin (insert directement en DB)
+ *
+ * ─── Webhook (POST avec header Stripe-Signature, AUCUN body.action) ───
+ *   Stripe POST sur cette URL pour les events payment_intent.succeeded.
+ *   Fallback SI le client a fermé sa tab entre confirm et finalize :
+ *   le webhook insère le don/achat/commande à la place du client. Idempotent
+ *   grâce aux contraintes UNIQUE sur paypal_order_id.
  *
  * ─── Secrets requis (Supabase Dashboard → Settings → Edge Functions) ───
- *   STRIPE_SECRET_KEY     = sk_test_xxx (test) ou sk_live_xxx (prod)
+ *   STRIPE_SECRET_KEY      = sk_live_... ou sk_test_...
+ *   STRIPE_WEBHOOK_SECRET  = whsec_... (Stripe Dashboard → Webhooks → ton
+ *                            endpoint → "Signing secret")
+ *
+ * ─── Setup webhook Stripe (à faire UNE fois côté Stripe Dashboard) ───
+ *   1. Stripe Dashboard → Developers → Webhooks → Add endpoint
+ *   2. URL : https://<project>.supabase.co/functions/v1/stripe-donation
+ *   3. Events : `payment_intent.succeeded`
+ *   4. Copier "Signing secret" → coller dans Supabase secret STRIPE_WEBHOOK_SECRET
+ *   5. Redeploy : `supabase functions deploy stripe-donation --no-verify-jwt`
  *
  * ─── Setup côté front ───
- *   VITE_STRIPE_PUBLISHABLE_KEY = pk_test_xxx (test) ou pk_live_xxx (prod)
- *   (à mettre dans les env vars Vercel)
+ *   VITE_STRIPE_PUBLISHABLE_KEY = pk_live_... ou pk_test_... (Vercel env)
  *
  * ─── Deploy ───
  *   supabase functions deploy stripe-donation --no-verify-jwt
- *   (no-verify-jwt car les dons peuvent être anonymes)
+ *   (no-verify-jwt car les dons peuvent être anonymes ET le webhook Stripe
+ *   n'envoie pas de JWT Supabase. La sécurité = vérif Stripe-Signature.)
  */
 // @ts-nocheck — environnement Deno Edge Function
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
@@ -29,12 +46,16 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const STRIPE_SECRET_KEY = Deno.env.get('STRIPE_SECRET_KEY')!
+// Webhook secret (configuré dans Stripe Dashboard → Webhooks → ton endpoint
+// → "Signing secret"). Préfixe whsec_... Sans ça, on rejette les webhooks
+// pour éviter qu'un attaquant ne forge des événements payment_intent.succeeded.
+const STRIPE_WEBHOOK_SECRET = Deno.env.get('STRIPE_WEBHOOK_SECRET') || ''
 
 const STRIPE_API = 'https://api.stripe.com/v1'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
 
@@ -80,12 +101,193 @@ async function stripeRequest(path: string, body?: Record<string, unknown>) {
   return data
 }
 
+// ──────────────────────────────────────
+// Vérification de signature Stripe (HMAC-SHA256)
+// Format du header Stripe-Signature : `t=1234567890,v1=hash,v0=hash2`
+// On signe `${t}.${rawBody}` avec STRIPE_WEBHOOK_SECRET et on compare au `v1`.
+// Anti-replay : timestamp < 5min ; comparaison en temps constant pour éviter
+// les attaques par timing.
+// ──────────────────────────────────────
+async function verifyStripeSignature(rawBody: string, sigHeader: string, secret: string): Promise<boolean> {
+  if (!secret) return false
+  const parts: Record<string, string> = {}
+  for (const item of sigHeader.split(',')) {
+    const eq = item.indexOf('=')
+    if (eq < 0) continue
+    parts[item.slice(0, eq).trim()] = item.slice(eq + 1).trim()
+  }
+  const timestamp = parts.t
+  const signature = parts.v1
+  if (!timestamp || !signature) return false
+  // Anti-replay : 5 minutes de tolérance dans les deux sens
+  const age = Math.floor(Date.now() / 1000) - parseInt(timestamp, 10)
+  if (Math.abs(age) > 300) return false
+
+  const enc = new TextEncoder()
+  const key = await crypto.subtle.importKey(
+    'raw',
+    enc.encode(secret),
+    { name: 'HMAC', hash: 'SHA-256' },
+    false,
+    ['sign'],
+  )
+  const sig = await crypto.subtle.sign('HMAC', key, enc.encode(`${timestamp}.${rawBody}`))
+  const hex = Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, '0')).join('')
+
+  // Comparaison constant-time pour ne pas leaker via timing
+  if (hex.length !== signature.length) return false
+  let diff = 0
+  for (let i = 0; i < hex.length; i++) diff |= hex.charCodeAt(i) ^ signature.charCodeAt(i)
+  return diff === 0
+}
+
+// ──────────────────────────────────────
+// Traitement partagé d'un PaymentIntent.succeeded.
+// Appelé depuis :
+//   - finalize / finalize-purchase / finalize-order (client-driven)
+//   - webhook payment_intent.succeeded (server-driven, fail-safe)
+// Idempotent grâce aux UNIQUE constraints sur paypal_order_id.
+// L'intent doit être passé "enrichi" (avec latest_charge expandé) pour
+// remplir card_brand/last4/receipt_url. Le webhook le re-fetch si besoin.
+// ──────────────────────────────────────
+async function processIntentSucceeded(intent: any, supabase: any) {
+  if (intent.status !== 'succeeded') {
+    return { ok: false, status: 400, error: 'payment_not_succeeded', detail: intent.status }
+  }
+  if (intent.currency !== 'eur') {
+    return { ok: false, status: 400, error: 'wrong_currency', detail: intent.currency }
+  }
+
+  const md = intent.metadata || {}
+  const charge = intent.latest_charge && typeof intent.latest_charge === 'object' ? intent.latest_charge : {}
+  const cardDetails = charge.payment_method_details?.card || {}
+  const cardBrand: string | null = cardDetails.brand || null
+  const cardLast4: string | null = cardDetails.last4 || null
+  const receiptUrl: string | null = charge.receipt_url || null
+  const payerEmail: string | null = charge.billing_details?.email || intent.receipt_email || null
+
+  if (md.kind === 'donation') {
+    const { error } = await supabase.from('donations').insert({
+      user_id: md.user_id || null,
+      display_name: String(md.display_name || 'Donateur Anonyme').slice(0, 80),
+      amount_cents: intent.amount,
+      message: md.message ? String(md.message).slice(0, 300) : null,
+      session_id: md.session_id || null,
+      paypal_order_id: intent.id,
+      payment_provider: 'stripe',
+      payer_email: payerEmail,
+      card_brand: cardBrand,
+      card_last4: cardLast4,
+      receipt_url: receiptUrl,
+    })
+    if (error?.code === '23505') return { ok: true, duplicate: true, kind: 'donation' }
+    if (error) return { ok: false, status: 500, error: 'db_insert_failed', detail: error.message }
+    return { ok: true, kind: 'donation', amountCents: intent.amount }
+  }
+
+  if (md.kind === 'purchase') {
+    if (!md.user_id || !md.item_slug) {
+      return { ok: false, status: 400, error: 'missing_metadata' }
+    }
+    const { error } = await supabase.from('user_purchases').insert({
+      user_id: md.user_id,
+      item_slug: md.item_slug,
+      amount_cents: intent.amount,
+      paypal_order_id: intent.id,
+      payment_provider: 'stripe',
+      card_brand: cardBrand,
+      card_last4: cardLast4,
+      receipt_url: receiptUrl,
+    })
+    if (error?.code === '23505') return { ok: true, duplicate: true, kind: 'purchase', itemSlug: md.item_slug }
+    if (error) return { ok: false, status: 500, error: 'db_insert_failed', detail: error.message }
+    return { ok: true, kind: 'purchase', itemSlug: md.item_slug }
+  }
+
+  if (md.kind === 'order') {
+    if (!md.user_id) {
+      return { ok: false, status: 400, error: 'missing_metadata' }
+    }
+    const { error } = await supabase.from('orders').insert([{
+      product_name: md.product_name,
+      price: (intent.amount / 100).toFixed(2) + '€',
+      custom_text: md.custom_text || null,
+      size: md.size || null,
+      customer_name: md.customer_name,
+      customer_email: md.customer_email,
+      shipping_address: md.shipping_address,
+      shipping_city: md.shipping_city,
+      shipping_zip: md.shipping_zip,
+      shipping_country: md.shipping_country,
+      status: 'Paiement Validé',
+      user_id: md.user_id,
+      paypal_order_id: intent.id,
+    }])
+    if (error?.code === '23505') return { ok: true, duplicate: true, kind: 'order' }
+    if (error) return { ok: false, status: 500, error: 'db_insert_failed', detail: error.message }
+    return { ok: true, kind: 'order' }
+  }
+
+  return { ok: false, status: 400, error: 'unknown_kind', detail: md.kind || 'none' }
+}
+
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
   if (req.method !== 'POST') {
     return json(405, { error: 'method_not_allowed' })
+  }
+
+  // ──────────────────────────────────────
+  // 0. WEBHOOK STRIPE
+  //    Détection par le header Stripe-Signature. C'est l'anti-perte de
+  //    paiement : Stripe nous rappelle directement après confirm, même si
+  //    le client a fermé sa tab entre temps. Idempotent grâce aux UNIQUE
+  //    constraints sur paypal_order_id (donations, user_purchases, orders).
+  // ──────────────────────────────────────
+  const stripeSig = req.headers.get('stripe-signature') || req.headers.get('Stripe-Signature')
+  if (stripeSig) {
+    const rawBody = await req.text()
+    const valid = await verifyStripeSignature(rawBody, stripeSig, STRIPE_WEBHOOK_SECRET)
+    if (!valid) {
+      return json(400, { error: 'invalid_signature' })
+    }
+    let event: any
+    try { event = JSON.parse(rawBody) } catch { return json(400, { error: 'invalid_event_json' }) }
+
+    // On ne traite que payment_intent.succeeded ; les autres events
+    // (failed, refunded, etc.) sont ignorés pour l'instant — on renvoie
+    // 200 pour que Stripe ne les retente pas indéfiniment.
+    if (event.type !== 'payment_intent.succeeded') {
+      return json(200, { ok: true, ignored: event.type })
+    }
+
+    let intent = event.data?.object
+    if (!intent?.id) return json(400, { error: 'no_intent_in_event' })
+
+    // Le payload webhook n'inclut pas latest_charge en object (juste l'ID).
+    // On re-fetch en GET avec expand pour récupérer card_brand/last4/etc.
+    // Si la latence Stripe est trop forte, on insère quand même sans
+    // ces détails (mieux vaut un row sans card_brand qu'un don perdu).
+    try {
+      intent = await stripeRequest(
+        `/payment_intents/${encodeURIComponent(intent.id)}?expand[]=latest_charge`,
+      )
+    } catch {
+      // On garde l'intent du webhook même sans latest_charge expanded
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+    const result = await processIntentSucceeded(intent, supabase)
+    // Retour 200 pour Stripe même si l'insert a échoué (sinon Stripe retry
+    // sans fin) — on log côté Edge function logs Supabase.
+    if (!result.ok) {
+      console.error('[webhook] processIntent failed:', result.error, result.detail)
+    }
+    return json(200, { ok: true, result })
   }
 
   let body: any
@@ -525,6 +727,55 @@ serve(async (req: Request) => {
     }
 
     return json(200, { ok: true })
+  }
+
+  // ──────────────────────────────────────
+  // 7. ADMIN-SIMULATE-DONATION
+  //    Remplace l'ancien broadcast `donation-simu` côté LiveRace, qui
+  //    était falsifiable par n'importe quel viewer en console. Ici on
+  //    insère une vraie ligne `donations` taguée `payment_provider='simu'` ;
+  //    le realtime Supabase relaie automatiquement à tous les viewers
+  //    par le chemin standard. Seuls les admins authentifiés y arrivent.
+  //    Pour distinguer dans DonationsAdmin, filtrer sur payment_provider.
+  // ──────────────────────────────────────
+  if (action === 'admin-simulate-donation') {
+    if (!authUserId) return json(401, { error: 'auth_required' })
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+
+    // Re-check admin role côté serveur (le check client n'est qu'UI-gating)
+    const { data: profile } = await supabase
+      .from('profiles').select('role').eq('id', authUserId).maybeSingle()
+    if (profile?.role !== 'admin') {
+      return json(403, { error: 'admin_required' })
+    }
+
+    const { displayName, amountCents, message, sessionId } = body
+    if (!displayName || typeof displayName !== 'string') {
+      return json(400, { error: 'missing_display_name' })
+    }
+    const amt = parseInt(amountCents, 10)
+    if (!Number.isFinite(amt) || amt < 1 || amt > 10000000) {
+      return json(400, { error: 'invalid_amount' })
+    }
+
+    // paypal_order_id unique par appel (sinon UNIQUE constraint refuse
+    // les simulations successives avec mêmes params).
+    const fakeOrderId = `simu_${Date.now()}_${authUserId.slice(0, 8)}`
+
+    const { error } = await supabase.from('donations').insert({
+      user_id: authUserId,
+      display_name: displayName.slice(0, 80),
+      amount_cents: amt,
+      message: message ? String(message).slice(0, 300) : null,
+      session_id: sessionId || null,
+      paypal_order_id: fakeOrderId,
+      payment_provider: 'simu',
+    })
+    if (error) return json(500, { error: 'db_insert_failed', detail: error.message })
+    return json(200, { ok: true, simulated: true })
   }
 
   return json(400, { error: 'unknown_action' })
