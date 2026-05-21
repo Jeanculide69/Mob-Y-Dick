@@ -884,6 +884,8 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
         <RaceFlagOverlay
           mode="pre-race"
           session={session}
+          announcement={announcement}
+          announcementsHistory={announcementsHistory}
           onClose={onClose}
         />
       )}

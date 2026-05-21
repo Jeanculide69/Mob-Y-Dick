@@ -26,7 +26,7 @@ const formatRemaining = (ms) => {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export default function RaceFlagOverlay({ mode, session, onAutoExit, onClose }) {
+export default function RaceFlagOverlay({ mode, session, announcement, announcementsHistory = [], onAutoExit, onClose }) {
   const [now, setNow] = useState(() => Date.now())
 
   // Ticker pour rafraichir le compteur post-race chaque seconde
@@ -125,6 +125,46 @@ export default function RaceFlagOverlay({ mode, session, onAutoExit, onClose }) 
             <div className="race-flag-pulse-dots">
               <span /><span /><span />
             </div>
+
+            {(announcement || announcementsHistory.length > 0) && (
+              <div className="race-flag-announcements glass fade-in" style={{ 
+                marginTop: '40px', 
+                textAlign: 'left', 
+                padding: '24px', 
+                borderRadius: '16px', 
+                background: 'rgba(0,0,0,0.5)',
+                border: '1px solid rgba(255, 85, 0, 0.2)',
+                backdropFilter: 'blur(10px)',
+                width: '100%',
+                maxWidth: '500px',
+                margin: '40px auto 0'
+              }}>
+                <h3 style={{ margin: '0 0 16px', color: '#ff5500', fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '8px', textTransform: 'uppercase', letterSpacing: '1px' }}>
+                  <span>📢</span> Dernières annonces orga
+                </h3>
+                
+                {announcement && (
+                  <div style={{ padding: '14px', background: 'rgba(255,85,0,0.15)', borderLeft: '3px solid #ff5500', borderRadius: '6px', marginBottom: '20px', animation: 'raceFlagFadeIn 0.3s ease-out' }}>
+                    <span style={{ color: '#fff', fontWeight: 'bold', display: 'block', marginBottom: '4px', fontSize: '0.8rem', textTransform: 'uppercase' }}>MAINTENANT</span>
+                    <span style={{ color: '#f0f0f0', fontSize: '1.05rem' }}>{announcement}</span>
+                  </div>
+                )}
+                
+                <div className="race-flag-announcements-list" style={{ display: 'flex', flexDirection: 'column', gap: '12px', maxHeight: '200px', overflowY: 'auto', paddingRight: '8px' }}>
+                  {announcementsHistory.map((ann, i) => (
+                    <div key={ann.id || i} style={{ fontSize: '0.95rem', color: '#e0e0e0', paddingBottom: '12px', borderBottom: i < announcementsHistory.length - 1 ? '1px solid rgba(255,255,255,0.06)' : 'none' }}>
+                      <span style={{ color: 'var(--text-muted)', fontSize: '0.75rem', display: 'block', marginBottom: '6px', fontWeight: '600' }}>
+                        {ann.created_at ? new Date(ann.created_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : 'Récemment'}
+                      </span>
+                      {ann.message}
+                    </div>
+                  ))}
+                  {announcementsHistory.length === 0 && !announcement && (
+                    <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.9rem', textAlign: 'center', padding: '10px 0' }}>Aucune annonce pour le moment.</div>
+                  )}
+                </div>
+              </div>
+            )}
           </>
         ) : (
           <>
