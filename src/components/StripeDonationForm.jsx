@@ -58,17 +58,23 @@ const CARD_ELEMENT_OPTIONS = {
  * Formulaire wrapped dans Elements. Le composant interne accède aux hooks
  * Stripe via useStripe() / useElements() (impossibles hors d'Elements).
  */
-function DonationFormInner({ amount, pseudo, message, sessionId, onSuccess, onCancel }) {
+function DonationFormInner({ amount, pseudo, message, sessionId, authUserEmail, onSuccess, onCancel }) {
   const stripe = useStripe()
   const elements = useElements()
   const toast = useToast()
   const [processing, setProcessing] = useState(false)
   const [cardError, setCardError] = useState(null)
   const [cardComplete, setCardComplete] = useState(false)
-  // Email optionnel — utile pour : (1) reçu Stripe automatique envoyé par
-  // mail au donateur, (2) traçabilité côté admin si quelqu'un dit "j'ai
-  // payé mais ça apparait pas", on a un moyen de retrouver son don.
+  // Email du payeur :
+  //   - Si l'user est connecté, on a déjà son mail via Supabase auth →
+  //     on l'utilise direct, pas besoin de demander.
+  //   - Sinon (don anonyme), on affiche un champ optionnel pour qu'il
+  //     puisse recevoir un reçu Stripe + être retrouvé si problème.
   const [payerEmail, setPayerEmail] = useState('')
+  const hasAuthEmail = !!authUserEmail
+  // Email qui sera réellement envoyé à la function : la version saisie
+  // si pas connecté, sinon celle du compte authentifié (read-only ici).
+  const effectiveEmail = hasAuthEmail ? authUserEmail : payerEmail.trim()
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -89,11 +95,13 @@ function DonationFormInner({ amount, pseudo, message, sessionId, onSuccess, onCa
     setProcessing(true)
     setCardError(null)
 
-    // Validation email si renseigné
-    const trimmedEmail = payerEmail.trim()
-    if (trimmedEmail && (!trimmedEmail.includes('@') || trimmedEmail.length > 254)) {
-      setCardError('Format email invalide')
-      return
+    // Validation email seulement si l'user n'est pas connecté ET a tapé qqch
+    if (!hasAuthEmail && payerEmail.trim()) {
+      const trimmed = payerEmail.trim()
+      if (!trimmed.includes('@') || trimmed.length > 254) {
+        setCardError('Format email invalide')
+        return
+      }
     }
 
     try {
@@ -107,7 +115,7 @@ function DonationFormInner({ amount, pseudo, message, sessionId, onSuccess, onCa
             displayName: pseudo.slice(0, 80),
             message: (message || '').slice(0, 300),
             sessionId: sessionId || null,
-            payerEmail: trimmedEmail || null,
+            payerEmail: effectiveEmail || null,
           },
         }
       )
@@ -157,20 +165,29 @@ function DonationFormInner({ amount, pseudo, message, sessionId, onSuccess, onCa
 
   return (
     <form className="stripe-form" onSubmit={handleSubmit}>
-      <label className="stripe-form-label">
-        Email <span style={{ fontWeight: 400, fontSize: '0.78rem', color: 'var(--text-muted)' }}>(optionnel — pour recevoir un reçu)</span>
-        <input
-          type="email"
-          inputMode="email"
-          autoComplete="email"
-          placeholder="ton@email.com"
-          value={payerEmail}
-          onChange={(e) => setPayerEmail(e.target.value)}
-          disabled={processing}
-          maxLength={254}
-          className="stripe-email-input"
-        />
-      </label>
+      {/* Champ email uniquement si pas connecté — sinon on a déjà son
+          mail via le compte authentifié (affiché en read-only ci-dessous). */}
+      {hasAuthEmail ? (
+        <div className="stripe-form-authuser">
+          <span className="stripe-form-authuser-icon">✓</span>
+          <span>Reçu envoyé à <strong>{authUserEmail}</strong></span>
+        </div>
+      ) : (
+        <label className="stripe-form-label">
+          Email <span style={{ fontWeight: 400, fontSize: '0.78rem', color: 'var(--text-muted)' }}>(optionnel — pour recevoir un reçu)</span>
+          <input
+            type="email"
+            inputMode="email"
+            autoComplete="email"
+            placeholder="ton@email.com"
+            value={payerEmail}
+            onChange={(e) => setPayerEmail(e.target.value)}
+            disabled={processing}
+            maxLength={254}
+            className="stripe-email-input"
+          />
+        </label>
+      )}
 
       <label className="stripe-form-label">
         Informations de carte

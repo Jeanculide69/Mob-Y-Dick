@@ -55,6 +55,34 @@
   cursor: not-allowed;
 }
 
+/* Indicateur quand on a déjà l'email via le compte authentifié */
+.stripe-form-authuser {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(0, 204, 102, 0.08);
+  border: 1px solid rgba(0, 204, 102, 0.3);
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+.stripe-form-authuser-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #00cc66;
+  color: #000;
+  font-weight: 800;
+  font-size: 0.75rem;
+}
+.stripe-form-authuser strong {
+  color: #fff;
+}
+
 .stripe-form-error {
   padding: 10px 12px;
   border-radius: 8px;

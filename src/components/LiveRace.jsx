@@ -69,6 +69,25 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   const [donationMessage, setDonationMessage] = useState('')
   const [donationAmount, setDonationAmount] = useState(5)
   const [customAmount, setCustomAmount] = useState('')
+  // Pré-remplit le pseudo avec le display_name de l'user connecté, mais
+  // seulement s'il n'a rien tapé manuellement (= laisse la liberté de
+  // donner sous un pseudo différent si voulu). Effect dans la suite.
+  const pseudoPrefilledFromProfileRef = useRef(false)
+  useEffect(() => {
+    if (
+      userProfile?.display_name
+      && !donationPseudo
+      && !pseudoPrefilledFromProfileRef.current
+    ) {
+      setDonationPseudo(userProfile.display_name)
+      pseudoPrefilledFromProfileRef.current = true
+    }
+    // Si l'user se déconnecte, on reset le flag pour qu'un futur login
+    // pré-remplisse à nouveau.
+    if (!userProfile) {
+      pseudoPrefilledFromProfileRef.current = false
+    }
+  }, [userProfile, donationPseudo])
 
   // ── Audio unlock for mobile browsers ──
   const audioUnlockedRef = useRef(false)
@@ -1485,6 +1504,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                         pseudo={donationPseudo}
                         message={donationMessage}
                         sessionId={session?.id || null}
+                        authUserEmail={authUser?.email || null}
                         onSuccess={handleStripeDonationSuccess}
                         onCancel={() => setShopOpen(false)}
                       />
