@@ -1044,6 +1044,14 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
             )}
           </div>
 
+          {/* ─── Live Video Broadcasting (Organiser) ─── */}
+          {raceSession.status === 'live' && (
+            <LiveVideoBroadcaster 
+              session={session} 
+              raceSession={raceSession} 
+            />
+          )}
+
           {/* ─── Bottom Action Buttons (secondary access + destructive) ─── */}
           <div className="race-setup-actions glass">
             {raceSession.status === 'live' && (
@@ -1086,4 +1094,182 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
   )
 }
 
+function LiveVideoBroadcaster({ session, raceSession }) {
+  const [isStreaming, setIsStreaming] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [errorMsg, setErrorMsg] = useState(null)
+  
+  const videoRef = useRef(null)
+  const streamRef = useRef(null)
+  const intervalRef = useRef(null)
+  const channelRef = useRef(null)
 
+  // Auto clean-up on unmount
+  useEffect(() => {
+    return () => {
+      // Clear capture loop
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+      // Stop camera track
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop())
+      }
+    }
+  }, [])
+
+  const startStreaming = async () => {
+    setLoading(true)
+    setErrorMsg(null)
+    try {
+      // 1. Concurrency Check: Check if someone else is already streaming
+      const { data: latestSession, error: checkError } = await supabase
+        .from('race_sessions')
+        .select('live_stream_active, live_stream_user_id')
+        .eq('id', raceSession.id)
+        .single()
+
+      if (checkError) throw checkError
+
+      if (latestSession.live_stream_active && latestSession.live_stream_user_id !== session.user.id) {
+        throw new Error("⚠️ Un live est déjà en cours de diffusion sur cette course par un autre organisateur.")
+      }
+
+      // 2. Request camera stream
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 360 } },
+        audio: false
+      })
+
+      streamRef.current = stream
+      // Small timeout to allow video tag to mount and be ready
+      setTimeout(() => {
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream
+        }
+      }, 100)
+
+      // 3. Update DB
+      await supabase.from('race_sessions').update({
+        live_stream_active: true,
+        live_stream_user_id: session.user.id
+      }).eq('id', raceSession.id)
+
+      // 4. Initialize Signaling / Frame Channel
+      const channel = supabase.channel(`live-stream-${raceSession.id}`)
+      channelRef.current = channel
+      channel.subscribe()
+
+      // 5. Canvas capture interval (every 250ms -> ~4fps, extremely fast and light!)
+      const canvas = document.createElement('canvas')
+      canvas.width = 480
+      canvas.height = 270
+      const ctx = canvas.getContext('2d')
+
+      intervalRef.current = setInterval(() => {
+        if (videoRef.current && videoRef.current.readyState === 4) {
+          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
+          const base64Frame = canvas.toDataURL('image/jpeg', 0.5) // high compression for low payload!
+          
+          channel.send({
+            type: 'broadcast',
+            event: 'video-frame',
+            payload: { image: base64Frame }
+          })
+        }
+      }, 250)
+
+      setIsStreaming(true)
+    } catch (err) {
+      console.error(err)
+      setErrorMsg(err.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const stopStreaming = async () => {
+    // Clear capture loop
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current)
+      intervalRef.current = null
+    }
+
+    // Stop camera track
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop())
+      streamRef.current = null
+    }
+
+    // Clean channels
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
+
+    // Update DB
+    try {
+      await supabase.from('race_sessions').update({
+        live_stream_active: false,
+        live_stream_user_id: null
+      }).eq('id', raceSession.id)
+    } catch (err) {
+      console.error("Error clearing live lock:", err)
+    }
+
+    setIsStreaming(false)
+  }
+
+  return (
+    <div className="race-setup-stream glass" style={{ padding: '20px', borderRadius: '14px', border: '1px solid var(--border-subtle)', marginBottom: '20px', background: 'rgba(255, 85, 0, 0.02)' }}>
+      <h3 style={{ margin: '0 0 15px 0', fontSize: '1.1rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+        🎥 Diffusion Vidéo en Direct
+      </h3>
+      
+      {errorMsg && (
+        <div style={{ padding: '12px', background: 'rgba(255,68,68,0.1)', border: '1px solid rgba(255,68,68,0.2)', color: '#ff4444', borderRadius: '8px', fontSize: '0.88rem', marginBottom: '15px', lineHeight: '1.4' }}>
+          {errorMsg}
+        </div>
+      )}
+
+      {isStreaming ? (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
+          <div style={{ position: 'relative', width: '100%', maxWidth: '360px', aspectRatio: '16/9', borderRadius: '8px', overflow: 'hidden', background: '#000', border: '1px solid rgba(255,255,255,0.1)' }}>
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              muted 
+              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+            />
+            <span style={{ position: 'absolute', top: '10px', left: '10px', background: '#ff3b30', color: '#fff', fontSize: '0.75rem', padding: '3px 8px', borderRadius: '20px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px', zIndex: 10 }}>
+              <span style={{ width: '6px', height: '6px', background: '#fff', borderRadius: '50%', animation: 'pulse 1.5s infinite' }} />
+              DIFFUSION EN COURS
+            </span>
+          </div>
+          <button 
+            className="btn btn-outline" 
+            onClick={stopStreaming}
+            style={{ borderColor: '#ff4444', color: '#ff4444', width: 'fit-content' }}
+          >
+            🛑 Arrêter le Live Vidéo
+          </button>
+        </div>
+      ) : (
+        <div>
+          <p style={{ margin: '0 0 15px 0', fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+            Partagez la course en direct depuis le bord de la piste ! Les spectateurs verront votre caméra s'afficher instantanément sur la page live.
+          </p>
+          <button 
+            className="btn btn-primary" 
+            onClick={startStreaming}
+            disabled={loading}
+            style={{ background: 'linear-gradient(135deg, #ff5500 0%, #ff8c42 100%)', border: 'none' }}
+          >
+            {loading ? 'Initialisation...' : '🎥 Lancer le Live Vidéo'}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
