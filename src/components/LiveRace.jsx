@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '../supabaseClient'
 import LiveTeamDrawer from './LiveTeamDrawer'
-import PayPalButton from './PayPalButton'
+import StripeDonationForm from './StripeDonationForm'
 import RaceFlagOverlay from './RaceFlagOverlay'
 import { playPremiumSound, playDonationSound, playRaceSignalSound, playAnnouncementSound } from '../utils/soundEffects'
 import { playPremiumEffects, SLUG_ANIM_CLASS, MEDIA_OVERRIDES } from '../utils/premiumEmoteEffects'
@@ -307,56 +307,16 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
     })
   }
 
-  // ⚠️ SÉCURITÉ : on n'insère plus directement dans donations/user_purchases
-  // depuis le client. À la place, on appelle l'Edge Function
-  // `verify-paypal-order` qui valide l'order auprès de l'API PayPal
-  // (status COMPLETED + montant cohérent) avant d'insérer via service_role.
-  // Sans ça, n'importe qui pouvait insérer des dons fictifs ou des achats
-  // gratuits via la console (cf. audit P0 #1 et #2).
-  const handleDonationSuccess = async (details, orderId, pseudo, msg, amount) => {
-    try {
-      const { data, error } = await supabase.functions.invoke('verify-paypal-order', {
-        body: {
-          kind: 'donation',
-          orderId,
-          expectedAmountCents: Math.round(amount * 100),
-          displayName: pseudo || 'Donateur Anonyme',
-          message: msg || null,
-          sessionId: session?.id || null,
-        },
-      })
-      if (error) throw error
-      if (!data?.ok) throw new Error(data?.error || 'Validation refusée')
-
-      setShopOpen(false)
-      setDonationPseudo('')
-      setDonationMessage('')
-      setCustomAmount('')
-      toast.success(`Merci pour ton don de ${amount}€ ! Ton message s'affiche en direct.`)
-    } catch (err) {
-      toast.error("Erreur don : " + (err.message || err))
-    }
-  }
-
-  const handlePremiumPurchaseSuccess = async (details, orderId, item) => {
-    if (!authUser) return
-    try {
-      const { data, error } = await supabase.functions.invoke('verify-paypal-order', {
-        body: {
-          kind: 'purchase',
-          orderId,
-          expectedAmountCents: item.price_cents,
-          itemSlug: item.slug,
-        },
-      })
-      if (error) throw error
-      if (!data?.ok) throw new Error(data?.error || 'Validation refusée')
-
-      await fetchUserPurchases(authUser.id)
-      toast.success(`Débloqué : ${item.name} ! Utilise-la depuis le live.`)
-    } catch (err) {
-      toast.error("Erreur achat : " + (err.message || err))
-    }
+  // Callback appelé par <StripeDonationForm> quand le don est validé par
+  // l'Edge Function `stripe-donation` (status='succeeded' côté Stripe).
+  // Le toast et l'insert DB sont gérés DANS le composant Stripe — ici on
+  // reset juste l'UI locale. L'alerte live s'affiche automatiquement via
+  // le realtime subscriber sur la table donations.
+  const handleStripeDonationSuccess = () => {
+    setShopOpen(false)
+    setDonationPseudo('')
+    setDonationMessage('')
+    setCustomAmount('')
   }
 
   useEffect(() => {
@@ -1414,11 +1374,13 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
             <div className="premium-modal-content">
               {modalTab === 'shop' && (
                 <div className="premium-shop-grid">
-                  {!authUser && (
-                    <div style={{ padding: '15px', background: 'rgba(255,85,0,0.1)', border: '1px solid var(--accent)', borderRadius: '12px', textAlign: 'center', marginBottom: '15px', color: '#fff' }}>
-                      <p style={{ margin: '0 0 10px 0', fontSize: '0.85rem' }}>💡 Connectez-vous à votre compte pour acheter des emotes premium et les débloquer définitivement.</p>
-                    </div>
-                  )}
+                  <div style={{ padding: '15px', background: 'rgba(255,85,0,0.1)', border: '1px solid var(--accent)', borderRadius: '12px', textAlign: 'center', marginBottom: '15px', color: '#fff' }}>
+                    <p style={{ margin: '0', fontSize: '0.85rem', lineHeight: '1.5' }}>
+                      💎 <strong>Catalogue des emotes premium</strong> — Les emotes sont distribuées
+                      par l'équipe aux donateurs et soutiens du projet.
+                      Fais un don dans l'onglet 💸 ci-dessus et contacte-nous pour les débloquer !
+                    </p>
+                  </div>
                   {shopItems.map(item => {
                     const isOwned = userPurchases.includes(item.slug) || userPurchases.includes('pack_premium_all');
                     const isPack = item.type === 'pack';
@@ -1437,19 +1399,9 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                           {isOwned ? (
                             <span className="premium-shop-owned-badge">✓ Débloqué</span>
                           ) : (
-                            <>
-                              <span className="premium-shop-price">{item.price_cents / 100}€</span>
-                              {authUser ? (
-                                <div style={{ width: '100%', minWidth: '120px' }}>
-                                  <PayPalButton
-                                    amount={(item.price_cents / 100).toFixed(2)}
-                                    onSuccess={(details, orderId) => handlePremiumPurchaseSuccess(details, orderId, item)}
-                                  />
-                                </div>
-                              ) : (
-                                <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Connexion requise</span>
-                              )}
-                            </>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', lineHeight: '1.3' }}>
+                              💎 Réservé<br />aux soutiens
+                            </span>
                           )}
                         </div>
                       </div>
@@ -1520,16 +1472,20 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                     Don de <strong>{donationAmount > 0 ? donationAmount : 0}€</strong> par <strong>{donationPseudo || 'Anonyme'}</strong>
                   </div>
 
-                  {donationAmount > 0 ? (
+                  {donationAmount > 0 && donationPseudo.trim() ? (
                     <div style={{ marginTop: '10px' }}>
-                      <PayPalButton
-                        amount={donationAmount.toFixed(2)}
-                        onSuccess={(details, orderId) => handleDonationSuccess(details, orderId, donationPseudo, donationMessage, donationAmount)}
+                      <StripeDonationForm
+                        amount={donationAmount}
+                        pseudo={donationPseudo}
+                        message={donationMessage}
+                        sessionId={session?.id || null}
+                        onSuccess={handleStripeDonationSuccess}
+                        onCancel={() => setShopOpen(false)}
                       />
                     </div>
                   ) : (
                     <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                      Indiquez un montant pour faire un don.
+                      Renseigne un pseudo et un montant pour faire un don.
                     </div>
                   )}
 

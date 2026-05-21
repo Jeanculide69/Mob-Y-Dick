@@ -1,0 +1,75 @@
+/* ═══════════════════════════════════════
+   Stripe Donation Form
+   ═══════════════════════════════════════ */
+
+.stripe-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 4px 0;
+}
+
+.stripe-form-label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.stripe-card-wrap {
+  padding: 14px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  transition: border-color 0.15s;
+}
+.stripe-card-wrap:focus-within {
+  border-color: rgba(255, 85, 0, 0.55);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.stripe-form-error {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(255, 60, 60, 0.1);
+  border: 1px solid rgba(255, 60, 60, 0.3);
+  color: #ff7575;
+  font-size: 0.85rem;
+}
+
+.stripe-form-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+.stripe-form-actions .btn { flex: 1; }
+.stripe-form-submit { font-weight: 700; }
+
+.stripe-form-disclaimer {
+  margin: 6px 0 0;
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-align: center;
+  line-height: 1.4;
+}
+.stripe-form-disclaimer strong {
+  color: var(--text-secondary);
+}
+
+.stripe-form-missing {
+  padding: 16px 18px;
+  border-radius: 12px;
+  background: rgba(255, 170, 0, 0.08);
+  border: 1px solid rgba(255, 170, 0, 0.35);
+  color: #ffaa00;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+@media (max-width: 500px) {
+  .stripe-form-actions {
+    flex-direction: column-reverse;
+  }
+}
