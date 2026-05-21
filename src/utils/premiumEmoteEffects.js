@@ -222,3 +222,49 @@ export const playPremiumEffects = (slug) => {
     try { fn() } catch (e) { console.warn('[premium-effect]', slug, e) }
   }
 }
+
+// ─── Effets confetti pour les dons (style néon orange/or/blanc) ───
+// Source : Design/Emotes/DonationAlertTest.html
+//
+// playDonationSparks(amount) :
+//   - Petites étincelles discrètes si don ≤ 10€
+//   - Explosion massive multi-bursts si don > 10€ (= MEGA DON)
+//
+// L'origin y=0.25 cale les particules au niveau de l'alerte (qui est
+// rendue à top:20% du viewport).
+export const playDonationSparks = (amountEuros = 0) => {
+  const isMega = amountEuros >= 10
+  const count = isMega ? 200 : 80
+  const defaults = {
+    origin: { y: 0.25 },
+    colors: ['#ff5500', '#ff8800', '#ffffff', '#ffd700'],
+    ticks: 200,
+    zIndex: 10000,
+  }
+
+  try {
+    if (isMega) {
+      // MEGA DON : 5 bursts en cascade pour un effet "feu d'artifice"
+      const fire = (ratio, opts) => confetti({
+        ...defaults,
+        ...opts,
+        particleCount: Math.floor(count * ratio),
+      })
+      fire(0.25, { spread: 26, startVelocity: 55 })
+      fire(0.2,  { spread: 60 })
+      fire(0.35, { spread: 100, decay: 0.91, scalar: 0.8 })
+      fire(0.1,  { spread: 120, startVelocity: 25, decay: 0.92, scalar: 1.2 })
+      fire(0.1,  { spread: 120, startVelocity: 45 })
+    } else {
+      // DON simple : une bourrasque d'étincelles
+      confetti({
+        ...defaults,
+        particleCount: count,
+        spread: 80,
+        startVelocity: 30,
+        gravity: 0.8,
+        scalar: 0.8,
+      })
+    }
+  } catch (e) { console.warn('[donation-sparks]', e) }
+}

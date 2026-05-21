@@ -1329,33 +1329,120 @@
   pointer-events: none;
 }
 
-/* Donation Alert (Twitch style) */
-.live-donation-alert {
-  background: linear-gradient(135deg, rgba(255, 85, 0, 0.95) 0%, rgba(200, 20, 0, 0.95) 100%);
-  border: 2px solid #ffd700;
-  border-radius: 12px;
-  box-shadow: 0 10px 30px rgba(255, 85, 0, 0.4), 0 0 15px rgba(255, 215, 0, 0.3);
-  padding: 16px;
-  color: #fff;
-  animation: alertSlideDown 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards, alertPulse 2s infinite ease-in-out;
-  text-align: center;
+/* ═══════════════════════════════════════════════════════════════════
+   Donation Alert — Style néon (refonte basée sur DonationAlertTest.html)
+   - Diamond icon transparent + drop-shadow lumineux
+   - Bordure orange qui pulse de plus en plus chaud
+   - Confetti déclenchés depuis premiumEmoteEffects.playDonationSparks
+   - MEGA DON (>10€) : même structure mais intensité +
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Élargit le container pour accueillir l'alerte avec son icône diamond */
+.live-donation-stage {
+  max-width: 580px;
 }
 
-@keyframes alertSlideDown {
-  from { transform: translateY(-50px) scale(0.9); opacity: 0; }
-  to { transform: translateY(0) scale(1); opacity: 1; }
+.neon-donation-alert {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  background: rgba(15, 15, 18, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 85, 0, 0.3);
+  border-radius: 16px;
+  padding: 18px 26px;
+  box-shadow:
+    0 0 30px rgba(255, 85, 0, 0.2),
+    inset 0 0 15px rgba(255, 85, 0, 0.08);
+  color: #f0f0f0;
+  /* État initial — caché avant la classe .show */
+  opacity: 0;
+  transform: translateY(-40px) scale(0.95);
+  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-@keyframes alertPulse {
-  0%, 100% { box-shadow: 0 10px 30px rgba(255, 85, 0, 0.4), 0 0 15px rgba(255, 215, 0, 0.3); }
-  50% { box-shadow: 0 10px 30px rgba(255, 85, 0, 0.5), 0 0 25px rgba(255, 215, 0, 0.6); }
+.neon-donation-alert.show {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  animation: neonPulseBorder 2s infinite alternate;
+}
+
+@keyframes neonPulseBorder {
+  0% {
+    box-shadow: 0 0 30px rgba(255, 85, 0, 0.2), inset 0 0 15px rgba(255, 85, 0, 0.08);
+    border-color: rgba(255, 85, 0, 0.3);
+  }
+  100% {
+    box-shadow: 0 0 50px rgba(255, 85, 0, 0.5), inset 0 0 25px rgba(255, 85, 0, 0.2);
+    border-color: rgba(255, 85, 0, 0.7);
+  }
+}
+
+/* MEGA DON (>10€) : pulsation plus intense + tons or */
+.neon-donation-alert.is-mega.show {
+  animation: neonPulseBorderMega 1.6s infinite alternate;
+  border-color: rgba(255, 215, 0, 0.55);
+}
+@keyframes neonPulseBorderMega {
+  0% {
+    box-shadow: 0 0 40px rgba(255, 215, 0, 0.3), 0 0 60px rgba(255, 85, 0, 0.25), inset 0 0 20px rgba(255, 215, 0, 0.15);
+    border-color: rgba(255, 215, 0, 0.55);
+  }
+  100% {
+    box-shadow: 0 0 80px rgba(255, 215, 0, 0.7), 0 0 100px rgba(255, 85, 0, 0.5), inset 0 0 35px rgba(255, 215, 0, 0.3);
+    border-color: rgba(255, 215, 0, 1);
+  }
+}
+
+.neon-icon {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  filter: drop-shadow(0 0 10px #ff5500);
+  animation: neonFloatIcon 3s ease-in-out infinite;
+  flex-shrink: 0;
+}
+.neon-donation-alert.is-mega .neon-icon {
+  width: 100px;
+  height: 100px;
+  filter: drop-shadow(0 0 20px #ffd700);
+  animation: neonFloatIconMega 2s ease-in-out infinite;
+}
+
+@keyframes neonFloatIconMega {
+  0%, 100% { transform: translateY(0) rotate(-3deg); filter: drop-shadow(0 0 20px #ffd700); }
+  50%      { transform: translateY(-12px) rotate(3deg); filter: drop-shadow(0 0 35px #ffd700) drop-shadow(0 0 15px #ff5500); }
+}
+
+.neon-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.neon-header {
+  font-family: var(--font-heading);
+  font-size: 0.9rem;
+  font-weight: 800;
+  color: #ff5500;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.neon-donation-alert.is-mega .neon-header {
+  color: #ffd700;
+  font-size: 1.05rem;
+  text-shadow: 0 0 12px rgba(255, 215, 0, 0.5);
 }
 
 .donation-alert-queue-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-left: 8px;
   padding: 2px 8px;
   border-radius: 10px;
   background: rgba(0, 0, 0, 0.45);
@@ -1366,39 +1453,61 @@
   border: 1px solid rgba(255, 215, 0, 0.4);
 }
 
-.donation-alert-header {
-  font-size: 0.75rem;
-  letter-spacing: 2px;
-  color: #ffd700;
-  font-weight: 800;
-  text-transform: uppercase;
-  margin-bottom: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
+.neon-main-text {
+  font-size: 1.2rem;
+  font-weight: 400;
+  color: #f0f0f0;
+  line-height: 1.3;
 }
-
-.donation-alert-body {
-  font-size: 1.15rem;
-  font-weight: 800;
-  margin-bottom: 8px;
-  text-shadow: 0 2px 4px rgba(0,0,0,0.3);
-}
-
-.donation-alert-body span {
-  color: #ffd700;
-}
-
-.donation-alert-message {
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 8px;
-  padding: 8px 12px;
-  font-style: italic;
-  font-size: 0.9rem;
+.neon-main-text strong {
+  font-weight: 700;
   color: #fff;
-  border-left: 3px solid #ffd700;
+}
+
+.neon-amount {
+  font-family: 'Outfit', 'Inter', sans-serif;
+  font-size: 1.8rem;
+  font-weight: 800;
+  color: #ffd700;
+  text-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+  margin: 0 4px;
+}
+.neon-donation-alert.is-mega .neon-amount {
+  font-size: 2.4rem;
+  text-shadow: 0 0 25px rgba(255, 215, 0, 0.8), 0 0 40px rgba(255, 85, 0, 0.5);
+}
+
+.neon-message {
+  margin-top: 6px;
+  font-size: 1rem;
+  color: #c8c8c8;
+  font-style: italic;
+  border-left: 2px solid #ff5500;
+  padding-left: 12px;
   word-break: break-word;
+}
+.neon-donation-alert.is-mega .neon-message {
+  border-left-color: #ffd700;
+  color: #e0e0e0;
+}
+
+/* ─── Mobile ─── */
+@media (max-width: 600px) {
+  .live-donation-stage {
+    max-width: calc(100vw - 24px);
+  }
+  .neon-donation-alert {
+    gap: 12px;
+    padding: 14px 16px;
+  }
+  .neon-icon { width: 56px; height: 56px; }
+  .neon-donation-alert.is-mega .neon-icon { width: 70px; height: 70px; }
+  .neon-header { font-size: 0.78rem; letter-spacing: 1.2px; }
+  .neon-donation-alert.is-mega .neon-header { font-size: 0.92rem; }
+  .neon-main-text { font-size: 1rem; }
+  .neon-amount { font-size: 1.5rem; }
+  .neon-donation-alert.is-mega .neon-amount { font-size: 1.9rem; }
+  .neon-message { font-size: 0.88rem; }
 }
 
 /* Premium Emote Alert (Center Screen Overlay) */

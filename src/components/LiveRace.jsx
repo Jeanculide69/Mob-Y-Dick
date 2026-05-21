@@ -6,7 +6,7 @@ import StripeDonationForm from './StripeDonationForm'
 import StripePurchaseButton from './StripePurchaseButton'
 import RaceFlagOverlay from './RaceFlagOverlay'
 import { playPremiumSound, playDonationSound, playRaceSignalSound, playAnnouncementSound } from '../utils/soundEffects'
-import { playPremiumEffects, SLUG_ANIM_CLASS, MEDIA_OVERRIDES } from '../utils/premiumEmoteEffects'
+import { playPremiumEffects, playDonationSparks, SLUG_ANIM_CLASS, MEDIA_OVERRIDES } from '../utils/premiumEmoteEffects'
 import { speakDonation, warmUpTTS, isDonationTTSEnabled, setDonationTTSEnabled } from '../utils/donationTTS'
 import { useToast } from './Toast'
 import './LiveRace.css'
@@ -239,6 +239,9 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       // ── Son ──
       if (head.type === 'donation') {
         playDonationSound()
+        // Confetti néon : petites étincelles (≤10€) ou explosion massive
+        // multi-bursts (>10€ = MEGA DON), cf. playDonationSparks.
+        playDonationSparks(head.amount || 0)
         // TTS façon Twitch : "Pseudo vient de donner X euros, et dit : message"
         // Joue ~800ms après le son de notification pour ne pas se chevaucher.
         setTimeout(() => speakDonation(head), 800)
@@ -534,6 +537,9 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       })
       .on('broadcast', { event: 'premium-reaction' }, ({ payload }) => {
         triggerPremiumReaction(payload.slug, payload.userDisplayName)
+      })
+      .on('broadcast', { event: 'donation-simu' }, ({ payload }) => {
+        triggerDonationAlert(payload.row)
       })
       .subscribe()
     extrasChannelRef.current = ch
@@ -905,27 +911,36 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
           {/* ── Active Alerts Container (dons) ──
              Une seule donation affichée à la fois (la tête de queue).
              Les suivantes attendent qu'elle disparaisse (8s). */}
-          <div className="live-alerts-container">
+          <div className="live-alerts-container live-donation-stage">
             {(() => {
               const head = activeAlerts.find(a => a.type === 'donation')
               if (!head) return null
               const queueRest = activeAlerts.filter(a => a.type === 'donation').length - 1
+              const amount = head.amount || 0
+              const isMega = amount >= 10
               return (
-                <div key={head.id} className="live-donation-alert">
-                  <div className="donation-alert-header">
-                    💎 SUPER CHAT 💎
-                    {queueRest > 0 && (
-                      <span className="donation-alert-queue-badge">+{queueRest}</span>
+                <div key={head.id} className={`neon-donation-alert show ${isMega ? 'is-mega' : ''}`}>
+                  <img
+                    src="/emotes/neon_diamond.png"
+                    alt=""
+                    aria-hidden="true"
+                    className="neon-icon"
+                  />
+                  <div className="neon-content">
+                    <div className="neon-header">
+                      {isMega ? '💎 MEGA DON 💎' : '💎 DON 💎'}
+                      {queueRest > 0 && (
+                        <span className="donation-alert-queue-badge">+{queueRest}</span>
+                      )}
+                    </div>
+                    <div className="neon-main-text">
+                      <strong>{head.display_name}</strong> vient de soutenir avec{' '}
+                      <span className="neon-amount">{amount}€</span> !
+                    </div>
+                    {head.message && (
+                      <div className="neon-message">"{head.message}"</div>
                     )}
                   </div>
-                  <div className="donation-alert-body">
-                    <span>{head.display_name}</span> a donné {head.amount}€ !
-                  </div>
-                  {head.message && (
-                    <div className="donation-alert-message">
-                      "{head.message}"
-                    </div>
-                  )}
                 </div>
               )
             })()}
@@ -1575,6 +1590,32 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                         onSuccess={handleStripeDonationSuccess}
                         onCancel={() => setShopOpen(false)}
                       />
+                      {userProfile?.role === 'admin' && (
+                        <button
+                          type="button"
+                          className="btn btn-outline"
+                          style={{ marginTop: '15px', width: '100%', borderColor: '#ff5555', color: '#ff5555' }}
+                          onClick={() => {
+                            const row = {
+                              display_name: donationPseudo || 'Admin Simu',
+                              amount_cents: donationAmount * 100,
+                              message: donationMessage || 'Simulation de don (Admin)'
+                            };
+                            triggerDonationAlert(row);
+                            extrasChannelRef.current?.send({
+                              type: 'broadcast',
+                              event: 'donation-simu',
+                              payload: { row }
+                            });
+                            setShopOpen(false);
+                            setDonationPseudo('');
+                            setDonationMessage('');
+                            setCustomAmount('');
+                          }}
+                        >
+                          🧪 Simuler le Don sur le Live (Admin)
+                        </button>
+                      )}
                     </div>
                   ) : (
                     <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
