@@ -182,13 +182,35 @@ export const SLUG_ANIM_CLASS = {
   emote_mindblown: 'pemote-anim-mindblown',
 }
 
-// ─── Overrides photo+son hardcodés (klaxon uniquement) ───
-// Le klaxon utilise les assets HTML d'origine (PNG transparent + MP3 horn)
-// peu importe ce qui est uploadé dans Supabase pour cet item.
+// ─── Overrides photo+son hardcodés ───
+// Ces emotes utilisent les assets HTML d'origine, peu importe ce qui est
+// uploadé dans Supabase pour cet item.
+//
+// - sound_horn : photo ET son forcés (les deux assets locaux existent)
+// - emote_wheelie / emote_crash / emote_trophy / emote_clown : seule la
+//   photo est forcée. Pas de MP3 dispo dans Design/Emotes/Assets/ pour
+//   ces slugs → on garde le sound_url de Supabase (paramétrable via
+//   EmoteAdmin). Tu pourras y uploader un son quand tu veux.
 export const MEDIA_OVERRIDES = {
   sound_horn: {
     mediaSrc: '/emotes/premium_horn.png',
     soundSrc: '/emotes/premium_horn.mp3',
+    mediaType: 'image',
+  },
+  emote_wheelie: {
+    mediaSrc: '/emotes/premium_wheelie.png',
+    mediaType: 'image',
+  },
+  emote_crash: {
+    mediaSrc: '/emotes/premium_crash.png',
+    mediaType: 'image',
+  },
+  emote_trophy: {
+    mediaSrc: '/emotes/premium_trophy.png',
+    mediaType: 'image',
+  },
+  emote_clown: {
+    mediaSrc: '/emotes/premium_clown.png',
     mediaType: 'image',
   },
 }
