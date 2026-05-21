@@ -529,6 +529,18 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       })
       .on('broadcast', { event: 'announcement' }, ({ payload }) => {
         setAnnouncement(payload.text)
+        
+        // Mise à jour immédiate de l'historique sans attendre la BDD
+        const newAnn = {
+          id: 'temp-' + Date.now(),
+          message: payload.text,
+          created_at: new Date().toISOString()
+        }
+        setAnnouncementsHistory(prev => {
+          if (prev.some(a => a.message === payload.text && (Date.now() - new Date(a.created_at).getTime() < 10000))) return prev
+          return [newAnn, ...prev]
+        })
+
         playAnnouncementSound()
         // Délai de 1.5s pour laisser la petite mélodie "ding-dong" se finir
         setTimeout(() => speakAnnouncement(payload.text), 1500)
