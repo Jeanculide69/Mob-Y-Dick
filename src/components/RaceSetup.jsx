@@ -891,15 +891,22 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
             </div>
           )}
           {raceSession.status === 'live' && (
-            <div className="race-primary-actions race-primary-actions-live">
-              <button
-                className="btn btn-primary race-action-cta race-action-chrono"
-                onClick={() => onStartRace(raceSession, teams)}
-              >
-                ⏱️ ACCÉDER AU CHRONOMÉTRAGE
-              </button>
+            <>
+              <div className="race-primary-actions race-primary-actions-live">
+                <button
+                  className="btn btn-primary race-action-cta race-action-chrono"
+                  onClick={() => onStartRace(raceSession, teams)}
+                >
+                  ⏱️ ACCÉDER AU CHRONOMÉTRAGE
+                </button>
+              </div>
 
-            </div>
+              {/* ─── Live Video Broadcasting (Organiser) ─── */}
+              <LiveVideoBroadcaster 
+                session={session} 
+                raceSession={raceSession} 
+              />
+            </>
           )}
 
           {/* ─── Categories Manager ─── */}
@@ -1043,14 +1050,6 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
               </div>
             )}
           </div>
-
-          {/* ─── Live Video Broadcasting (Organiser) ─── */}
-          {raceSession.status === 'live' && (
-            <LiveVideoBroadcaster 
-              session={session} 
-              raceSession={raceSession} 
-            />
-          )}
 
           {/* ─── Bottom Action Buttons (secondary access + destructive) ─── */}
           <div className="race-setup-actions glass">
