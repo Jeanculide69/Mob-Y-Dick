@@ -40,7 +40,10 @@ if (SENTRY_DSN && import.meta.env.PROD) {
 }
 
 createRoot(document.getElementById('root')).render(
-  <StrictMode>
+  // <StrictMode> est désactivé temporairement car il détruit la connexion
+  // WebSocket Supabase (Realtime) en développement à cause du double-montage.
+  // <StrictMode>
+  <>
     <ErrorBoundary>
       <ToastProvider>
         <App />
@@ -48,5 +51,6 @@ createRoot(document.getElementById('root')).render(
     </ErrorBoundary>
     <Analytics />
     <SpeedInsights />
-  </StrictMode>,
+  </>
+  // </StrictMode>,
 )
