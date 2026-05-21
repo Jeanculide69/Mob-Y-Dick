@@ -1282,7 +1282,7 @@ function App() {
          - Décodage GPU natif, zéro canvas, zéro RAM extra */}
       <div className="video-bg">
         {(liveSession || activeTab !== 'home') ? (
-          <img src="/video_background.jpg" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img src="/video_background.jpg" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: 'brightness(0.6) contrast(1.1) saturate(0.8)' }} />
         ) : (
           <VideoBackgroundDual src="/video_background.mp4" />
         )}
