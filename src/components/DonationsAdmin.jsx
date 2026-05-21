@@ -24,26 +24,39 @@ export default function DonationsAdmin({ onClose }) {
   const [tab, setTab] = useState('donations')
   const [loading, setLoading] = useState(true)
   const [donations, setDonations] = useState([])
+  const [purchases, setPurchases] = useState([])
   const [triggers, setTriggers] = useState([])
   const [shopItems, setShopItems] = useState([])
   const [sessions, setSessions] = useState([])
+  const [profiles, setProfiles] = useState([])
   const [filterSessionId, setFilterSessionId] = useState('')
   const [page, setPage] = useState(0)
 
   const load = async () => {
     setLoading(true)
-    const [d, t, s, sh] = await Promise.all([
+    const [d, p, t, s, sh, pr] = await Promise.all([
       supabase.from('donations').select('*').order('created_at', { ascending: false }),
+      supabase.from('user_purchases').select('*').order('purchased_at', { ascending: false }),
       supabase.from('emote_triggers').select('*').order('triggered_at', { ascending: false }),
       supabase.from('race_sessions').select('id, name, created_at').order('created_at', { ascending: false }),
       supabase.from('shop_items').select('slug, name, emoji, price_cents'),
+      // On charge tous les profils pour pouvoir résoudre user_id → display_name
+      // côté front. Tableau petit (les users connectés), pas besoin de join.
+      supabase.from('profiles').select('id, display_name, email, avatar_url'),
     ])
     setDonations(d.data || [])
+    setPurchases(p.data || [])
     setTriggers(t.data || [])
     setSessions(s.data || [])
     setShopItems(sh.data || [])
+    setProfiles(pr.data || [])
     setLoading(false)
   }
+
+  // Helper : retourne le profil pour un user_id (ou null si user_id introuvable)
+  const profileFor = (userId) => profiles.find(p => p.id === userId) || null
+  // Helper : retourne l'item shop_items à partir d'un slug
+  const itemFor = (slug) => shopItems.find(s => s.slug === slug) || null
 
   useEffect(() => { load() }, [])
 
@@ -92,6 +105,12 @@ export default function DonationsAdmin({ onClose }) {
           onClick={() => { setTab('donations'); setPage(0) }}
         >
           💰 Dons <span className="donations-admin-tab-count">{donations.length}</span>
+        </button>
+        <button
+          className={`donations-admin-tab ${tab === 'purchases' ? 'active' : ''}`}
+          onClick={() => { setTab('purchases'); setPage(0) }}
+        >
+          💎 Achats Premium <span className="donations-admin-tab-count">{purchases.length}</span>
         </button>
         <button
           className={`donations-admin-tab ${tab === 'triggers' ? 'active' : ''}`}
@@ -234,6 +253,147 @@ export default function DonationsAdmin({ onClose }) {
               >
                 Suivant →
               </button>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* ─────────────────────────────────────
+          Onglet Achats Premium (user_purchases)
+          - Listing des emotes/packs achetés par les users
+          - L'activation est AUTO (faite par stripe-donation finalize-purchase)
+          - Ici c'est juste un historique consultatif
+      ───────────────────────────────────────── */}
+      {tab === 'purchases' && (
+        <>
+          <div className="donations-admin-summary">
+            <div className="donations-admin-stat">
+              <span className="donations-admin-stat-label">Total achats</span>
+              <span className="donations-admin-stat-value">{purchases.length}</span>
+            </div>
+            <div className="donations-admin-stat">
+              <span className="donations-admin-stat-label">Recette brute</span>
+              <span className="donations-admin-stat-value">
+                {fmtMoney(purchases.reduce((acc, p) => acc + (p.amount_cents || 0), 0))}
+              </span>
+            </div>
+            <div className="donations-admin-stat">
+              <span className="donations-admin-stat-label">Utilisateurs uniques</span>
+              <span className="donations-admin-stat-value">
+                {new Set(purchases.map(p => p.user_id)).size}
+              </span>
+            </div>
+          </div>
+
+          <div className="donations-admin-info-banner">
+            💡 <strong>Activation automatique</strong> — Les emotes premium se débloquent
+            instantanément pour l'utilisateur dès que le paiement Stripe est validé.
+            Aucune action manuelle requise. Les commandes physiques (T-shirts, etc.) restent
+            dans l'onglet <strong>📦 Commandes</strong> du menu admin.
+          </div>
+
+          {purchases.length === 0 ? (
+            <div className="donations-admin-empty">
+              Aucun achat d'emote premium pour le moment.
+            </div>
+          ) : (
+            <div className="donations-admin-list">
+              {purchases.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE).map(p => {
+                const item = itemFor(p.item_slug)
+                const buyer = profileFor(p.user_id)
+                const provider = p.payment_provider
+                  || (p.paypal_order_id?.startsWith('pi_') ? 'stripe' : (p.paypal_order_id ? 'paypal' : null))
+                const stripeUrl = provider === 'stripe' && p.paypal_order_id
+                  ? `https://dashboard.stripe.com/payments/${p.paypal_order_id}`
+                  : null
+                const isPack = item?.slug?.includes('pack')
+                return (
+                  <div key={p.id} className="donations-admin-row donations-admin-row-purchase">
+                    <div className="donations-admin-row-amount">
+                      {p.amount_cents > 0 ? fmtMoney(p.amount_cents) : <span style={{color:'var(--text-muted)',fontSize:'0.85rem'}}>Gratuit</span>}
+                    </div>
+                    <div className="donations-admin-row-content">
+                      <div className="donations-admin-row-header">
+                        <strong>
+                          {item?.emoji || '🔊'} {item?.name || p.item_slug}
+                          {isPack && <span className="purchase-pack-badge">PACK</span>}
+                        </strong>
+                        <span className="donations-admin-row-date">{fmtDate(p.purchased_at)}</span>
+                      </div>
+
+                      <div className="donations-admin-row-payer">
+                        <span className="donations-admin-row-buyer">
+                          👤 {buyer?.display_name || <em style={{opacity:0.6}}>User #{p.user_id?.slice(0,8)}…</em>}
+                        </span>
+                        {buyer?.email && (
+                          <a
+                            href={`mailto:${buyer.email}`}
+                            className="donations-admin-row-email"
+                            title="Envoyer un mail à l'acheteur"
+                          >📧 {buyer.email}</a>
+                        )}
+                        {p.card_brand && p.card_last4 && (
+                          <span className="donations-admin-row-card">
+                            💳 {p.card_brand} •••• {p.card_last4}
+                          </span>
+                        )}
+                        {provider && (
+                          <span className={`donations-admin-row-provider provider-${provider}`}>
+                            {provider === 'stripe' ? '⚡ Stripe' : '💼 PayPal'}
+                          </span>
+                        )}
+                        {/* Badge état activation */}
+                        <span className="purchase-status-badge">
+                          ✓ Activé auto
+                        </span>
+                      </div>
+
+                      <div className="donations-admin-row-actions">
+                        {p.receipt_url && (
+                          <a
+                            href={p.receipt_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="donations-admin-row-link"
+                          >📄 Reçu</a>
+                        )}
+                        {stripeUrl && (
+                          <a
+                            href={stripeUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="donations-admin-row-link"
+                          >🔗 Voir sur Stripe</a>
+                        )}
+                      </div>
+
+                      {p.paypal_order_id && (
+                        <div className="donations-admin-row-meta">
+                          ID : <code>{p.paypal_order_id}</code>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+
+          {Math.ceil(purchases.length / PAGE_SIZE) > 1 && (
+            <div className="donations-admin-pagination">
+              <button
+                className="btn btn-ghost"
+                onClick={() => setPage(pg => Math.max(0, pg - 1))}
+                disabled={page === 0}
+              >← Précédent</button>
+              <span className="donations-admin-page-info">
+                Page {page + 1} / {Math.ceil(purchases.length / PAGE_SIZE)}
+              </span>
+              <button
+                className="btn btn-ghost"
+                onClick={() => setPage(pg => Math.min(Math.ceil(purchases.length / PAGE_SIZE) - 1, pg + 1))}
+                disabled={page >= Math.ceil(purchases.length / PAGE_SIZE) - 1}
+              >Suivant →</button>
             </div>
           )}
         </>
