@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import { supabase } from '../supabaseClient'
 import LiveTeamDrawer from './LiveTeamDrawer'
 import StripeDonationForm from './StripeDonationForm'
+import StripePurchaseButton from './StripePurchaseButton'
 import RaceFlagOverlay from './RaceFlagOverlay'
 import { playPremiumSound, playDonationSound, playRaceSignalSound, playAnnouncementSound } from '../utils/soundEffects'
 import { playPremiumEffects, SLUG_ANIM_CLASS, MEDIA_OVERRIDES } from '../utils/premiumEmoteEffects'
@@ -1374,13 +1375,11 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
             <div className="premium-modal-content">
               {modalTab === 'shop' && (
                 <div className="premium-shop-grid">
-                  <div style={{ padding: '15px', background: 'rgba(255,85,0,0.1)', border: '1px solid var(--accent)', borderRadius: '12px', textAlign: 'center', marginBottom: '15px', color: '#fff' }}>
-                    <p style={{ margin: '0', fontSize: '0.85rem', lineHeight: '1.5' }}>
-                      💎 <strong>Catalogue des emotes premium</strong> — Les emotes sont distribuées
-                      par l'équipe aux donateurs et soutiens du projet.
-                      Fais un don dans l'onglet 💸 ci-dessus et contacte-nous pour les débloquer !
-                    </p>
-                  </div>
+                  {!authUser && (
+                    <div style={{ padding: '15px', background: 'rgba(255,85,0,0.1)', border: '1px solid var(--accent)', borderRadius: '12px', textAlign: 'center', marginBottom: '15px', color: '#fff' }}>
+                      <p style={{ margin: '0 0 10px 0', fontSize: '0.85rem' }}>💡 Connecte-toi pour acheter et débloquer définitivement des emotes premium.</p>
+                    </div>
+                  )}
                   {shopItems.map(item => {
                     const isOwned = userPurchases.includes(item.slug) || userPurchases.includes('pack_premium_all');
                     const isPack = item.type === 'pack';
@@ -1398,9 +1397,16 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                         <div className="premium-shop-card-action">
                           {isOwned ? (
                             <span className="premium-shop-owned-badge">✓ Débloqué</span>
+                          ) : authUser ? (
+                            <div style={{ width: '100%', minWidth: '120px' }}>
+                              <StripePurchaseButton
+                                item={item}
+                                onPurchased={() => fetchUserPurchases(authUser.id)}
+                              />
+                            </div>
                           ) : (
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', lineHeight: '1.3' }}>
-                              💎 Réservé<br />aux soutiens
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                              Connexion requise
                             </span>
                           )}
                         </div>

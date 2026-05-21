@@ -97,8 +97,20 @@ serve(async (req: Request) => {
 
   const { action } = body
 
+  // Récupérer l'auth user si dispo (header Authorization) — utilisé par
+  // les 4 actions ci-dessous, on factorise le code en haut.
+  let authUserId: string | null = null
+  const authHeader = req.headers.get('Authorization')
+  if (authHeader?.startsWith('Bearer ')) {
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+    const { data } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''))
+    authUserId = data.user?.id ?? null
+  }
+
   // ──────────────────────────────────────
-  // 1. CREATE-INTENT
+  // 1. CREATE-INTENT (don)
   //    Crée un PaymentIntent Stripe, renvoie le client_secret au front.
   //    Le montant et les métadonnées sont stockés DANS le PaymentIntent
   //    pour qu'à la finalisation on puisse re-vérifier ce qu'on devait
@@ -117,17 +129,6 @@ serve(async (req: Request) => {
     }
     if (message && (typeof message !== 'string' || message.length > 300)) {
       return json(400, { error: 'invalid_message' })
-    }
-
-    // Récupérer l'auth user si dispo (header Authorization)
-    let authUserId: string | null = null
-    const authHeader = req.headers.get('Authorization')
-    if (authHeader?.startsWith('Bearer ')) {
-      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-        auth: { autoRefreshToken: false, persistSession: false },
-      })
-      const { data } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''))
-      authUserId = data.user?.id ?? null
     }
 
     try {
@@ -210,6 +211,131 @@ serve(async (req: Request) => {
     }
 
     return json(200, { ok: true, amountCents: intent.amount })
+  }
+
+  // ──────────────────────────────────────
+  // 3. CREATE-PURCHASE-INTENT (achat d'une emote premium)
+  //    Le user achète un item dont le prix est fixé en DB (shop_items).
+  //    On NE FAIT PAS CONFIANCE au montant envoyé par le client : on
+  //    relit le prix depuis shop_items et on l'utilise pour le Stripe
+  //    PaymentIntent. Le client_secret est ensuite confirmé par le front,
+  //    puis finalize-purchase débloque l'emote pour le user.
+  // ──────────────────────────────────────
+  if (action === 'create-purchase-intent') {
+    if (!authUserId) return json(401, { error: 'auth_required_for_purchase' })
+
+    const { itemSlug } = body
+    if (!itemSlug || typeof itemSlug !== 'string') {
+      return json(400, { error: 'missing_item_slug' })
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+
+    // Vérifier que l'item existe, est visible, et récupérer son prix officiel
+    const { data: item, error: itemErr } = await supabase
+      .from('shop_items')
+      .select('slug, name, price_cents, is_visible')
+      .eq('slug', itemSlug)
+      .maybeSingle()
+    if (itemErr || !item) return json(400, { error: 'item_not_found' })
+    if (!item.is_visible) return json(400, { error: 'item_not_purchasable' })
+    if (!item.price_cents || item.price_cents < 100) {
+      return json(400, { error: 'invalid_item_price' })
+    }
+
+    // Vérifier que le user ne possède pas déjà cet item (évite les
+    // débits multiples accidentels — l'UI front filtre déjà mais on
+    // re-vérifie côté serveur).
+    const { data: existing } = await supabase
+      .from('user_purchases')
+      .select('id')
+      .eq('user_id', authUserId)
+      .eq('item_slug', itemSlug)
+      .maybeSingle()
+    if (existing) return json(400, { error: 'already_owned' })
+
+    try {
+      const intent = await stripeRequest('/payment_intents', {
+        amount: item.price_cents, // ← prix SERVEUR, pas celui du client
+        currency: 'eur',
+        automatic_payment_methods: { enabled: true },
+        description: `Achat emote ${item.name} — Mob Y Dick`,
+        metadata: {
+          user_id: authUserId,
+          item_slug: itemSlug,
+          kind: 'purchase',
+        },
+      })
+      return json(200, {
+        clientSecret: intent.client_secret,
+        paymentIntentId: intent.id,
+      })
+    } catch (err) {
+      return json(502, { error: 'stripe_create_failed', detail: String(err.message || err) })
+    }
+  }
+
+  // ──────────────────────────────────────
+  // 4. FINALIZE-PURCHASE (débloque l'emote)
+  //    Vérifie le PaymentIntent côté Stripe puis insère dans user_purchases.
+  //    Idempotent grâce au UNIQUE(user_id, item_slug) de la table.
+  // ──────────────────────────────────────
+  if (action === 'finalize-purchase') {
+    if (!authUserId) return json(401, { error: 'auth_required_for_purchase' })
+
+    const { paymentIntentId } = body
+    if (!paymentIntentId || typeof paymentIntentId !== 'string') {
+      return json(400, { error: 'missing_payment_intent_id' })
+    }
+
+    let intent: any
+    try {
+      intent = await stripeRequest(`/payment_intents/${encodeURIComponent(paymentIntentId)}`)
+    } catch (err) {
+      return json(502, { error: 'stripe_fetch_failed', detail: String(err.message || err) })
+    }
+
+    if (intent.status !== 'succeeded') {
+      return json(400, { error: 'payment_not_succeeded', status: intent.status })
+    }
+    if (intent.currency !== 'eur') {
+      return json(400, { error: 'wrong_currency', currency: intent.currency })
+    }
+
+    const md = intent.metadata || {}
+    if (md.kind !== 'purchase') {
+      return json(400, { error: 'wrong_intent_kind' })
+    }
+    if (md.user_id !== authUserId) {
+      // Tentative d'un user de "voler" l'achat d'un autre
+      return json(403, { error: 'user_mismatch' })
+    }
+    if (!md.item_slug) {
+      return json(400, { error: 'missing_item_slug_in_intent' })
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+
+    const { error: insertErr } = await supabase.from('user_purchases').insert({
+      user_id: authUserId,
+      item_slug: md.item_slug,
+      amount_cents: intent.amount,
+      paypal_order_id: paymentIntentId, // ← réutilisation de la colonne (cf. v20 UNIQUE)
+    })
+
+    if (insertErr) {
+      if (insertErr.code === '23505') {
+        // Duplicate (UNIQUE user_id+item_slug ou paypal_order_id) → idempotent
+        return json(200, { ok: true, duplicate: true, itemSlug: md.item_slug })
+      }
+      return json(500, { error: 'db_insert_failed', detail: insertErr.message })
+    }
+
+    return json(200, { ok: true, itemSlug: md.item_slug })
   }
 
   return json(400, { error: 'unknown_action' })

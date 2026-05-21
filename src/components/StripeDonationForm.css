@@ -73,3 +73,97 @@
     flex-direction: column-reverse;
   }
 }
+
+/* ─── Purchase modal (reuse du form, wrapper différent) ─── */
+.stripe-purchase-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10002; /* au-dessus du shop modal (qui est sur le live overlay) */
+  background: rgba(0, 0, 0, 0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 30px 16px;
+  overflow-y: auto;
+  animation: stripePurchaseFadeIn 0.18s ease-out;
+}
+
+@keyframes stripePurchaseFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.stripe-purchase-modal {
+  width: 100%;
+  max-width: 460px;
+  margin: auto 0;
+  background: rgba(15, 15, 18, 0.96);
+  border: 1px solid rgba(255, 85, 0, 0.3);
+  border-radius: 16px;
+  padding: 22px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  animation: stripePurchaseSlideIn 0.22s ease-out;
+}
+
+@keyframes stripePurchaseSlideIn {
+  from { transform: translateY(16px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+.stripe-purchase-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.stripe-purchase-header h3 {
+  margin: 0;
+  font-size: 1.1rem;
+  color: #fff;
+}
+
+.stripe-purchase-close {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.stripe-purchase-close:hover:not(:disabled) {
+  background: rgba(255, 85, 0, 0.12);
+  border-color: rgba(255, 85, 0, 0.4);
+  color: var(--accent);
+}
+.stripe-purchase-close:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.stripe-purchase-desc {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.stripe-purchase-price-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(255, 85, 0, 0.08);
+  border: 1px solid rgba(255, 85, 0, 0.25);
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+.stripe-purchase-price-amount {
+  color: var(--accent);
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
