@@ -1452,6 +1452,166 @@
   color: var(--accent);
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   PREMIUM EMOTE ANIMATIONS — par slug
+   Source : Design/Emotes/PremiumEmotesTest.html (réécrites en
+   transform-only pour rester compatibles avec le flexbox centré du
+   parent .live-emote-overlay-stage).
+
+   Quand une de ces classes est appliquée sur .live-premium-emote-img,
+   elle OVERRIDE l'animation par défaut (emotePopIn sur le wrapper) :
+   l'image fait sa propre choré, le wrapper reste statique.
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Caca qui tombe et bounce */
+@keyframes pemotePoopDrop {
+  0%   { transform: translateY(-100vh) scale(1, 1); }
+  40%  { transform: translateY(0) scale(1, 1); }
+  45%  { transform: translateY(0) scale(1.4, 0.6); }
+  55%  { transform: translateY(-30px) scale(0.9, 1.1); }
+  65%  { transform: translateY(0) scale(1.1, 0.9); }
+  75%  { transform: translateY(-15px) scale(0.95, 1.05); }
+  100% { transform: translateY(0) scale(1, 1); opacity: 0; }
+}
+.pemote-anim-poop { animation: pemotePoopDrop 1.5s cubic-bezier(0.5, 0, 0.75, 0) forwards; }
+
+/* Pet vert : pulse + monte + fade */
+@keyframes pemotePulseFloat {
+  0%   { transform: scale(0.8) translateY(20px); opacity: 0; filter: drop-shadow(0 0 10px #00ff00); }
+  20%  { transform: scale(1.2) translateY(-10px); opacity: 1; filter: drop-shadow(0 0 30px #00ff00); }
+  80%  { transform: scale(1.3) translateY(-20px); opacity: 1; filter: drop-shadow(0 0 40px #00ff00); }
+  100% { transform: scale(2) translateY(-50px); opacity: 0; filter: blur(10px); }
+}
+.pemote-anim-fart { animation: pemotePulseFloat 3s ease-in-out forwards; }
+
+/* Klaxon : slide de gauche, secoue, repart par la gauche */
+@keyframes pemoteSlideHonk {
+  0%   { transform: translateX(-110vw) scale(1); }
+  20%  { transform: translateX(0) scale(1.2) rotate(10deg); }
+  30%  { transform: translateX(0) scale(1.4) rotate(-5deg); filter: brightness(1.5); }
+  70%  { transform: translateX(0) scale(1.2) rotate(10deg); }
+  100% { transform: translateX(-110vw) scale(1); opacity: 0; }
+}
+.pemote-anim-horn { animation: pemoteSlideHonk 2s ease-out forwards; }
+
+/* Clown : jumpscare zoom in + s'éloigne en blur */
+@keyframes pemoteJumpScare {
+  0%   { transform: scale(0) translateY(200px); opacity: 0; }
+  10%  { transform: scale(2) translateY(0); opacity: 1; filter: drop-shadow(0 0 50px red); }
+  80%  { transform: scale(2.2) translateY(0); opacity: 1; filter: drop-shadow(0 0 60px red); }
+  100% { transform: scale(5) translateY(0); opacity: 0; filter: blur(20px); }
+}
+.pemote-anim-clown { animation: pemoteJumpScare 1.5s cubic-bezier(0.17, 0.89, 0.32, 1.28) forwards; }
+
+/* Feu : grossit, brûle, monte */
+@keyframes pemoteFireBurn {
+  0%   { transform: scale(0.5); opacity: 0; }
+  20%  { transform: scale(1.5); opacity: 1; filter: drop-shadow(0 0 40px #ff5500); }
+  80%  { transform: scale(1.6); opacity: 1; filter: drop-shadow(0 0 60px #ff2a00); }
+  100% { transform: scale(2) translateY(-100px); opacity: 0; }
+}
+.pemote-anim-fire { animation: pemoteFireBurn 2.5s ease-out forwards; }
+
+/* Wheelie : entre par la gauche, scale up au centre, sort par la droite */
+@keyframes pemoteWheelieZoom {
+  0%   { transform: translateX(-110vw) scaleX(-1) rotate(10deg) scale(1);
+         filter: drop-shadow(0 20px 20px rgba(0,0,0,0.5)); }
+  50%  { transform: translateX(0) scaleX(-1) rotate(25deg) scale(1.5);
+         filter: drop-shadow(0 40px 30px rgba(0,0,0,0.3)); }
+  100% { transform: translateX(110vw) scaleX(-1) rotate(10deg) scale(1);
+         filter: drop-shadow(0 20px 20px rgba(0,0,0,0.5)); opacity: 0; }
+}
+.pemote-anim-wheelie { animation: pemoteWheelieZoom 2.5s cubic-bezier(0.4, 0, 0.2, 1) forwards; }
+
+/* Crash : explosion zoom flash */
+@keyframes pemoteCrashBoom {
+  0%   { transform: scale(0.1); opacity: 0; }
+  10%  { transform: scale(2); opacity: 1; filter: brightness(2) contrast(1.5); }
+  20%  { transform: scale(1.8); filter: brightness(1) contrast(1.2); }
+  80%  { transform: scale(2.2); opacity: 1; }
+  100% { transform: scale(3); opacity: 0; }
+}
+.pemote-anim-crash { animation: pemoteCrashBoom 1s ease-out forwards; }
+
+/* Trophée : monte en glow, reste, s'envole */
+@keyframes pemoteTrophyReveal {
+  0%   { transform: scale(0) translateY(200px); opacity: 0; }
+  10%  { transform: scale(1.5) translateY(0); opacity: 1; filter: drop-shadow(0 0 20px gold); }
+  15%  { transform: scale(1.2) translateY(0); }
+  85%  { transform: scale(1.3) translateY(0); opacity: 1; filter: drop-shadow(0 0 50px gold); }
+  100% { transform: scale(0) translateY(-200px); opacity: 0; }
+}
+.pemote-anim-trophy { animation: pemoteTrophyReveal 5s ease-out forwards; }
+
+/* Air horn : monte du bas, secoue, repart en bas */
+@keyframes pemoteAirhornBlast {
+  0%   { transform: translateY(110vh) scale(1); }
+  15%  { transform: translateY(0) scale(1.5); }
+  25%  { transform: translateY(0) scale(1.8) rotate(-10deg); filter: brightness(1.5); }
+  80%  { transform: translateY(0) scale(1.5); opacity: 1; }
+  100% { transform: translateY(110vh) scale(1); opacity: 0; }
+}
+.pemote-anim-airhorn { animation: pemoteAirhornBlast 2s ease-out forwards; }
+
+/* Rooster : court de gauche à droite avec petits sauts */
+@keyframes pemoteRoosterRun {
+  0%   { transform: translateX(-110vw) scaleX(-1) translateY(0); }
+  25%  { transform: translateX(-50vw) scaleX(-1) translateY(-50px) rotate(-10deg); }
+  50%  { transform: translateX(0) scaleX(-1) translateY(0); filter: drop-shadow(0 0 30px red); }
+  75%  { transform: translateX(50vw) scaleX(-1) translateY(-50px) rotate(-10deg); }
+  100% { transform: translateX(110vw) scaleX(-1) translateY(0); }
+}
+.pemote-anim-rooster { animation: pemoteRoosterRun 3s linear forwards; }
+
+/* Laughcry : oscillation rotation hystérique */
+@keyframes pemoteManiacLaugh {
+  0%   { transform: scale(0) rotate(-180deg); opacity: 0; }
+  15%  { transform: scale(1.5) rotate(10deg); opacity: 1; }
+  30%  { transform: scale(1.3) rotate(-10deg); }
+  45%  { transform: scale(1.5) rotate(10deg); }
+  60%  { transform: scale(1.3) rotate(-10deg); }
+  75%  { transform: scale(1.5) rotate(10deg); opacity: 1; }
+  100% { transform: scale(0) rotate(180deg); opacity: 0; }
+}
+.pemote-anim-laughcry { animation: pemoteManiacLaugh 3s ease-in-out forwards; }
+
+/* Mind blown : zoom contrast flash dispersion */
+@keyframes pemoteMindBlow {
+  0%   { transform: scale(0.5); opacity: 0; }
+  10%  { transform: scale(1.5); opacity: 1; filter: contrast(1.5); }
+  30%  { transform: scale(1.6) rotate(5deg); }
+  35%  { transform: scale(2) rotate(-5deg); filter: brightness(2); }
+  60%  { transform: scale(1.8); opacity: 1; }
+  100% { transform: scale(3); opacity: 0; filter: blur(10px); }
+}
+.pemote-anim-mindblown { animation: pemoteMindBlow 2s ease-out forwards; }
+
+/* Quand une anim slug est appliquée à l'image, on annule l'emotePopIn
+   du wrapper pour ne pas qu'elles se battent. */
+.live-premium-emote-alert:has(.live-premium-emote-img[class*="pemote-anim-"]) {
+  animation: none;
+}
+
+/* Screen shake (déclenché via JS qui pose la classe sur document.body) */
+@keyframes pemoteCameraShake {
+  0%   { transform: translate(10px, 10px) rotate(1deg); filter: blur(2px); }
+  20%  { transform: translate(-20px, 0px) rotate(2deg); filter: blur(0px); }
+  40%  { transform: translate(10px, -10px) rotate(1deg); }
+  60%  { transform: translate(-20px, 10px) rotate(0deg); }
+  80%  { transform: translate(-10px, -10px) rotate(1deg); }
+  100% { transform: translate(0, 0) rotate(0); }
+}
+@keyframes pemoteCameraShakeHeavy {
+  0%   { transform: translate(20px, 20px) rotate(3deg); filter: contrast(1.5); }
+  20%  { transform: translate(-30px, -20px) rotate(-3deg); }
+  40%  { transform: translate(30px, -10px) rotate(2deg); }
+  60%  { transform: translate(-20px, 30px) rotate(-2deg); }
+  80%  { transform: translate(-30px, -30px) rotate(3deg); }
+  100% { transform: translate(0, 0) rotate(0); filter: contrast(1); }
+}
+body.shake-screen { animation: pemoteCameraShake 0.5s ease-in-out; }
+body.shake-heavy  { animation: pemoteCameraShakeHeavy 1s ease-in-out; }
+
 /* Premium reaction section in sidebar */
 .live-reactions-premium-header {
   display: flex;

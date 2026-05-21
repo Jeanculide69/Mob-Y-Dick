@@ -5,6 +5,7 @@ import LiveTeamDrawer from './LiveTeamDrawer'
 import PayPalButton from './PayPalButton'
 import RaceFlagOverlay from './RaceFlagOverlay'
 import { playPremiumSound, playDonationSound, playRaceSignalSound, playAnnouncementSound } from '../utils/soundEffects'
+import { playPremiumEffects, SLUG_ANIM_CLASS, MEDIA_OVERRIDES } from '../utils/premiumEmoteEffects'
 import './LiveRace.css'
 
 const EMOJIS = ['🔥', '👏', '🏁', '🏍️', '⚡', '🤙', '😱', '🚀']
@@ -164,10 +165,18 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
         playDonationSound()
       } else if (head.type === 'premium-reaction') {
         const item = head.item
-        const isVideo = item.media_type === 'mp4' || /\.(mp4|webm)($|\?)/i.test(item.media_url || item.animation_url || '')
-        if (item.sound_url) {
+        const override = MEDIA_OVERRIDES[item.slug]
+        // Pour le klaxon (et tout futur override), on remplace le son par
+        // l'asset local hardcodé — peu importe ce qui est dans Supabase.
+        const soundUrl = override?.soundSrc || item.sound_url
+        const overrideIsVideo = override?.mediaType === 'mp4'
+        const supabaseIsVideo = item.media_type === 'mp4' ||
+          /\.(mp4|webm)($|\?)/i.test(item.media_url || item.animation_url || '')
+        const isVideo = override ? overrideIsVideo : supabaseIsVideo
+
+        if (soundUrl) {
           try {
-            const audio = new Audio(item.sound_url)
+            const audio = new Audio(soundUrl)
             audio.volume = 0.3   // baissé : les MP3 uploadés étaient trop forts
             audio.play().catch(() => { if (!isVideo) playPremiumSound(item.slug) })
           } catch {
@@ -176,6 +185,10 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
         } else if (!isVideo) {
           playPremiumSound(item.slug)
         }
+
+        // Effets visuels (confetti + screen shake) par-slug.
+        // Fire-and-forget, ne bloque pas le rendu de l'image.
+        playPremiumEffects(item.slug)
       }
 
       // ── Programmer le retrait ──
@@ -805,9 +818,18 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
 
           {/* ── Premium Emote Overlays (une à la fois aussi) ── */}
           {activeAlerts.filter(a => a.type === 'premium-reaction').slice(0, 1).map(a => {
-            // Priorité au champ media_url (v15 admin upload) sinon fallback sur l'ancien animation_url
-            const mediaSrc = a.item.media_url || a.item.animation_url
-            const isVideo = a.item.media_type === 'mp4' || /\.(mp4|webm)($|\?)/i.test(mediaSrc || '')
+            // Override prioritaire pour les emotes au visuel hardcodé (ex: klaxon).
+            // Sinon : media_url (v15 admin upload) → fallback animation_url (legacy).
+            const override = MEDIA_OVERRIDES[a.item.slug]
+            const mediaSrc = override?.mediaSrc || a.item.media_url || a.item.animation_url
+            const isVideo = override
+              ? override.mediaType === 'mp4'
+              : (a.item.media_type === 'mp4' || /\.(mp4|webm)($|\?)/i.test(mediaSrc || ''))
+            // Classe CSS d'animation spécifique au slug — override emotePopIn
+            // sur le wrapper (cf. règle :has() dans LiveRace.css).
+            const animClass = SLUG_ANIM_CLASS[a.item.slug] || ''
+            // Son séparé : présent côté Supabase OU forcé par l'override (klaxon).
+            const hasSeparateSound = !!(override?.soundSrc || a.item.sound_url)
             return (
               <div key={a.id} className="live-emote-overlay-stage">
                 <div className="live-premium-emote-alert">
@@ -815,13 +837,13 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                     isVideo ? (
                       <video
                         src={mediaSrc}
-                        className="live-premium-emote-img"
+                        className={`live-premium-emote-img ${animClass}`}
                         autoPlay
                         playsInline
                         /* Mute la vidéo SI un sound_url séparé est défini :
                            dans ce cas c'est le MP3 qui joue (cf. triggerPremiumReaction).
                            Sinon, le MP4 joue son propre son intégré. */
-                        muted={!!a.item.sound_url}
+                        muted={hasSeparateSound}
                         onEnded={(e) => {
                           try { e.currentTarget.pause() } catch { /* ignore */ }
                           // Petite marge pour laisser respirer l'overlay text "X envoie Y!"
@@ -829,7 +851,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                         }}
                       />
                     ) : (
-                      <img src={mediaSrc} alt={a.item.name} className="live-premium-emote-img" />
+                      <img src={mediaSrc} alt={a.item.name} className={`live-premium-emote-img ${animClass}`} />
                     )
                   )}
                   <div className="live-premium-emote-user">
