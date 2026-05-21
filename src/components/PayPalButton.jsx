@@ -1,6 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 
-const PAYPAL_CLIENT_ID = 'AT6gLyOB9yKCzgAXR2b_TwJH_b_DosUBPGJ-F2ZBp5oNsA1AoblVnki_ZuJ7a7h9STNzLqMoFyI9MC8A';
+// Client ID configurable via env var Vite (VITE_PAYPAL_CLIENT_ID) pour
+// pouvoir basculer entre sandbox et prod sans recommit. Si la var n'est
+// pas définie, on retombe sur le Client ID prod en dur (historique).
+//
+// → Pour le mode sandbox : sur Vercel, ajouter une env var
+//     VITE_PAYPAL_CLIENT_ID = "ton-client-id-sandbox"
+//   et redéployer. Le bouton chargera alors le SDK PayPal en mode test.
+const PAYPAL_CLIENT_ID = import.meta.env.VITE_PAYPAL_CLIENT_ID
+  || 'AT6gLyOB9yKCzgAXR2b_TwJH_b_DosUBPGJ-F2ZBp5oNsA1AoblVnki_ZuJ7a7h9STNzLqMoFyI9MC8A';
 
 export default function PayPalButton({ amount, onSuccess, style = {}, type = 'checkout' }) {
   const containerRef = useRef(null);
