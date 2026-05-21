@@ -1,22 +1,35 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import './App.css'
 import { supabase } from './supabaseClient'
 import AuthModal from './components/AuthModal'
 import LiveChat from './components/LiveChat'
 import PhotoComments from './components/PhotoComments'
 import ProfilePage from './components/ProfilePage'
-import UserManagement from './components/UserManagement'
-import EmoteAdmin from './components/EmoteAdmin'
-import DonationsAdmin from './components/DonationsAdmin'
 import RiderPage from './components/RiderPage'
 import VideoBackgroundDual from './components/VideoBackgroundDual'
-import RaceSetup from './components/RaceSetup'
-import RaceChrono from './components/RaceChrono'
 import LiveRace from './components/LiveRace'
-import Championnat from './components/Championnat'
 import MotoPage from './components/MotoPage'
 import PayPalButton from './components/PayPalButton'
+// ─── Code-splitting : composants chargés à la demande ───
+// Tout ce qui est admin (gestion users/emotes/dons) ou orga (course setup,
+// chronométrage) ne sert qu'à une minorité d'utilisateurs. Pas la peine
+// de leur faire payer ces 100+ KB au chargement initial pour le visiteur
+// lambda qui regarde la home + le live. Suspense affiche un loader léger.
+const UserManagement = lazy(() => import('./components/UserManagement'))
+const EmoteAdmin     = lazy(() => import('./components/EmoteAdmin'))
+const DonationsAdmin = lazy(() => import('./components/DonationsAdmin'))
+const RaceSetup      = lazy(() => import('./components/RaceSetup'))
+const RaceChrono     = lazy(() => import('./components/RaceChrono'))
+const Championnat    = lazy(() => import('./components/Championnat'))
 import './components/AuthNavbar.css'
+
+// Loader léger pour les Suspense de code-split
+const LazyLoader = () => (
+  <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'40vh', gap:'12px', color:'var(--text-muted)' }}>
+    <span style={{ width:'18px', height:'18px', border:'2px solid rgba(255,255,255,0.15)', borderTopColor:'var(--accent)', borderRadius:'50%', animation:'spin 0.8s linear infinite' }} />
+    Chargement…
+  </div>
+)
 
 const SITE_VERSION = 'v2.0.0'
 
@@ -1502,7 +1515,11 @@ function App() {
 
                     {isAdmin && m.id && (
                       <div className="admin-inline-actions">
-                        <button onClick={() => handleDeleteItem('team', m.id)}>🗑️</button>
+                        <button
+                          onClick={() => handleDeleteItem('team', m.id)}
+                          aria-label={`Supprimer le rider ${m.name}`}
+                          title="Supprimer ce rider"
+                        >🗑️</button>
                       </div>
                     )}
                   </div>
@@ -1726,7 +1743,10 @@ function App() {
 
                       {hasPermission('manage_gallery') && (
                         <div className="admin-inline-actions">
-                          <button onClick={() => handleDeleteItem('gallery', item.id, item)}>🗑️ Supprimer</button>
+                          <button
+                            onClick={() => handleDeleteItem('gallery', item.id, item)}
+                            aria-label={`Supprimer ${item.title || 'cet élément de la galerie'}`}
+                          >🗑️ Supprimer</button>
                         </div>
                       )}
                     </div>
@@ -1814,8 +1834,14 @@ function App() {
 
                       {hasPermission('manage_events') && ev.id && (
                         <div className="admin-inline-actions">
-                          <button onClick={() => handleOpenForm('event', ev)}>✏️ Modifier</button>
-                          <button onClick={() => handleDeleteItem('events', ev.id)}>🗑️ Supprimer</button>
+                          <button
+                            onClick={() => handleOpenForm('event', ev)}
+                            aria-label={`Modifier l'événement ${ev.title}`}
+                          >✏️ Modifier</button>
+                          <button
+                            onClick={() => handleDeleteItem('events', ev.id)}
+                            aria-label={`Supprimer l'événement ${ev.title}`}
+                          >🗑️ Supprimer</button>
                         </div>
                       )}
 
@@ -2000,8 +2026,16 @@ function App() {
 
                       {hasPermission('manage_products') && p.id && (
                         <div className="admin-inline-actions">
-                          <button onClick={() => handleOpenForm('product', p)}>✏️</button>
-                          <button onClick={() => handleDeleteItem('products', p.id, p)}>🗑️</button>
+                          <button
+                            onClick={() => handleOpenForm('product', p)}
+                            aria-label={`Modifier le produit ${p.name}`}
+                            title="Modifier"
+                          >✏️</button>
+                          <button
+                            onClick={() => handleDeleteItem('products', p.id, p)}
+                            aria-label={`Supprimer le produit ${p.name}`}
+                            title="Supprimer"
+                          >🗑️</button>
                         </div>
                       )}
                     </div>
@@ -2162,29 +2196,35 @@ function App() {
       )}
 
       {/* ─── CHAMPIONNAT ─── */}
-      {activeTab === 'championnat' && <Championnat />}
+      {activeTab === 'championnat' && (
+        <Suspense fallback={<LazyLoader />}>
+          <Championnat />
+        </Suspense>
+      )}
 
       {/* ─── RACE SETUP (organisateur) ─── */}
       {activeTab === 'race' && activeRaceView === 'setup' && selectedRaceEvent && (
         <section className="section page-top">
           <div className="container">
-            <RaceSetup 
-              event={selectedRaceEvent}
-              session={session}
-              profile={profile}
-              isAdmin={isAdmin}
-              onStartRace={(rSession, rTeams) => {
-                setActiveRaceSession(rSession)
-                setActiveRaceTeams(rTeams)
-                setActiveRaceView('chrono')
-                setLiveSession(rSession)
-              }}
-              onClose={() => {
-                setActiveRaceView(null)
-                setSelectedRaceEvent(null)
-                setActiveTab('events')
-              }}
-            />
+            <Suspense fallback={<LazyLoader />}>
+              <RaceSetup
+                event={selectedRaceEvent}
+                session={session}
+                profile={profile}
+                isAdmin={isAdmin}
+                onStartRace={(rSession, rTeams) => {
+                  setActiveRaceSession(rSession)
+                  setActiveRaceTeams(rTeams)
+                  setActiveRaceView('chrono')
+                  setLiveSession(rSession)
+                }}
+                onClose={() => {
+                  setActiveRaceView(null)
+                  setSelectedRaceEvent(null)
+                  setActiveTab('events')
+                }}
+              />
+            </Suspense>
           </div>
         </section>
       )}
@@ -2193,19 +2233,21 @@ function App() {
       {activeTab === 'race' && activeRaceView === 'chrono' && activeRaceSession && session && (
         <section className="section page-top">
           <div className="container">
-            <RaceChrono 
-              raceSession={activeRaceSession}
-              teams={activeRaceTeams}
-              session={session}
-              profile={profile}
-              isAdmin={isAdmin}
-              onFinish={() => {
-                setActiveRaceView('setup')
-              }}
-              onClose={() => {
-                setActiveRaceView('setup')
-              }}
-            />
+            <Suspense fallback={<LazyLoader />}>
+              <RaceChrono
+                raceSession={activeRaceSession}
+                teams={activeRaceTeams}
+                session={session}
+                profile={profile}
+                isAdmin={isAdmin}
+                onFinish={() => {
+                  setActiveRaceView('setup')
+                }}
+                onClose={() => {
+                  setActiveRaceView('setup')
+                }}
+              />
+            </Suspense>
           </div>
         </section>
       )}
@@ -2797,23 +2839,29 @@ function App() {
                 )}
               </div>
             ) : activeForm === 'users_admin' ? (
-              <UserManagement
-                users={dbUsers}
-                onRefresh={() => {
-                  supabase.from('profiles').select('*').order('created_at', { ascending: false })
-                    .then(({ data, error }) => {
-                      if (error) {
-                        alert('Erreur lors du chargement des profils : ' + error.message)
-                      } else if (data) {
-                        setDbUsers(data)
-                      }
-                    })
-                }}
-              />
+              <Suspense fallback={<LazyLoader />}>
+                <UserManagement
+                  users={dbUsers}
+                  onRefresh={() => {
+                    supabase.from('profiles').select('*').order('created_at', { ascending: false })
+                      .then(({ data, error }) => {
+                        if (error) {
+                          alert('Erreur lors du chargement des profils : ' + error.message)
+                        } else if (data) {
+                          setDbUsers(data)
+                        }
+                      })
+                  }}
+                />
+              </Suspense>
             ) : activeForm === 'emotes_admin' ? (
-              <EmoteAdmin onClose={() => setActiveForm(null)} />
+              <Suspense fallback={<LazyLoader />}>
+                <EmoteAdmin onClose={() => setActiveForm(null)} />
+              </Suspense>
             ) : activeForm === 'donations_admin' ? (
-              <DonationsAdmin onClose={() => setActiveForm(null)} />
+              <Suspense fallback={<LazyLoader />}>
+                <DonationsAdmin onClose={() => setActiveForm(null)} />
+              </Suspense>
             ) : activeForm === 'bikes_admin' ? (
               <div className="admin-orders-container" style={{ maxHeight: '75vh', overflowY: 'auto' }}>
                 {(!dbBikes || dbBikes.length === 0) && (

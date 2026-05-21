@@ -1,4 +1,5 @@
 import { Component } from 'react'
+import * as Sentry from '@sentry/react'
 
 // Wraps the app so any uncaught render error shows a recoverable screen instead of a blank page.
 // The "Réinitialiser" button clears the localStorage keys that drive view state, which is the
@@ -15,6 +16,14 @@ export default class ErrorBoundary extends Component {
 
   componentDidCatch(error, info) {
     console.error('App crashed:', error, info)
+    // Sentry n'envoie rien si Sentry.init() n'a pas été appelé
+    // (cas dev local ou prod sans DSN configurée) — no-op safe.
+    try {
+      Sentry.withScope((scope) => {
+        scope.setExtras({ componentStack: info?.componentStack })
+        Sentry.captureException(error)
+      })
+    } catch { /* ignore */ }
   }
 
   handleReset = () => {

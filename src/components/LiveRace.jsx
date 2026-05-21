@@ -6,6 +6,7 @@ import PayPalButton from './PayPalButton'
 import RaceFlagOverlay from './RaceFlagOverlay'
 import { playPremiumSound, playDonationSound, playRaceSignalSound, playAnnouncementSound } from '../utils/soundEffects'
 import { playPremiumEffects, SLUG_ANIM_CLASS, MEDIA_OVERRIDES } from '../utils/premiumEmoteEffects'
+import { useToast } from './Toast'
 import './LiveRace.css'
 
 const EMOJIS = ['🔥', '👏', '🏁', '🏍️', '⚡', '🤙', '😱', '🚀']
@@ -26,6 +27,7 @@ const formatElapsed = (ms) => {
 }
 
 export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
+  const toast = useToast()
   const [session, setSession]               = useState(null)
   const [teams, setTeams]                   = useState([])
   const [laps, setLaps]                     = useState([])
@@ -305,43 +307,55 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
     })
   }
 
+  // ⚠️ SÉCURITÉ : on n'insère plus directement dans donations/user_purchases
+  // depuis le client. À la place, on appelle l'Edge Function
+  // `verify-paypal-order` qui valide l'order auprès de l'API PayPal
+  // (status COMPLETED + montant cohérent) avant d'insérer via service_role.
+  // Sans ça, n'importe qui pouvait insérer des dons fictifs ou des achats
+  // gratuits via la console (cf. audit P0 #1 et #2).
   const handleDonationSuccess = async (details, orderId, pseudo, msg, amount) => {
     try {
-      const { error } = await supabase.from('donations').insert([{
-        user_id: authUser ? authUser.id : null,
-        display_name: pseudo || 'Donateur Anonyme',
-        amount_cents: Math.round(amount * 100),
-        message: msg || '',
-        session_id: session?.id || null,
-        paypal_order_id: orderId
-      }])
+      const { data, error } = await supabase.functions.invoke('verify-paypal-order', {
+        body: {
+          kind: 'donation',
+          orderId,
+          expectedAmountCents: Math.round(amount * 100),
+          displayName: pseudo || 'Donateur Anonyme',
+          message: msg || null,
+          sessionId: session?.id || null,
+        },
+      })
       if (error) throw error
-      
+      if (!data?.ok) throw new Error(data?.error || 'Validation refusée')
+
       setShopOpen(false)
       setDonationPseudo('')
       setDonationMessage('')
       setCustomAmount('')
-      alert(`Merci infiniment pour ton don de ${amount}€ ! Ton message va s'afficher en direct.`);
+      toast.success(`Merci pour ton don de ${amount}€ ! Ton message s'affiche en direct.`)
     } catch (err) {
-      alert("Erreur lors de l'enregistrement de ton don : " + err.message)
+      toast.error("Erreur don : " + (err.message || err))
     }
   }
 
   const handlePremiumPurchaseSuccess = async (details, orderId, item) => {
     if (!authUser) return
     try {
-      const { error } = await supabase.from('user_purchases').insert([{
-        user_id: authUser.id,
-        item_slug: item.slug,
-        paypal_order_id: orderId,
-        amount_cents: item.price_cents
-      }])
+      const { data, error } = await supabase.functions.invoke('verify-paypal-order', {
+        body: {
+          kind: 'purchase',
+          orderId,
+          expectedAmountCents: item.price_cents,
+          itemSlug: item.slug,
+        },
+      })
       if (error) throw error
-      
+      if (!data?.ok) throw new Error(data?.error || 'Validation refusée')
+
       await fetchUserPurchases(authUser.id)
-      alert(`Génial ! Tu as débloqué : ${item.name} ! Tu peux maintenant l'utiliser en direct sur le Live.`);
+      toast.success(`Débloqué : ${item.name} ! Utilise-la depuis le live.`)
     } catch (err) {
-      alert("Erreur lors de la validation de ton achat : " + err.message)
+      toast.error("Erreur achat : " + (err.message || err))
     }
   }
 
