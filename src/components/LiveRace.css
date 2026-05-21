@@ -2315,3 +2315,37 @@ body.shake-heavy  { animation: pemoteCameraShakeHeavy 1s ease-in-out; }
     padding: 10px 14px;
   }
 }
+
+.audio-unlock-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(8px);
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 20px;
+}
+
+.audio-unlock-modal {
+  padding: 40px;
+  max-width: 500px;
+  animation: popIn 0.3s ease-out;
+}
+
+.audio-unlock-modal h2 {
+  font-size: 2rem;
+  margin-bottom: 15px;
+  color: #fff;
+}
+
+.audio-unlock-modal p {
+  font-size: 1.1rem;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 25px;
+}

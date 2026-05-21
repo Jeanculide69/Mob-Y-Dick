@@ -38,7 +38,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   const [highlightedLap, setHighlightedLap] = useState(null)
   const [eventInfo, setEventInfo]           = useState(null)
   const [elapsed, setElapsed]               = useState(0)
-  const [streamFrame, setStreamFrame]       = useState(null)
+
 
   // ── New features ──
   const [spectatorCount, setSpectatorCount] = useState(1)
@@ -138,21 +138,23 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   }, [])
 
   // ── Audio unlock for mobile browsers ──
-  const audioUnlockedRef = useRef(false)
+  const [audioUnlocked, setAudioUnlocked] = useState(false)
+  
+  const unlockAudio = useCallback(() => {
+    if (audioUnlocked) return
+    // Play a tiny silent sound to unlock the audio context on mobile
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)()
+      const buf = ctx.createBuffer(1, 1, 22050)
+      const src = ctx.createBufferSource()
+      src.buffer = buf
+      src.connect(ctx.destination)
+      src.start(0)
+    } catch(e) { /* ignore */ }
+    setAudioUnlocked(true)
+  }, [audioUnlocked])
+
   useEffect(() => {
-    const unlockAudio = () => {
-      if (audioUnlockedRef.current) return
-      // Play a tiny silent sound to unlock the audio context on mobile
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)()
-        const buf = ctx.createBuffer(1, 1, 22050)
-        const src = ctx.createBufferSource()
-        src.buffer = buf
-        src.connect(ctx.destination)
-        src.start(0)
-        audioUnlockedRef.current = true
-      } catch(e) { /* ignore */ }
-    }
     document.addEventListener('click', unlockAudio, { once: true })
     document.addEventListener('touchstart', unlockAudio, { once: true })
     return () => {
@@ -165,48 +167,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   const prevRankingsRef     = useRef({})
   const extrasChannelRef    = useRef(null)
 
-  // ── Video stream ──
-  const [isLiveStreamActive, setIsLiveStreamActive] = useState(session?.live_stream_active || false)
-  const streamTimeoutRef = useRef(null)
-
-  // Listen for live_stream_active changes in real-time
-  useEffect(() => {
-    if (!session?.id) return
-    setIsLiveStreamActive(session.live_stream_active || false)
-
-    const ch = supabase.channel(`live-status-viewer-${session.id}`)
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'race_sessions', filter: `id=eq.${session.id}` }, ({ new: row }) => {
-        const active = row.live_stream_active || false
-        setIsLiveStreamActive(active)
-        if (!active) setStreamFrame(null)
-      })
-      .subscribe()
-
-    return () => supabase.removeChannel(ch)
-  }, [session?.id])
-
-  // Subscribe to video frames
-  useEffect(() => {
-    if (!isLiveStreamActive || !session?.id) { setStreamFrame(null); return }
-
-    const ch = supabase.channel(`live-stream-${session.id}`)
-      .on('broadcast', { event: 'video-frame' }, ({ payload }) => {
-        if (payload?.image) {
-          setStreamFrame(payload.image)
-          // Reset timeout — if no frame in 5s, assume stream died
-          if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current)
-          streamTimeoutRef.current = setTimeout(() => {
-            setStreamFrame(null)
-          }, 5000)
-        }
-      })
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(ch)
-      if (streamTimeoutRef.current) clearTimeout(streamTimeoutRef.current)
-    }
-  }, [isLiveStreamActive, session?.id])
+  // (Vidéo par WebSocket supprimée pour des raisons de performance)
 
   // Ref qui se met à true dès qu'on a vu la session en status='live'.
   // Utilisé pour décider si l'overlay drapeau post-race doit apparaître
@@ -612,6 +573,38 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
 
   // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
   useEffect(() => { loadLiveSession() }, [customSessionId])
+
+  // ── Wake Lock & Visibility Refresh ──
+  useEffect(() => {
+    let wakeLock = null
+    const requestWakeLock = async () => {
+      try {
+        if ('wakeLock' in navigator) {
+          wakeLock = await navigator.wakeLock.request('screen')
+        }
+      } catch (err) {}
+    }
+
+    const handleVisibilityChange = async () => {
+      if (wakeLock !== null && document.visibilityState === 'visible') {
+        requestWakeLock()
+      }
+      if (document.visibilityState === 'visible') {
+        // Refetch everything when the tab becomes active again
+        // eslint-disable-next-line no-undef
+        loadLiveSession()
+      }
+    }
+
+    requestWakeLock()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      if (wakeLock !== null) wakeLock.release().catch(() => {})
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Reset le flag "vu en live" quand on change de session : sinon naviguer
   // depuis une course live vers une course archivée déclencherait à tort
@@ -1118,21 +1111,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
           )
         })()}
 
-        {/* ── Video stream ── */}
-        {isLiveStreamActive && (
-          <div className="live-video-container glass" style={{ marginBottom: '30px', padding: '20px', borderRadius: '16px', border: '1px solid var(--accent)', background: 'rgba(255,85,0,0.03)', textAlign: 'center' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '15px' }}>
-              <span style={{ width: '10px', height: '10px', background: '#ff3b30', borderRadius: '50%', animation: 'pulse 1.5s infinite', display: 'inline-block' }} />
-              <h3 style={{ margin: 0, fontSize: '1.1rem', color: '#fff' }}>🎥 EN DIRECT DE LA PISTE</h3>
-            </div>
-            <div style={{ position: 'relative', width: '100%', maxWidth: '960px', margin: '0 auto', aspectRatio: '16/9', borderRadius: '12px', overflow: 'hidden', background: '#000' }}>
-              {streamFrame
-                ? <img src={streamFrame} alt="Live" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                : <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-secondary)' }}>Connexion au flux vidéo...</div>
-              }
-            </div>
-          </div>
-        )}
+
 
 
 
@@ -1765,6 +1744,19 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
           </button>
         </div>,
         document.body
+      )}
+
+      {/* ── Audio Unlock Overlay ── */}
+      {!audioUnlocked && (
+        <div className="audio-unlock-overlay" onClick={unlockAudio}>
+          <div className="audio-unlock-modal glass">
+            <h2>🔔 Son désactivé</h2>
+            <p>Cliquez pour activer le son et rejoindre le Live !</p>
+            <button className="btn btn-primary" style={{ padding: '15px 30px', fontSize: '1.2rem', marginTop: '10px' }} onClick={unlockAudio}>
+              Rejoindre le Live
+            </button>
+          </div>
+        </div>
       )}
     </section>
   )

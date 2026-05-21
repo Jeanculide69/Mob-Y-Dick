@@ -37,6 +37,9 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
     typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches
   )
   const [teamStatuses, setTeamStatuses]           = useState({}) // teamId → 'DNF' | 'DNS' | null
+  const [offlineQueue, setOfflineQueue]           = useState(() => {
+    try { return JSON.parse(localStorage.getItem(`race_offline_laps_${raceSession.id}`) || '[]') } catch { return [] }
+  })
 
   const inputRef       = useRef(null)
   const intervalRef    = useRef(null)
@@ -64,8 +67,39 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
       .select('*')
       .eq('session_id', raceSession.id)
       .order('recorded_at', { ascending: false })
-    setLaps(data || [])
+    
+    // Combine real laps with offline queue for display
+    setLaps((data || []).concat(offlineQueue.map((q, i) => ({ ...q, id: 'offline-' + i }))))
   }
+
+  const syncOfflineQueue = useCallback(async () => {
+    if (!navigator.onLine) return
+    let currentQueue = []
+    try {
+      const stored = localStorage.getItem(`race_offline_laps_${raceSession.id}`)
+      currentQueue = stored ? JSON.parse(stored) : []
+    } catch { return }
+
+    if (currentQueue.length === 0) return
+
+    const { error } = await supabase.from('race_laps').insert(currentQueue)
+    if (error) {
+      console.warn('[Offline] Sync failed:', error)
+      return
+    }
+
+    setOfflineQueue([])
+    localStorage.removeItem(`race_offline_laps_${raceSession.id}`)
+    loadLaps()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [raceSession.id])
+
+  useEffect(() => {
+    window.addEventListener('online', syncOfflineQueue)
+    // Attempt sync on mount
+    if (navigator.onLine) syncOfflineQueue()
+    return () => window.removeEventListener('online', syncOfflineQueue)
+  }, [syncOfflineQueue])
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -161,53 +195,80 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
     const teamLaps = laps.filter(l => l.team_id === team.id)
     const lapNumber = teamLaps.length + 1
 
-    // Use .select() to get the inserted row's ID for undo
-    const { data, error } = await supabase.from('race_laps').insert([{
+    const lapData = {
       session_id: raceSession.id,
       team_id: team.id,
       moto_number: num,
       lap_time_ms: lapTime,
       lap_number: lapNumber,
       recorded_by: session.user.id,
-    }]).select()
-
-    if (error) {
-      alert('Erreur: ' + error.message)
-      return
+      recorded_at: new Date().toISOString()
     }
 
-    // Start undo window
-    if (data?.[0]) {
-      const newId = data[0].id
-      setLastInsertedLapId(newId)
-      setUndoCountdown(10)
-      clearInterval(undoTimerRef.current)
-      undoTimerRef.current = setInterval(() => {
-        setUndoCountdown(prev => {
-          if (prev <= 1) {
-            clearInterval(undoTimerRef.current)
-            setLastInsertedLapId(null)
-            return 0
-          }
-          return prev - 1
-        })
-      }, 1000)
-    }
+    // Sauvegarde en file d'attente hors-ligne
+    let newQ = []
+    setOfflineQueue(prev => {
+      newQ = [...prev, lapData]
+      try { localStorage.setItem(`race_offline_laps_${raceSession.id}`, JSON.stringify(newQ)) } catch {}
+      return newQ
+    })
+
+    // Mise à jour immédiate de l'interface (Optimistic UI)
+    setLaps(prev => [{...lapData, id: 'temp-' + Date.now()}, ...prev])
+
+    setLastInsertedLapId({ ...lapData }) // We store the data itself for undo
+    setUndoCountdown(10)
+    clearInterval(undoTimerRef.current)
+    undoTimerRef.current = setInterval(() => {
+      setUndoCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(undoTimerRef.current)
+          setLastInsertedLapId(null)
+          return 0
+        }
+        return prev - 1
+      })
+    }, 1000)
 
     setLastLapFlash({ moto: num, time: lapTime, pilot: team.pilot_1_name })
     setTimeout(() => setLastLapFlash(null), 3000)
 
     setMotoInput('')
     if (!xxlMode && inputRef.current) inputRef.current.focus()
-  }, [motoInput, isRunning, chrono, laps, teams, raceSession.id, session.user.id, xxlMode])
+
+    // Tentative de synchronisation immédiate
+    syncOfflineQueue()
+  }, [motoInput, isRunning, chrono, laps, teams, raceSession.id, session.user.id, xxlMode, syncOfflineQueue])
 
   const handleUndoLastLap = async () => {
     if (!lastInsertedLapId) return
     clearInterval(undoTimerRef.current)
-    await supabase.from('race_laps').delete().eq('id', lastInsertedLapId)
+    
+    // Check if it's in offline queue
+    let removedFromQueue = false
+    setOfflineQueue(prev => {
+      const filtered = prev.filter(q => q.recorded_at !== lastInsertedLapId.recorded_at)
+      if (filtered.length < prev.length) {
+        removedFromQueue = true
+        try { localStorage.setItem(`race_offline_laps_${raceSession.id}`, JSON.stringify(filtered)) } catch {}
+      }
+      return filtered
+    })
+
+    if (!removedFromQueue && navigator.onLine) {
+      // It was already synced to DB, delete it
+      await supabase.from('race_laps')
+        .delete()
+        .eq('team_id', lastInsertedLapId.team_id)
+        .eq('recorded_at', lastInsertedLapId.recorded_at)
+    }
+
     setLastInsertedLapId(null)
     setUndoCountdown(0)
     setLastLapFlash(null)
+    
+    // Optimistic UI update
+    setLaps(prev => prev.filter(l => l.recorded_at !== lastInsertedLapId.recorded_at))
     loadLaps()
   }
 
