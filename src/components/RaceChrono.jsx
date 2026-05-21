@@ -3,16 +3,16 @@ import { createPortal } from 'react-dom'
 import { supabase } from '../supabaseClient'
 import './RaceChrono.css'
 
-const formatTime = (ms) => {
-  if (!ms && ms !== 0) return '--:--.---'
+const formatTime = (ms, showMillis = true) => {
+  if (!ms && ms !== 0) return showMillis ? '--:--.---' : '--:--:--'
   const hours = Math.floor(ms / 3600000)
   const minutes = Math.floor((ms % 3600000) / 60000)
   const seconds = Math.floor((ms % 60000) / 1000)
   const millis = ms % 1000
   if (hours > 0) {
-    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${millis.toString().padStart(3, '0')}`
+    return showMillis ? `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${millis.toString().padStart(3, '0')}` : `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
   }
-  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${millis.toString().padStart(3, '0')}`
+  return showMillis ? `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${millis.toString().padStart(3, '0')}` : `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
 }
 
 // XXL Numpad digits layout
@@ -40,7 +40,6 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
   const [xxlMode, setXxlMode]                     = useState(() =>
     typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches
   )
-  const [teamStatuses, setTeamStatuses]           = useState({}) // teamId → 'DNF' | 'DNS' | null
   const [offlineQueue, setOfflineQueue]           = useState(() => {
     try { return JSON.parse(localStorage.getItem(`race_offline_laps_${raceSession.id}`) || '[]') } catch { return [] }
   })
@@ -72,8 +71,9 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
       .eq('session_id', raceSession.id)
       .order('recorded_at', { ascending: false })
     
-    // Combine real laps with offline queue for display
-    setLaps((data || []).concat(offlineQueue.map((q, i) => ({ ...q, id: 'offline-' + i }))))
+    const stored = localStorage.getItem(`race_offline_laps_${raceSession.id}`)
+    const currentQueue = stored ? JSON.parse(stored) : []
+    setLaps((data || []).concat(currentQueue.map((q, i) => ({ ...q, id: 'offline-' + i }))))
   }
 
   const syncOfflineQueue = useCallback(async () => {
@@ -89,6 +89,9 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
     const { error } = await supabase.from('race_laps').insert(currentQueue)
     if (error) {
       console.warn('[Offline] Sync failed:', error)
+      if (error.code === '401' || error.message?.toLowerCase().includes('jwt')) {
+        alert("Session expirée ! Veuillez rafraîchir la page pour synchroniser vos chronos en attente.")
+      }
       return
     }
 
@@ -327,17 +330,6 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
     }
   }
 
-  // ── Team DNF / DNS ──
-  const setTeamStatus = async (teamId, status) => {
-    const newStatus = teamStatuses[teamId] === status ? null : status
-    setTeamStatuses(prev => ({ ...prev, [teamId]: newStatus }))
-    // Broadcast to spectators in LiveRace
-    await extrasChannelRef.current?.send({
-      type: 'broadcast',
-      event: 'team-status',
-      payload: { teamId, status: newStatus }
-    })
-  }
 
   // ── XXL Numpad ──
   const handleNumpadKey = (key) => {
@@ -366,8 +358,7 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
         }
         return {
           ...team, bestLap, totalLaps, laps: teamLaps,
-          lastPassageTime: totalLaps > 0 ? teamLaps[totalLaps - 1].lap_time_ms : Infinity,
-          status: teamStatuses[team.id] || null
+          lastPassageTime: totalLaps > 0 ? teamLaps[totalLaps - 1].lap_time_ms : Infinity
         }
       }).filter(t => t.totalLaps > 0)
         .sort((a, b) => b.totalLaps !== a.totalLaps ? b.totalLaps - a.totalLaps : a.lastPassageTime - b.lastPassageTime)
@@ -390,7 +381,7 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
       <div className="chrono-xxl-overlay">
         <div className="chrono-xxl-header">
           <button className="btn btn-ghost chrono-xxl-close" onClick={() => setXxlMode(false)}>✕ Normal</button>
-          <div className="chrono-xxl-timer">{formatTime(chrono)}</div>
+          <div className="chrono-xxl-timer">{formatTime(chrono, false)}</div>
           <div className="chrono-xxl-badge">
             {isRunning ? <><span className="chrono-live-dot" />EN DIRECT</> : '⏸ EN ATTENTE'}
           </div>
@@ -477,7 +468,7 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
         <div className="chrono-panel-left">
           {/* Big Chrono Display */}
           <div className="chrono-display glass">
-            <div className="chrono-time">{formatTime(chrono)}</div>
+            <div className="chrono-time">{formatTime(chrono, false)}</div>
             <div className="chrono-controls">
               {!isRunning ? (
                 <button className="chrono-btn chrono-btn-start" onClick={handleStartChrono}>
@@ -618,28 +609,14 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
                     </thead>
                     <tbody>
                       {results.map((r, i) => (
-                        <tr key={r.id} className={`${i < 3 ? `chrono-podium-${i + 1}` : ''} ${r.status ? 'chrono-row-inactive' : ''}`}>
+                        <tr key={r.id} className={`${i < 3 ? `chrono-podium-${i + 1}` : ''}`}>
                           <td className="chrono-pos">
-                            {r.status ? '—' : (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1)}
+                            {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
                           </td>
                           <td className="chrono-num">#{r.moto_number}</td>
                           <td className="chrono-pilot">{r.pilot_1_name}</td>
                           <td className="chrono-best">{formatTime(r.bestLap)}</td>
                           <td className="chrono-laps-count">{r.totalLaps}</td>
-                          <td className="chrono-status-cell">
-                            <button
-                              className={`chrono-status-btn ${r.status === 'DNF' ? 'active-dnf' : ''}`}
-                              // eslint-disable-next-line react-hooks/refs
-                              onClick={() => setTeamStatus(r.id, 'DNF')}
-                              title="Marquer DNF (Did Not Finish)"
-                            >DNF</button>
-                            <button
-                              className={`chrono-status-btn ${r.status === 'DNS' ? 'active-dns' : ''}`}
-
-                              onClick={() => setTeamStatus(r.id, 'DNS')}
-                              title="Marquer DNS (Did Not Start)"
-                            >DNS</button>
-                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -648,21 +625,6 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
               ))
             )}
           </div>
-
-          {/* DNF/DNS legend */}
-          {Object.values(teamStatuses).some(Boolean) && (
-            <div className="chrono-status-legend glass">
-              <h4>⚠️ Statuts spéciaux</h4>
-              {teams.filter(t => teamStatuses[t.id]).map(t => (
-                <div key={t.id} className="chrono-status-legend-item">
-                  <span>#{t.moto_number} {t.pilot_1_name}</span>
-                  <span className={`chrono-status-badge ${teamStatuses[t.id] === 'DNF' ? 'badge-dnf' : 'badge-dns'}`}>
-                    {teamStatuses[t.id]}
-                  </span>
-                </div>
-              ))}
-            </div>
-          )}
         </div>
       </div>
     </div>

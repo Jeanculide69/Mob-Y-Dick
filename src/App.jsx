@@ -10,6 +10,7 @@ import VideoBackgroundDual from './components/VideoBackgroundDual'
 import LiveRace from './components/LiveRace'
 import MotoPage from './components/MotoPage'
 import PayPalButton from './components/PayPalButton'
+import StripeOrderCheckout from './components/StripeOrderCheckout'
 // ─── Code-splitting : composants chargés à la demande ───
 // Tout ce qui est admin (gestion users/emotes/dons) ou orga (course setup,
 // chronométrage) ne sert qu'à une minorité d'utilisateurs. Pas la peine
@@ -1205,68 +1206,45 @@ function App() {
   // ─── Client Ordering Handlers ───
   const handleOpenCheckout = (product) => {
     if (product.status === 'Coming soon' || product.status === 'Rupture de stock') return
+    
+    if (!session) {
+      alert("Tu dois être connecté pour commander dans la boutique.")
+      setShowAuthModal(true)
+      return
+    }
+    
+    if (!profile?.shipping_address || !profile?.shipping_city || !profile?.shipping_zip) {
+      alert("Tu dois renseigner ton adresse postale dans l'onglet 'Adresse' de ton profil avant de commander.")
+      setActiveTab('profile')
+      return
+    }
+
     setCheckoutProduct(product)
     setCurrentImageIndex(0)
     setCheckoutStep(1)
     setCheckoutData({
       customText: '',
       size: product.has_sizes ? 'M' : '',
-      customerName: '',
-      customerEmail: '',
-      shippingAddress: '',
-      shippingCity: '',
-      shippingZip: '',
-      shippingCountry: 'France'
+      customerName: profile?.display_name || session.user.email.split('@')[0],
+      customerEmail: session.user.email,
+      shippingAddress: profile?.shipping_address || '',
+      shippingCity: profile?.shipping_city || '',
+      shippingZip: profile?.shipping_zip || '',
+      shippingCountry: profile?.shipping_country || 'France'
     })
   }
 
   const handleCheckoutSubmit = (e) => {
     e.preventDefault()
     if (checkoutStep === 1) {
-      setCheckoutStep(2)
-      return
-    }
-    
-    if (checkoutStep === 2) {
-      const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(checkoutData.customerEmail)
-      if (!emailOk) {
-        alert('Veuillez entrer une adresse e-mail valide.')
-        return
-      }
-      if (!checkoutData.customerName || !checkoutData.shippingAddress || !checkoutData.shippingCity || !checkoutData.shippingZip) {
-        alert('Veuillez remplir tous les champs de livraison.')
-        return
-      }
-      setCheckoutStep(3)
+      setCheckoutStep(3) // Skip step 2 as we got address from profile
       return
     }
   }
 
-  const handleCheckoutPaymentSuccess = async (details, orderId) => {
-    try {
-      const orderPayload = {
-        product_name: checkoutProduct.name,
-        price: checkoutProduct.price,
-        custom_text: checkoutData.customText,
-        size: checkoutData.size,
-        customer_name: checkoutData.customerName,
-        customer_email: checkoutData.customerEmail,
-        shipping_address: checkoutData.shippingAddress,
-        shipping_city: checkoutData.shippingCity,
-        shipping_zip: checkoutData.shippingZip,
-        shipping_country: checkoutData.shippingCountry,
-        status: 'Paiement Validé',
-        user_id: session ? session.user.id : null,
-        paypal_order_id: orderId
-      }
-      
-      const { error } = await supabase.from('orders').insert([orderPayload])
-      if (error) throw error
-      setCheckoutStep(4)
-      refreshData()
-    } catch (err) {
-      alert("Erreur lors de l'enregistrement de votre commande payée : " + err.message)
-    }
+  const handleCheckoutPaymentSuccess = () => {
+    setCheckoutStep(4)
+    refreshData()
   }
 
   const getBikesList = () => {
@@ -2437,8 +2415,7 @@ function App() {
             {checkoutStep < 4 && (
               <div className="checkout-steps-indicator">
                 <span className={checkoutStep === 1 ? 'active' : ''}>1. Design</span>
-                <span className={checkoutStep === 2 ? 'active' : ''}>2. Livraison</span>
-                <span className={checkoutStep === 3 ? 'active' : ''}>3. Récap</span>
+                <span className={checkoutStep === 3 ? 'active' : ''}>2. Récapitulatif</span>
               </div>
             )}
 
@@ -2531,30 +2508,7 @@ function App() {
                     </>
                   )}
                   
-                  <button type="submit" className="btn btn-primary" style={{width:'100%', marginTop:'24px'}}>Étape Suivante ➔</button>
-                </div>
-              )}
-
-              {/* STEP 2: Shipping Address */}
-              {checkoutStep === 2 && (
-                <div className="checkout-step-container">
-                  <h3>📍 Adresse de Livraison</h3>
-                  
-                  <input type="text" placeholder="Nom et Prénom complet" value={checkoutData.customerName} onChange={e => setCheckoutData({...checkoutData, customerName: e.target.value})} required />
-                  <input type="email" placeholder="Adresse email de contact" value={checkoutData.customerEmail} onChange={e => setCheckoutData({...checkoutData, customerEmail: e.target.value})} required />
-                  <input type="text" placeholder="Adresse (N°, rue, appartement...)" value={checkoutData.shippingAddress} onChange={e => setCheckoutData({...checkoutData, shippingAddress: e.target.value})} required />
-                  
-                  <div className="admin-row">
-                    <input type="text" placeholder="Code Postal" value={checkoutData.shippingZip} onChange={e => setCheckoutData({...checkoutData, shippingZip: e.target.value})} required />
-                    <input type="text" placeholder="Ville" value={checkoutData.shippingCity} onChange={e => setCheckoutData({...checkoutData, shippingCity: e.target.value})} required />
-                  </div>
-                  
-                  <input type="text" placeholder="Pays" value={checkoutData.shippingCountry} onChange={e => setCheckoutData({...checkoutData, shippingCountry: e.target.value})} required />
-                  
-                  <div className="admin-row" style={{marginTop:'16px'}}>
-                    <button type="button" className="btn btn-ghost" onClick={() => setCheckoutStep(1)}>⬅ Retour</button>
-                    <button type="submit" className="btn btn-primary">Étape Suivante ➔</button>
-                  </div>
+                  <button type="submit" className="btn btn-primary" style={{width:'100%', marginTop:'24px'}}>Valider la personnalisation ➔</button>
                 </div>
               )}
 
@@ -2580,12 +2534,12 @@ function App() {
                   <p className="checkout-warning-text" style={{ marginBottom: '15px' }}>⚠️ Procède au règlement sécurisé ci-dessous pour enregistrer et valider ta commande immédiatement.</p>
 
                   <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                    <PayPalButton
-                      amount={parseFloat(checkoutProduct.price.replace(/[^0-9.]/g, ''))}
+                    <StripeOrderCheckout
+                      product={checkoutProduct}
+                      checkoutData={checkoutData}
                       onSuccess={handleCheckoutPaymentSuccess}
-                      type="checkout"
+                      onCancel={() => setCheckoutStep(1)}
                     />
-                    <button type="button" className="btn btn-ghost" style={{ width: '100%' }} onClick={() => setCheckoutStep(2)}>⬅ Retour</button>
                   </div>
                 </div>
               )}

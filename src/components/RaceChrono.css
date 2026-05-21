@@ -543,99 +543,6 @@
   min-width: 110px;
 }
 
-/* ─── Status cells in ranking table ─── */
-.chrono-status-cell {
-  display: flex;
-  gap: 4px;
-  align-items: center;
-}
-
-.chrono-status-btn {
-  padding: 6px 12px;
-  border-radius: 6px;
-  border: 1px solid var(--border-subtle);
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 0.75rem;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.15s;
-  font-family: var(--font-heading);
-  letter-spacing: 0.5px;
-  min-height: 32px;
-  min-width: 44px;
-}
-
-.chrono-status-btn:hover {
-  background: rgba(255, 255, 255, 0.07);
-  color: var(--text-secondary);
-}
-
-.chrono-status-btn.active-dnf {
-  background: rgba(239, 68, 68, 0.2);
-  border-color: rgba(239, 68, 68, 0.5);
-  color: #ef4444;
-}
-
-.chrono-status-btn.active-dns {
-  background: rgba(156, 163, 175, 0.15);
-  border-color: rgba(156, 163, 175, 0.4);
-  color: #9ca3af;
-}
-
-.chrono-row-inactive td {
-  opacity: 0.5;
-}
-
-/* ─── Status legend ─── */
-.chrono-status-legend {
-  margin-top: 12px;
-  padding: 16px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 170, 0, 0.2);
-}
-
-.chrono-status-legend h4 {
-  margin: 0 0 10px;
-  font-size: 0.85rem;
-  color: #ffaa00;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.chrono-status-legend-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 6px 0;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.chrono-status-legend-item:last-child {
-  border-bottom: none;
-}
-
-.chrono-status-badge {
-  padding: 2px 8px;
-  border-radius: 6px;
-  font-size: 0.7rem;
-  font-weight: 800;
-  letter-spacing: 1px;
-}
-
-.badge-dnf {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.3);
-}
-
-.badge-dns {
-  background: rgba(156, 163, 175, 0.1);
-  color: #9ca3af;
-  border: 1px solid rgba(156, 163, 175, 0.25);
-}
 
 /* ═══ XXL NUMPAD OVERLAY ═══ */
 .chrono-xxl-overlay {
@@ -858,12 +765,6 @@
 
 /* ─── Responsive additions ─── */
 @media (max-width: 900px) {
-  .chrono-status-cell {
-    flex-direction: column;
-    gap: 2px;
-  }
-}
-
 @media (max-width: 480px) {
   .chrono-top-right {
     gap: 6px;

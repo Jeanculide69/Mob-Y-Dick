@@ -408,5 +408,124 @@ serve(async (req: Request) => {
     return json(200, { ok: true, itemSlug: md.item_slug })
   }
 
+  // ──────────────────────────────────────
+  // 5. CREATE-ORDER-INTENT (achat dans la boutique)
+  // ──────────────────────────────────────
+  if (action === 'create-order-intent') {
+    if (!authUserId) return json(401, { error: 'auth_required_for_order' })
+
+    const { productId, customText, size, customerName, customerEmail, shippingAddress, shippingCity, shippingZip, shippingCountry } = body
+    
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+
+    const { data: product, error: prodErr } = await supabase
+      .from('products')
+      .select('name, price')
+      .eq('id', productId)
+      .maybeSingle()
+      
+    if (prodErr || !product) return json(400, { error: 'product_not_found' })
+    
+    // Convert string price like '35€' to cents
+    const parsedPriceStr = String(product.price).replace(/[^0-9.]/g, '')
+    const amountCents = Math.round(parseFloat(parsedPriceStr) * 100)
+    
+    if (!amountCents || amountCents < 100) return json(400, { error: 'invalid_product_price' })
+
+    try {
+      const intent = await stripeRequest('/payment_intents', {
+        amount: amountCents,
+        currency: 'eur',
+        automatic_payment_methods: { enabled: true },
+        description: `Commande ${product.name} — Mob Y Dick`,
+        metadata: {
+          user_id: authUserId,
+          product_name: product.name,
+          custom_text: customText || '',
+          size: size || '',
+          customer_name: customerName,
+          customer_email: customerEmail,
+          shipping_address: shippingAddress,
+          shipping_city: shippingCity,
+          shipping_zip: shippingZip,
+          shipping_country: shippingCountry,
+          kind: 'order',
+        },
+        receipt_email: customerEmail,
+      })
+      return json(200, {
+        clientSecret: intent.client_secret,
+        paymentIntentId: intent.id,
+      })
+    } catch (err) {
+      return json(502, { error: 'stripe_create_failed', detail: String(err.message || err) })
+    }
+  }
+
+  // ──────────────────────────────────────
+  // 6. FINALIZE-ORDER
+  // ──────────────────────────────────────
+  if (action === 'finalize-order') {
+    if (!authUserId) return json(401, { error: 'auth_required_for_order' })
+
+    const { paymentIntentId } = body
+    if (!paymentIntentId || typeof paymentIntentId !== 'string') {
+      return json(400, { error: 'missing_payment_intent_id' })
+    }
+
+    let intent: any
+    try {
+      intent = await stripeRequest(
+        `/payment_intents/${encodeURIComponent(paymentIntentId)}?expand[]=latest_charge`
+      )
+    } catch (err) {
+      return json(502, { error: 'stripe_fetch_failed', detail: String(err.message || err) })
+    }
+
+    if (intent.status !== 'succeeded') {
+      return json(400, { error: 'payment_not_succeeded', status: intent.status })
+    }
+
+    const md = intent.metadata || {}
+    if (md.kind !== 'order') {
+      return json(400, { error: 'wrong_intent_kind' })
+    }
+    if (md.user_id !== authUserId) {
+      return json(403, { error: 'user_mismatch' })
+    }
+
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+
+    const orderPayload = {
+      product_name: md.product_name,
+      price: (intent.amount / 100).toFixed(2) + '€',
+      custom_text: md.custom_text || null,
+      size: md.size || null,
+      customer_name: md.customer_name,
+      customer_email: md.customer_email,
+      shipping_address: md.shipping_address,
+      shipping_city: md.shipping_city,
+      shipping_zip: md.shipping_zip,
+      shipping_country: md.shipping_country,
+      status: 'Paiement Validé',
+      user_id: authUserId,
+      paypal_order_id: paymentIntentId,
+    }
+
+    const { error: insertErr } = await supabase.from('orders').insert([orderPayload])
+    if (insertErr) {
+      if (insertErr.code === '23505') {
+        return json(200, { ok: true, duplicate: true })
+      }
+      return json(500, { error: 'db_insert_failed', detail: insertErr.message })
+    }
+
+    return json(200, { ok: true })
+  }
+
   return json(400, { error: 'unknown_action' })
 })
