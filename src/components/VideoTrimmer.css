@@ -5,12 +5,14 @@
 .video-trimmer-overlay {
   position: fixed;
   inset: 0;
-  z-index: 3000;
+  z-index: 10000;
   background: rgba(0, 0, 0, 0.78);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   display: flex;
-  align-items: center;
+  /* flex-start + auto-margin sur l'enfant : centre quand ça rentre,
+     colle en haut avec scroll fluide quand le modal dépasse le viewport. */
+  align-items: flex-start;
   justify-content: center;
   padding:
     calc(20px + env(safe-area-inset-top, 0px))
@@ -18,6 +20,8 @@
     calc(20px + env(safe-area-inset-bottom, 0px))
     16px;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  box-sizing: border-box;
   animation: videoTrimmerFadeIn 0.18s ease-out;
 }
 
@@ -34,7 +38,8 @@
   border-radius: 16px;
   display: flex;
   flex-direction: column;
-  max-height: 90dvh;
+  /* Centre verticalement quand le modal rentre, sinon scroll naturel. */
+  margin: auto 0;
   overflow: hidden;
   animation: videoTrimmerSlideIn 0.22s ease-out;
 }
@@ -121,6 +126,30 @@
   object-fit: contain;
   display: block;
   background: #000;
+}
+
+.video-trimmer-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 14px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.video-trimmer-loading-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: videoTrimmerSpin 0.8s linear infinite;
+}
+
+@keyframes videoTrimmerSpin {
+  to { transform: rotate(360deg); }
 }
 
 /* ─── Contrôles ─── */
@@ -301,9 +330,6 @@
 
 /* ─── Mobile ─── */
 @media (max-width: 600px) {
-  .video-trimmer {
-    max-height: 95dvh;
-  }
   .video-trimmer-body {
     padding: 14px;
   }

@@ -81,6 +81,55 @@
   opacity: 0.55;
 }
 
+/* ─── Reorder arrows ─── */
+.emote-admin-reorder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  flex: 0 0 36px;
+  user-select: none;
+}
+
+.emote-admin-reorder-btn {
+  width: 32px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.1s;
+}
+
+.emote-admin-reorder-btn:hover:not(:disabled) {
+  background: rgba(255, 85, 0, 0.12);
+  border-color: rgba(255, 85, 0, 0.45);
+  color: var(--accent);
+}
+
+.emote-admin-reorder-btn:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+.emote-admin-reorder-btn:disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}
+
+.emote-admin-reorder-pos {
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ─── Preview ─── */
 .emote-admin-preview {
   flex: 0 0 110px;
@@ -265,6 +314,17 @@
   .emote-admin-row {
     flex-direction: column;
     gap: 12px;
+  }
+  .emote-admin-reorder {
+    flex-direction: row;
+    align-self: flex-start;
+    flex: none;
+    gap: 8px;
+  }
+  .emote-admin-reorder-btn {
+    width: 44px;
+    height: 36px;
+    font-size: 0.95rem;
   }
   .emote-admin-preview {
     flex: none;

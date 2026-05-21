@@ -19,6 +19,7 @@ export default function Championnat() {
   const [loading, setLoading]       = useState(true)
   const [selectedCat, setSelectedCat] = useState('all')
   const [allCategories, setAllCategories] = useState([])
+  const [showSessions, setShowSessions] = useState(false)
 
 
   const loadChampionship = async () => {
@@ -164,15 +165,29 @@ export default function Championnat() {
           </div>
         </div>
 
-        {/* ── Sessions list ── */}
+        {/* ── Sessions list (replié par défaut) ── */}
         {sessions.length > 0 && (
-          <div className="champ-sessions-strip">
-            {sessions.map((s, i) => (
-              <div key={s.id} className="champ-session-chip">
-                <span className="champ-session-num">M{i + 1}</span>
-                <span className="champ-session-name">{s.name}</span>
+          <div className="champ-sessions-section">
+            <button
+              type="button"
+              className="champ-sessions-toggle"
+              onClick={() => setShowSessions(s => !s)}
+              aria-expanded={showSessions}
+            >
+              <span className={`champ-sessions-toggle-chevron ${showSessions ? 'open' : ''}`}>▸</span>
+              <span className="champ-sessions-toggle-label">Détail des manches</span>
+              <span className="champ-sessions-toggle-count">{sessions.length}</span>
+            </button>
+            {showSessions && (
+              <div className="champ-sessions-strip">
+                {sessions.map((s, i) => (
+                  <div key={s.id} className="champ-session-chip">
+                    <span className="champ-session-num">M{i + 1}</span>
+                    <span className="champ-session-name">{s.name}</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            )}
           </div>
         )}
 

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import './LiveChat.css';
 
-export default function LiveChat({ session, isAdmin, isModerator }) {
+export default function LiveChat({ session, canModerate }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [isOpen, setIsOpen] = useState(false);
@@ -70,7 +70,7 @@ export default function LiveChat({ session, isAdmin, isModerator }) {
     }
   };
 
-  const hasModRights = isAdmin || isModerator;
+  const hasModRights = canModerate;
 
   return (
     <div className={`live-chat-container${isOpen ? ' is-open' : ''}`}>

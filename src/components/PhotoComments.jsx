@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import './PhotoComments.css';
 
-export default function PhotoComments({ photoUrl, session, isAdmin, isModerator }) {
+export default function PhotoComments({ photoUrl, session, canModerate }) {
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
   const [loading, setLoading] = useState(true);
@@ -80,7 +80,7 @@ export default function PhotoComments({ photoUrl, session, isAdmin, isModerator 
     }
   };
 
-  const hasModRights = isAdmin || isModerator;
+  const hasModRights = canModerate;
 
   return (
     <div className="photo-comments-container">

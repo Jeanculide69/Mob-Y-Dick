@@ -87,11 +87,61 @@
   color: var(--text-muted);
 }
 
-/* ─── Sessions strip ─── */
+/* ─── Sessions strip (collapsible) ─── */
+.champ-sessions-section {
+  margin-bottom: 20px;
+}
+
+.champ-sessions-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.champ-sessions-toggle:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.champ-sessions-toggle-chevron {
+  display: inline-block;
+  font-size: 0.7rem;
+  color: var(--accent);
+  transition: transform 0.2s ease;
+}
+
+.champ-sessions-toggle-chevron.open {
+  transform: rotate(90deg);
+}
+
+.champ-sessions-toggle-label {
+  font-weight: 600;
+}
+
+.champ-sessions-toggle-count {
+  padding: 1px 8px;
+  background: rgba(255, 85, 0, 0.15);
+  border: 1px solid rgba(255, 85, 0, 0.3);
+  border-radius: 10px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  color: var(--accent);
+  letter-spacing: 0.5px;
+}
+
 .champ-sessions-strip {
   display: flex;
   gap: 8px;
-  margin-bottom: 20px;
+  margin-top: 12px;
   flex-wrap: wrap;
 }
 

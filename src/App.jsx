@@ -744,7 +744,7 @@ function App() {
   // additionnelles stockees dans profile.permissions.
   const ROLE_BASELINE_PERMISSIONS = {
     organisateur: ['manage_races', 'manage_events'],
-    moderator: ['moderate_content', 'manage_products'],
+    moderator: ['moderate_content', 'manage_products', 'manage_team', 'manage_gallery'],
   }
   const hasPermission = (perm) => {
     if (isAdmin) return true
@@ -1448,7 +1448,7 @@ function App() {
                 <span className="section-tag">L'Équipe</span>
                 <h2>Les Riders</h2>
                 <p className="section-sub">Les personnalités qui font vivre Mob Y Dick.</p>
-                {isAdmin && (
+                {hasPermission('manage_team') && (
                   <button className="btn btn-primary btn-sm inline-add-btn" onClick={() => handleOpenForm('team')}>
                     ➕ Ajouter un Rider
                   </button>
@@ -1502,7 +1502,6 @@ function App() {
 
                     {isAdmin && m.id && (
                       <div className="admin-inline-actions">
-                        <button onClick={() => handleOpenForm('team', m)}>✏️</button>
                         <button onClick={() => handleDeleteItem('team', m.id)}>🗑️</button>
                       </div>
                     )}
@@ -1701,7 +1700,7 @@ function App() {
                 <span className="section-tag">Galerie</span>
                 <h2>Photos & Vidéos</h2>
                 <p className="section-sub">Les meilleurs moments de la team Mob Y Dick.</p>
-                {(isAdmin || isModerator) && (
+                {hasPermission('manage_gallery') && (
                   <button className="btn btn-primary btn-sm inline-add-btn" onClick={() => handleOpenForm('gallery')}>
                     ➕ Ajouter une Photo/Vidéo
                   </button>
@@ -1725,7 +1724,7 @@ function App() {
                         </span>
                       </p>
 
-                      {(isAdmin || isModerator) && (
+                      {hasPermission('manage_gallery') && (
                         <div className="admin-inline-actions">
                           <button onClick={() => handleDeleteItem('gallery', item.id, item)}>🗑️ Supprimer</button>
                         </div>
@@ -2271,7 +2270,7 @@ function App() {
       </footer>
 
       {/* ─── Live Chat (global — visible sur toutes les pages) ─── */}
-      <LiveChat session={session} profile={profile} isAdmin={isAdmin} isModerator={isModerator} />
+      <LiveChat session={session} profile={profile} canModerate={hasPermission('moderate_content')} />
 
       {/* ─── Moto Profile Page (overlay) ─── */}
       {viewingMotoNumber && (
@@ -2288,7 +2287,7 @@ function App() {
       {viewingRider && (
         <RiderPage
           rider={viewingRider}
-          canEdit={isAdmin}
+          canEdit={hasPermission('manage_team')}
           onClose={() => setViewingRider(null)}
           onSaved={(updated) => {
             setViewingRider(updated)
@@ -3109,7 +3108,7 @@ function App() {
           <button className="lightbox-close" onClick={() => setLightboxImage(null)}>✕</button>
           <div className="lightbox-content" onClick={e => e.stopPropagation()} style={{ padding: '40px 20px', margin: 'auto', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
             <img src={lightboxImage} alt="Agrandissement" className="lightbox-img" style={{ maxHeight: '70vh' }} />
-            <PhotoComments photoUrl={lightboxImage} session={session} isAdmin={isAdmin} isModerator={isModerator} />
+            <PhotoComments photoUrl={lightboxImage} session={session} canModerate={hasPermission('moderate_content')} />
           </div>
         </div>
       )}

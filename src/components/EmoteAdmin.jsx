@@ -152,6 +152,40 @@ export default function EmoteAdmin({ onClose }) {
     }
   }
 
+  // Réordonner : swap du sort_order entre l'item et son voisin (haut ou bas).
+  // Marche même si les sort_order ont des trous (1, 3, 7…) : on échange juste
+  // les deux valeurs existantes au lieu de réécrire toute la séquence.
+  const handleMove = async (item, direction) => {
+    const idx = items.findIndex(i => i.id === item.id)
+    if (idx === -1) return
+    const neighborIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (neighborIdx < 0 || neighborIdx >= items.length) return
+    const neighbor = items[neighborIdx]
+
+    // Optimistic UI : on swap localement avant le round-trip réseau
+    setItems(prev => {
+      const next = [...prev]
+      next[idx] = neighbor
+      next[neighborIdx] = item
+      return next
+    })
+
+    setSavingId(item.id)
+    try {
+      const [{ error: e1 }, { error: e2 }] = await Promise.all([
+        supabase.from('shop_items').update({ sort_order: neighbor.sort_order }).eq('id', item.id),
+        supabase.from('shop_items').update({ sort_order: item.sort_order }).eq('id', neighbor.id),
+      ])
+      if (e1 || e2) throw (e1 || e2)
+      await load()
+    } catch (err) {
+      alert(`Erreur de tri : ${err.message}`)
+      await load() // resync depuis la DB en cas d'échec
+    } finally {
+      setSavingId(null)
+    }
+  }
+
   const handleClearSound = async (item) => {
     if (!confirm(`Supprimer le son personnalisé de "${item.name}" ?`)) return
     setSavingId(item.id)
@@ -235,14 +269,37 @@ export default function EmoteAdmin({ onClose }) {
       </div>
 
       <div className="emote-admin-list">
-        {items.map(item => {
+        {items.map((item, idx) => {
           const isPack = item.type === 'pack'
           const mediaUrl = item.media_url || item.animation_url
           const isVideo = item.media_type === 'mp4' || /\.(mp4|webm)($|\?)/i.test(mediaUrl || '')
           const saving = savingId === item.id
+          const isFirst = idx === 0
+          const isLast  = idx === items.length - 1
 
           return (
             <div key={item.id} className={`emote-admin-row ${isPack ? 'is-pack' : ''} ${!item.is_visible ? 'is-hidden' : ''}`}>
+              {/* Reorder arrows */}
+              <div className="emote-admin-reorder">
+                <button
+                  type="button"
+                  className="emote-admin-reorder-btn"
+                  onClick={() => handleMove(item, 'up')}
+                  disabled={isFirst || saving}
+                  title="Monter"
+                  aria-label="Monter"
+                >▲</button>
+                <span className="emote-admin-reorder-pos">#{idx + 1}</span>
+                <button
+                  type="button"
+                  className="emote-admin-reorder-btn"
+                  onClick={() => handleMove(item, 'down')}
+                  disabled={isLast || saving}
+                  title="Descendre"
+                  aria-label="Descendre"
+                >▼</button>
+              </div>
+
               {/* Preview */}
               <div className="emote-admin-preview">
                 {isPack ? (

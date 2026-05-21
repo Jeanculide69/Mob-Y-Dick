@@ -17,6 +17,7 @@
  *  Si la durée source est ≤ 5 s : on garde toute la vidéo sans slider.
  */
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import './VideoTrimmer.css'
 
 const TARGET_SIZE = 480           // Canvas carré 480×480
@@ -77,11 +78,26 @@ export default function VideoTrimmer({ file, onConfirm, onCancel }) {
   const handleLoadedMetadata = () => {
     const v = videoRef.current
     if (!v) return
+    setError('')
     setDuration(v.duration)
     // Initialise au début
     v.currentTime = 0
     setStartTime(0)
     setPreviewTime(0)
+  }
+
+  const handleVideoError = () => {
+    const v = videoRef.current
+    const errCode = v?.error?.code
+    // 1=ABORTED, 2=NETWORK, 3=DECODE, 4=SRC_NOT_SUPPORTED
+    if (errCode === 4 || errCode === 3) {
+      setError(
+        "Ton navigateur ne peut pas lire ce fichier (codec non supporté — souvent HEVC/H.265 venant d'iPhone). " +
+        "Convertis-le en H.264 (mp4 'compatible') ou utilise un autre fichier."
+      )
+    } else {
+      setError("Impossible de charger la vidéo. Essaie un autre fichier ou un autre format (mp4 H.264 / webm).")
+    }
   }
 
   const handleScrub = (e) => {
@@ -238,7 +254,7 @@ export default function VideoTrimmer({ file, onConfirm, onCancel }) {
     }
   }
 
-  return (
+  return createPortal(
     <div className="video-trimmer-overlay" onClick={(e) => { if (e.target === e.currentTarget && !processing) onCancel() }}>
       <div className="video-trimmer glass">
         <div className="video-trimmer-header">
@@ -258,10 +274,17 @@ export default function VideoTrimmer({ file, onConfirm, onCancel }) {
               ref={videoRef}
               onLoadedMetadata={handleLoadedMetadata}
               onTimeUpdate={handleTimeUpdate}
+              onError={handleVideoError}
               className="video-trimmer-video"
               playsInline
               controls={!processing}
             />
+            {duration === 0 && !error && (
+              <div className="video-trimmer-loading">
+                <div className="video-trimmer-loading-spinner" />
+                <span>Chargement de la vidéo…</span>
+              </div>
+            )}
           </div>
 
           <canvas ref={canvasRef} style={{ display: 'none' }} />
@@ -358,6 +381,7 @@ export default function VideoTrimmer({ file, onConfirm, onCancel }) {
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
