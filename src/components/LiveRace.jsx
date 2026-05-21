@@ -853,7 +853,11 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
               : (a.item.media_type === 'mp4' || /\.(mp4|webm)($|\?)/i.test(mediaSrc || ''))
             // Classe CSS d'animation spécifique au slug — override emotePopIn
             // sur le wrapper (cf. règle :has() dans LiveRace.css).
-            const animClass = SLUG_ANIM_CLASS[a.item.slug] || ''
+            // ON N'APPLIQUE PAS la classe slug sur les vidéos : les keyframes
+            // finissent en opacity:0 à 1-3s alors que la vidéo dure souvent
+            // 5s+. L'image disparaîtrait avant la fin du clip. Les vidéos
+            // ont déjà leur propre choré interne.
+            const animClass = isVideo ? '' : (SLUG_ANIM_CLASS[a.item.slug] || '')
             // Son séparé : présent côté Supabase OU forcé par l'override (klaxon).
             const hasSeparateSound = !!(override?.soundSrc || a.item.sound_url)
             return (
