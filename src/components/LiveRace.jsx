@@ -15,10 +15,14 @@ const EMOJIS = ['🔥', '👏', '🏁', '🏍️', '⚡', '🤙', '😱', '🚀'
 
 const formatTime = (ms) => {
   if (!ms && ms !== 0) return '--:--.---'
-  const minutes = Math.floor(ms / 60000)
+  const hours = Math.floor(ms / 3600000)
+  const minutes = Math.floor((ms % 3600000) / 60000)
   const seconds = Math.floor((ms % 60000) / 1000)
   const millis = ms % 1000
-  return `${minutes}:${seconds.toString().padStart(2, '0')}.${millis.toString().padStart(3, '0')}`
+  if (hours > 0) {
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${millis.toString().padStart(3, '0')}`
+  }
+  return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${millis.toString().padStart(3, '0')}`
 }
 
 const formatElapsed = (ms) => {
@@ -50,6 +54,42 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   const [copied, setCopied]                 = useState(false)
   const [teamStatuses, setTeamStatuses]     = useState({}) // teamId → 'DNF' | 'DNS'
   
+  // ── Anti-Spam (Cooldowns) ──
+  const [spamPenaltyLevel, setSpamPenaltyLevel] = useState(0)
+  const [cooldownUntil, setCooldownUntil] = useState(0)
+  const recentEmotesRef = useRef([])
+
+  useEffect(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('myd_emote_spam_data'))
+      if (stored) {
+        if (stored.cooldownUntil > Date.now()) {
+          setSpamPenaltyLevel(stored.penaltyLevel || 0)
+          setCooldownUntil(stored.cooldownUntil || 0)
+        } else {
+          // Cooldown finished, decay penalty by 1
+          setSpamPenaltyLevel(Math.max(0, (stored.penaltyLevel || 1) - 1))
+          setCooldownUntil(0)
+          localStorage.setItem('myd_emote_spam_data', JSON.stringify({
+            penaltyLevel: Math.max(0, (stored.penaltyLevel || 1) - 1),
+            cooldownUntil: 0
+          }))
+        }
+      }
+    } catch {}
+  }, [])
+
+  const saveSpamData = (level, until) => {
+    setSpamPenaltyLevel(level)
+    setCooldownUntil(until)
+    try {
+      localStorage.setItem('myd_emote_spam_data', JSON.stringify({
+        penaltyLevel: level,
+        cooldownUntil: until
+      }))
+    } catch {}
+  }
+
   // ── Tabs State ──
   const [activeViewTab, setActiveViewTab]   = useState('classement') // 'classement' | 'podiums' | 'activite'
   const [announcementsHistory, setAnnouncementsHistory] = useState([])
@@ -322,6 +362,38 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   }
 
   const sendPremiumReaction = (item) => {
+    if (Date.now() < cooldownUntil) {
+      const remainingSecs = Math.ceil((cooldownUntil - Date.now()) / 1000)
+      let timeStr = `${remainingSecs} secondes`
+      if (remainingSecs > 60) {
+        timeStr = `${Math.ceil(remainingSecs / 60)} minutes`
+      }
+      toast.warning(`Afin de ne pas spammer le live, vous êtes bloqué pour encore ${timeStr}.`)
+      return
+    }
+
+    const now = Date.now()
+    const windowStart = now - 15000 // 15 seconds window
+    recentEmotesRef.current = recentEmotesRef.current.filter(t => t > windowStart)
+    recentEmotesRef.current.push(now)
+
+    if (recentEmotesRef.current.length > 4) {
+      // Penalty applies on the 5th emote within 15 seconds
+      const newLevel = Math.min(spamPenaltyLevel + 1, 5)
+      let penaltyMinutes = 1
+      if (newLevel === 2) penaltyMinutes = 2
+      if (newLevel === 3) penaltyMinutes = 5
+      if (newLevel === 4) penaltyMinutes = 10
+      if (newLevel >= 5) penaltyMinutes = 15
+
+      const until = now + penaltyMinutes * 60000
+      saveSpamData(newLevel, until)
+      recentEmotesRef.current = [] // reset
+
+      toast.error(`Vous avez envoyé trop d'animations. Vous êtes bloqué pour ${penaltyMinutes} minute(s).`)
+      return
+    }
+
     const nameToUse = userProfile?.display_name || authUser?.email?.split('@')[0] || 'Un Rider'
     // 1. Trigger locally
     triggerPremiumReaction(item.slug, nameToUse)
@@ -1093,23 +1165,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
           </div>
         )}
 
-        {/* ── Gagnante féminine ── */}
-        {(() => {
-          const fw = getFemaleWinner()
-          if (!fw) return null
-          const names = [fw.pilot_1_sex === 'F' && fw.pilot_1_name, fw.pilot_2_sex === 'F' && fw.pilot_2_name, fw.pilot_3_sex === 'F' && fw.pilot_3_name].filter(Boolean)
-          return (
-            <div className="live-best-overall glass" style={{ border: '1px solid rgba(255,0,128,0.3)', background: 'linear-gradient(90deg,rgba(255,0,128,0.08),rgba(0,0,0,0.2))', marginTop: '10px' }}>
-              <span className="live-best-label" style={{ color: '#ff3399' }}>👑 Gagnante Féminine Toute Catégorie</span>
-              <div className="live-best-info">
-                <span className="live-best-moto" style={{ color: '#ff3399' }}>#{fw.moto_number}</span>
-                <span className="live-best-pilot">{names.join(' & ')}</span>
-                <span className="live-best-time" style={{ color: '#ff3399' }}>{fw.totalLaps} Tours</span>
-                <span className="live-best-cat">Min: {formatTime(fw.bestLap)}</span>
-              </div>
-            </div>
-          )
-        })()}
+
 
 
 

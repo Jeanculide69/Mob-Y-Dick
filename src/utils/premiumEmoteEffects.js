@@ -65,7 +65,7 @@ const EFFECTS = {
 
   sound_horn: () => {
     setTimeout(() => {
-      try { confetti({ particleCount: 150, angle: 0, spread: 60, origin: { x: 0.2, y: 0.5 },
+      try { confetti({ particleCount: 150, angle: 0, spread: 60, origin: { x: 0.5, y: 0.5 },
         colors: ['#ffaa00', '#ffffff', '#ff0000'], startVelocity: 45, scalar: 1.5 }) } catch {}
     }, 500)
   },
@@ -195,6 +195,15 @@ export const MEDIA_OVERRIDES = {
   sound_horn: {
     mediaSrc: '/emotes/premium_horn.png',
     soundSrc: '/emotes/premium_horn.mp3',
+    mediaType: 'image',
+  },
+  sound_airhorn: {
+    mediaSrc: '/emotes/premium_airhorn.png',
+    soundSrc: '/emotes/premium_airhorn.mp3',
+    mediaType: 'image',
+  },
+  emote_mindblown: {
+    mediaSrc: '/emotes/premium_mindblown.png',
     mediaType: 'image',
   },
   emote_wheelie: {

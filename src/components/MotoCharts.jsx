@@ -27,10 +27,14 @@ const PERIODS = [
 
 const formatTime = (ms) => {
   if (ms == null) return '--'
-  const m   = Math.floor(ms / 60000)
-  const s   = Math.floor((ms % 60000) / 1000)
+  const h = Math.floor(ms / 3600000)
+  const m = Math.floor((ms % 3600000) / 60000)
+  const s = Math.floor((ms % 60000) / 1000)
   const ms3 = ms % 1000
-  return `${m}:${s.toString().padStart(2, '0')}.${ms3.toString().padStart(3, '0')}`
+  if (h > 0) {
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${ms3.toString().padStart(3, '0')}`
+  }
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}.${ms3.toString().padStart(3, '0')}`
 }
 
 const toX = (i, n) =>

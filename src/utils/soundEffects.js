@@ -1,7 +1,16 @@
 // Sound effects generator - plays sounds using Web Audio API
 // No external files needed, works everywhere, no CORS issues
 
-const getAudioCtx = () => new (window.AudioContext || window.webkitAudioContext)()
+let globalCtx = null;
+const getAudioCtx = () => {
+  if (!globalCtx) {
+    globalCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  if (globalCtx.state === 'suspended') {
+    globalCtx.resume().catch(() => {});
+  }
+  return globalCtx;
+}
 
 const soundGenerators = {
   // Fart / poop sound - low frequency rumble
@@ -233,7 +242,7 @@ const slugToSound = {
 // passe au générateur un Proxy du ctx qui retourne un GainNode à la
 // place de `destination`. Le GainNode est branché sur le vrai
 // destination avec un volume réduit.
-const MASTER_GAIN = 0.3  // 30% du volume nominal des générateurs
+const MASTER_GAIN = 0.15  // 15% du volume nominal des générateurs
 
 const playWithMasterGain = (ctx, runGenerator) => {
   const master = ctx.createGain()

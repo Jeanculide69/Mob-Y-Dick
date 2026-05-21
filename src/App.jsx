@@ -1303,7 +1303,11 @@ function App() {
            économiser le CPU
          - Décodage GPU natif, zéro canvas, zéro RAM extra */}
       <div className="video-bg">
-        <VideoBackgroundDual src="/video_background.mp4" />
+        {liveSession ? (
+          <img src="/video_background.jpg" alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+        ) : (
+          <VideoBackgroundDual src="/video_background.mp4" />
+        )}
         <div className="video-overlay" />
       </div>
 
