@@ -130,6 +130,32 @@ serve(async (req: Request) => {
     if (message && (typeof message !== 'string' || message.length > 300)) {
       return json(400, { error: 'invalid_message' })
     }
+
+    // ── Anti-impersonation : refuser un pseudo déjà pris par un autre user
+    //    Si le donateur n'est pas connecté ET le pseudo matche le
+    //    display_name d'un user enregistré → bloque. Si le donateur EST
+    //    connecté ET son propre display_name matche → autorisé.
+    {
+      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      })
+      const trimmedName = displayName.trim()
+      if (trimmedName.length > 0) {
+        // ILIKE = match insensible à la casse. Empêche "jctest" de squatter "JCTest".
+        const { data: clash } = await supabase
+          .from('profiles')
+          .select('id, display_name')
+          .ilike('display_name', trimmedName)
+          .limit(1)
+          .maybeSingle()
+        if (clash && clash.id !== authUserId) {
+          return json(400, {
+            error: 'pseudo_taken',
+            message: `Le pseudo "${trimmedName}" est déjà utilisé par un membre. Choisis-en un autre ou connecte-toi.`,
+          })
+        }
+      }
+    }
     // Email optionnel — si fourni, on valide (basique)
     let cleanEmail: string | null = null
     if (payerEmail && typeof payerEmail === 'string') {

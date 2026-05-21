@@ -1970,6 +1970,11 @@ body.shake-heavy  { animation: pemoteCameraShakeHeavy 1s ease-in-out; }
   border-color: var(--accent);
 }
 
+.donation-form input.pseudo-input-taken {
+  border-color: #ff5555 !important;
+  background: rgba(255, 85, 85, 0.05);
+}
+
 .donation-form label {
   font-size: 0.8rem;
   color: var(--text-secondary);
@@ -2142,6 +2147,25 @@ body.shake-heavy  { animation: pemoteCameraShakeHeavy 1s ease-in-out; }
   border-color: rgba(255, 215, 0, 0.3);
   background: rgba(255, 215, 0, 0.08);
   color: #ffd700;
+}
+
+.live-fab-tts-toggle {
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  letter-spacing: 0.2px;
+}
+.live-fab-tts-toggle:hover {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: #fff;
 }
 
 .live-fab-action-btn.donation:hover {

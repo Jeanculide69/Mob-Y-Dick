@@ -1,0 +1,133 @@
+/**
+ * donationTTS — Lecture vocale des dons façon Twitch
+ *
+ * Utilise l'API Web Speech (window.speechSynthesis) qui est :
+ *  - 100% gratuite, native du navigateur
+ *  - Disponible sur Chrome, Firefox, Safari, Edge récents
+ *  - Multi-langues (on cherche une voix française en priorité)
+ *
+ * Limitations connues :
+ *  - Sur Safari iOS, la première lecture nécessite une interaction
+ *    utilisateur (touch). Le LiveRace a déjà un mécanisme "audio unlock"
+ *    qu'on suit (audioUnlockedRef), donc une fois qu'un son a été
+ *    déclenché par l'user, la TTS peut jouer librement.
+ *  - Les voix varient selon l'OS. Sur Windows c'est Microsoft, sur
+ *    macOS c'est Apple, sur Android c'est Google. Toutes décentes en
+ *    français.
+ *
+ * Toggle : persisté dans localStorage sous la clé 'myd_donation_tts'.
+ * Par défaut : ON.
+ */
+
+const STORAGE_KEY = 'myd_donation_tts'
+
+/** Retourne true si la TTS est activée dans les préférences. */
+export const isDonationTTSEnabled = () => {
+  try {
+    const val = localStorage.getItem(STORAGE_KEY)
+    // Par défaut on est ON. Le user doit explicitement opt-out.
+    return val !== '0' && val !== 'false'
+  } catch {
+    return true
+  }
+}
+
+/** Active ou désactive la TTS. Persiste dans localStorage. */
+export const setDonationTTSEnabled = (enabled) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, enabled ? '1' : '0')
+  } catch { /* ignore (mode privé) */ }
+}
+
+/** Retourne la meilleure voix française disponible, ou null. */
+const pickFrenchVoice = () => {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return null
+  const voices = window.speechSynthesis.getVoices()
+  if (!voices.length) return null
+  // Préférence : fr-FR (France), puis fr-CA (Canada), puis n'importe quoi en français
+  return voices.find(v => v.lang === 'fr-FR')
+      || voices.find(v => v.lang === 'fr-CA')
+      || voices.find(v => v.lang?.startsWith('fr'))
+      || null
+}
+
+/** Sanitize le message pour la TTS : retire URL, emoji bruyants, longueur cap. */
+const cleanForTTS = (text) => {
+  if (!text) return ''
+  let cleaned = String(text)
+    // URLs : on les lit pas (sinon "h-t-t-p-s-deux-points-slash-slash...")
+    .replace(/https?:\/\/\S+/gi, '')
+    // Emojis et caractères non-imprimables (la TTS les lit littéralement
+    // "smiling face emoji" en anglais sur certains navigateurs, agaçant)
+    .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{27BF}]/gu, '')
+    // Espaces multiples
+    .replace(/\s+/g, ' ')
+    .trim()
+  // Cap à 250 chars pour éviter qu'un troll envoie War & Peace
+  if (cleaned.length > 250) cleaned = cleaned.slice(0, 250) + '… etc'
+  return cleaned
+}
+
+/**
+ * Lit à voix haute un don.
+ * @param {object} d - { display_name, amount, message }
+ * @param {object} [opts]
+ * @param {number} [opts.rate=1.05]    — vitesse (0.5 à 2)
+ * @param {number} [opts.pitch=1]      — hauteur (0 à 2)
+ * @param {number} [opts.volume=0.85]  — volume (0 à 1)
+ * @param {boolean} [opts.force=false] — ignore le toggle utilisateur
+ */
+export const speakDonation = (d, opts = {}) => {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return
+  if (!opts.force && !isDonationTTSEnabled()) return
+  if (!d) return
+
+  const name = (d.display_name || 'Quelqu\'un').trim().slice(0, 40)
+  const amount = Number(d.amount || 0)
+  const message = cleanForTTS(d.message)
+
+  // Construction de la phrase. Comme sur Twitch :
+  //   "Rider44 vient de donner 5 euros, il dit : Allez les gars !"
+  // Si pas de message, on s'arrête au montant.
+  let phrase
+  if (amount >= 1) {
+    const euros = Number.isInteger(amount) ? `${amount}` : amount.toFixed(2).replace('.', ',')
+    phrase = `${name} vient de donner ${euros} euros`
+    if (message) phrase += `, et dit : ${message}`
+  } else {
+    phrase = `${name} envoie un message`
+    if (message) phrase += ` : ${message}`
+  }
+
+  // Cancel ce qui était en cours (anti-empilage si plusieurs dons rapprochés)
+  try { window.speechSynthesis.cancel() } catch { /* ignore */ }
+
+  const utterance = new SpeechSynthesisUtterance(phrase)
+  utterance.lang = 'fr-FR'
+  utterance.rate = opts.rate ?? 1.05
+  utterance.pitch = opts.pitch ?? 1
+  utterance.volume = opts.volume ?? 0.85
+
+  const frenchVoice = pickFrenchVoice()
+  if (frenchVoice) utterance.voice = frenchVoice
+
+  try { window.speechSynthesis.speak(utterance) }
+  catch (e) { console.warn('[TTS] speak failed', e) }
+}
+
+/**
+ * Préchargement des voix (Chrome charge async la première fois).
+ * À appeler une fois au mount de LiveRace pour que la 1re TTS soit nickel.
+ */
+export const warmUpTTS = () => {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return
+  // Trigger le chargement des voix
+  window.speechSynthesis.getVoices()
+  // Sur Chrome, l'événement voiceschanged se fire quand la liste est prête
+  if (typeof window.speechSynthesis.addEventListener === 'function') {
+    window.speechSynthesis.addEventListener('voiceschanged', () => {
+      // Rien à faire, juste forcer le caching
+      window.speechSynthesis.getVoices()
+    }, { once: true })
+  }
+}

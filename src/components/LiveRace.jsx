@@ -7,6 +7,7 @@ import StripePurchaseButton from './StripePurchaseButton'
 import RaceFlagOverlay from './RaceFlagOverlay'
 import { playPremiumSound, playDonationSound, playRaceSignalSound, playAnnouncementSound } from '../utils/soundEffects'
 import { playPremiumEffects, SLUG_ANIM_CLASS, MEDIA_OVERRIDES } from '../utils/premiumEmoteEffects'
+import { speakDonation, warmUpTTS, isDonationTTSEnabled, setDonationTTSEnabled } from '../utils/donationTTS'
 import { useToast } from './Toast'
 import './LiveRace.css'
 
@@ -69,6 +70,12 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   const [donationMessage, setDonationMessage] = useState('')
   const [donationAmount, setDonationAmount] = useState(5)
   const [customAmount, setCustomAmount] = useState('')
+  // État de la vérification d'unicité du pseudo (anti-impersonation)
+  // - 'idle'    : pas de check en cours
+  // - 'checking': requête en vol
+  // - 'ok'      : pseudo libre OU appartient au user connecté
+  // - 'taken'   : pseudo déjà pris par quelqu'un d'autre
+  const [pseudoCheckState, setPseudoCheckState] = useState('idle')
   // Pré-remplit le pseudo avec le display_name de l'user connecté, mais
   // seulement s'il n'a rien tapé manuellement (= laisse la liberté de
   // donner sous un pseudo différent si voulu). Effect dans la suite.
@@ -88,6 +95,47 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       pseudoPrefilledFromProfileRef.current = false
     }
   }, [userProfile, donationPseudo])
+
+  // Vérification d'unicité du pseudo (debounced 400ms). On query la
+  // table profiles côté client — c'est public en lecture (RLS) donc
+  // safe + ça donne un feedback instantané. Le serveur re-vérifie
+  // dans tous les cas avant de créer le PaymentIntent.
+  useEffect(() => {
+    const trimmed = donationPseudo.trim()
+    if (!trimmed) {
+      setPseudoCheckState('idle')
+      return
+    }
+    // Cas trivial : si user connecté et pseudo === son display_name, OK direct
+    if (userProfile?.display_name && trimmed.toLowerCase() === userProfile.display_name.toLowerCase()) {
+      setPseudoCheckState('ok')
+      return
+    }
+    setPseudoCheckState('checking')
+    const debounceId = setTimeout(async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id')
+        .ilike('display_name', trimmed)
+        .limit(1)
+        .maybeSingle()
+      if (!data) {
+        setPseudoCheckState('ok')
+      } else if (authUser && data.id === authUser.id) {
+        setPseudoCheckState('ok')
+      } else {
+        setPseudoCheckState('taken')
+      }
+    }, 400)
+    return () => clearTimeout(debounceId)
+  }, [donationPseudo, userProfile, authUser])
+
+  // ── TTS warm-up : précharge les voix navigateur au mount (Chrome charge
+  //    les voix de façon async, donc la 1re lecture peut tomber sur une
+  //    liste vide si on ne pré-trigger pas. warmUpTTS() force le chargement.
+  useEffect(() => {
+    warmUpTTS()
+  }, [])
 
   // ── Audio unlock for mobile browsers ──
   const audioUnlockedRef = useRef(false)
@@ -191,6 +239,9 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       // ── Son ──
       if (head.type === 'donation') {
         playDonationSound()
+        // TTS façon Twitch : "Pseudo vient de donner X euros, et dit : message"
+        // Joue ~800ms après le son de notification pour ne pas se chevaucher.
+        setTimeout(() => speakDonation(head), 800)
       } else if (head.type === 'premium-reaction') {
         const item = head.item
         const override = MEDIA_OVERRIDES[item.slug]
@@ -1446,7 +1497,23 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                         value={donationPseudo}
                         onChange={(e) => setDonationPseudo(e.target.value)}
                         maxLength={25}
+                        className={pseudoCheckState === 'taken' ? 'pseudo-input-taken' : ''}
                       />
+                      {pseudoCheckState === 'checking' && (
+                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px', display: 'inline-block' }}>
+                          🔄 Vérification…
+                        </span>
+                      )}
+                      {pseudoCheckState === 'taken' && (
+                        <span style={{ fontSize: '0.75rem', color: '#ff5555', marginTop: '2px', display: 'inline-block' }}>
+                          ❌ Ce pseudo appartient à un membre. Choisis-en un autre.
+                        </span>
+                      )}
+                      {pseudoCheckState === 'ok' && donationPseudo.trim() && (
+                        <span style={{ fontSize: '0.72rem', color: '#00cc66', marginTop: '2px', display: 'inline-block' }}>
+                          ✓ Pseudo disponible
+                        </span>
+                      )}
                     </div>
                     <div>
                       <label>Montant du Don</label>
@@ -1497,7 +1564,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                     Don de <strong>{donationAmount > 0 ? donationAmount : 0}€</strong> par <strong>{donationPseudo || 'Anonyme'}</strong>
                   </div>
 
-                  {donationAmount > 0 && donationPseudo.trim() ? (
+                  {donationAmount > 0 && donationPseudo.trim() && pseudoCheckState !== 'taken' && pseudoCheckState !== 'checking' ? (
                     <div style={{ marginTop: '10px' }}>
                       <StripeDonationForm
                         amount={donationAmount}
@@ -1511,7 +1578,11 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                     </div>
                   ) : (
                     <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                      Renseigne un pseudo et un montant pour faire un don.
+                      {pseudoCheckState === 'taken'
+                        ? '⛔ Choisis un pseudo qui n\'est pas déjà utilisé par un membre.'
+                        : pseudoCheckState === 'checking'
+                          ? '⏳ Vérification du pseudo…'
+                          : 'Renseigne un pseudo et un montant pour faire un don.'}
                     </div>
                   )}
 
@@ -1579,6 +1650,30 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                   💸 Faire un Don
                 </button>
               </div>
+
+              {/* ── Toggle TTS (lecture vocale des dons) ── */}
+              <div className="live-fab-divider" />
+              <button
+                type="button"
+                className="live-fab-tts-toggle"
+                onClick={() => {
+                  const newState = !isDonationTTSEnabled()
+                  setDonationTTSEnabled(newState)
+                  // Force re-render via le state du fabOpen (hack léger)
+                  setFabOpen(o => o)
+                  // Test vocal pour confirmer l'activation
+                  if (newState) {
+                    setTimeout(() => speakDonation({
+                      display_name: 'Test',
+                      amount: 0,
+                      message: 'La lecture vocale des dons est activée.',
+                    }, { force: true }), 100)
+                  }
+                }}
+                title={isDonationTTSEnabled() ? 'Désactiver la lecture vocale des dons' : 'Activer la lecture vocale des dons'}
+              >
+                {isDonationTTSEnabled() ? '🔊 Lecture des dons : ON' : '🔇 Lecture des dons : OFF'}
+              </button>
             </div>
           )}
           <button
