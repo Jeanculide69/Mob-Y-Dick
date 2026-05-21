@@ -172,6 +172,81 @@
   color: var(--text-muted);
   font-family: ui-monospace, monospace;
 }
+.donations-admin-row-meta code {
+  font-family: inherit;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+/* ─── Infos payeur enrichies (Stripe : email, carte, provider) ─── */
+.donations-admin-row-payer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 0.78rem;
+}
+.donations-admin-row-email {
+  color: var(--accent);
+  text-decoration: none;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255, 85, 0, 0.08);
+  border: 1px solid rgba(255, 85, 0, 0.2);
+  transition: all 0.15s;
+}
+.donations-admin-row-email:hover {
+  background: rgba(255, 85, 0, 0.15);
+  text-decoration: underline;
+}
+.donations-admin-row-card {
+  color: var(--text-secondary);
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  font-variant-numeric: tabular-nums;
+}
+.donations-admin-row-provider {
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.3px;
+}
+.provider-stripe {
+  color: #635bff;
+  background: rgba(99, 91, 255, 0.08);
+  border: 1px solid rgba(99, 91, 255, 0.3);
+}
+.provider-paypal {
+  color: #0070ba;
+  background: rgba(0, 112, 186, 0.08);
+  border: 1px solid rgba(0, 112, 186, 0.3);
+}
+
+.donations-admin-row-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.donations-admin-row-link {
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.75rem;
+  transition: all 0.15s;
+}
+.donations-admin-row-link:hover {
+  background: rgba(255, 85, 0, 0.08);
+  border-color: rgba(255, 85, 0, 0.4);
+  color: var(--accent);
+}
 
 /* ─── Empty / Pagination ─── */
 .donations-admin-empty {

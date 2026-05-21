@@ -118,7 +118,7 @@ serve(async (req: Request) => {
   //    à la finalize, Stripe a stocké la vraie valeur).
   // ──────────────────────────────────────
   if (action === 'create-intent') {
-    const { amountCents, displayName, message, sessionId } = body
+    const { amountCents, displayName, message, sessionId, payerEmail } = body
 
     // Validations côté serveur (jamais faire confiance au client)
     if (!Number.isInteger(amountCents) || amountCents < 100 || amountCents > 10000000) {
@@ -130,9 +130,18 @@ serve(async (req: Request) => {
     if (message && (typeof message !== 'string' || message.length > 300)) {
       return json(400, { error: 'invalid_message' })
     }
+    // Email optionnel — si fourni, on valide (basique)
+    let cleanEmail: string | null = null
+    if (payerEmail && typeof payerEmail === 'string') {
+      const trimmed = payerEmail.trim()
+      if (trimmed.length > 254 || !trimmed.includes('@')) {
+        return json(400, { error: 'invalid_email' })
+      }
+      cleanEmail = trimmed
+    }
 
     try {
-      const intent = await stripeRequest('/payment_intents', {
+      const intentBody: Record<string, unknown> = {
         amount: amountCents,
         currency: 'eur',
         // Méthodes de paiement automatiques (Stripe choisit ce qui est dispo
@@ -148,7 +157,11 @@ serve(async (req: Request) => {
           user_id: authUserId || '',
           kind: 'donation',
         },
-      })
+      }
+      // Email pour reçu Stripe automatique
+      if (cleanEmail) intentBody.receipt_email = cleanEmail
+
+      const intent = await stripeRequest('/payment_intents', intentBody)
       return json(200, {
         clientSecret: intent.client_secret,
         paymentIntentId: intent.id,
@@ -170,9 +183,15 @@ serve(async (req: Request) => {
       return json(400, { error: 'missing_payment_intent_id' })
     }
 
+    // On récupère le PaymentIntent + son latest_charge (qui contient la
+    // marque de carte, last4, receipt_url, email du payeur). Le paramètre
+    // expand[]=latest_charge demande à Stripe de nous inclure cet objet
+    // directement (sinon on aurait juste l'ID et il faudrait un 2e appel).
     let intent: any
     try {
-      intent = await stripeRequest(`/payment_intents/${encodeURIComponent(paymentIntentId)}`)
+      intent = await stripeRequest(
+        `/payment_intents/${encodeURIComponent(paymentIntentId)}?expand[]=latest_charge`
+      )
     } catch (err) {
       return json(502, { error: 'stripe_fetch_failed', detail: String(err.message || err) })
     }
@@ -184,6 +203,19 @@ serve(async (req: Request) => {
       return json(400, { error: 'wrong_currency', currency: intent.currency })
     }
 
+    // Extraction des infos enrichies depuis le charge
+    const charge = intent.latest_charge || {}
+    const cardDetails = charge.payment_method_details?.card || {}
+    const cardBrand: string | null = cardDetails.brand || null
+    const cardLast4: string | null = cardDetails.last4 || null
+    const receiptUrl: string | null = charge.receipt_url || null
+    // Email : soit billing_details.email (saisi par Stripe via 3DS),
+    // soit receipt_email (qu'on a passé à create-intent), soit null
+    const payerEmail: string | null =
+      charge.billing_details?.email
+      || intent.receipt_email
+      || null
+
     const md = intent.metadata || {}
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -191,15 +223,20 @@ serve(async (req: Request) => {
 
     // On utilise paypal_order_id pour stocker le payment_intent_id Stripe
     // (la colonne existe déjà et a une UNIQUE constraint via v20 →
-    // idempotence automatique en cas de retry). Sémantiquement c'est un
-    // peu sale mais ça évite une nouvelle migration de schéma.
+    // idempotence automatique en cas de retry). Le payment_provider
+    // distingue stripe vs paypal pour l'affichage admin.
     const { error: insertErr } = await supabase.from('donations').insert({
       user_id: md.user_id || null,
       display_name: (md.display_name || 'Donateur Anonyme').slice(0, 80),
       amount_cents: intent.amount,
       message: md.message ? String(md.message).slice(0, 300) : null,
       session_id: md.session_id || null,
-      paypal_order_id: paymentIntentId, // ← réutilisation de la colonne
+      paypal_order_id: paymentIntentId,
+      payment_provider: 'stripe',
+      payer_email: payerEmail,
+      card_brand: cardBrand,
+      card_last4: cardLast4,
+      receipt_url: receiptUrl,
     })
 
     if (insertErr) {
@@ -292,7 +329,9 @@ serve(async (req: Request) => {
 
     let intent: any
     try {
-      intent = await stripeRequest(`/payment_intents/${encodeURIComponent(paymentIntentId)}`)
+      intent = await stripeRequest(
+        `/payment_intents/${encodeURIComponent(paymentIntentId)}?expand[]=latest_charge`
+      )
     } catch (err) {
       return json(502, { error: 'stripe_fetch_failed', detail: String(err.message || err) })
     }
@@ -309,12 +348,14 @@ serve(async (req: Request) => {
       return json(400, { error: 'wrong_intent_kind' })
     }
     if (md.user_id !== authUserId) {
-      // Tentative d'un user de "voler" l'achat d'un autre
       return json(403, { error: 'user_mismatch' })
     }
     if (!md.item_slug) {
       return json(400, { error: 'missing_item_slug_in_intent' })
     }
+
+    const charge = intent.latest_charge || {}
+    const cardDetails = charge.payment_method_details?.card || {}
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
@@ -324,12 +365,15 @@ serve(async (req: Request) => {
       user_id: authUserId,
       item_slug: md.item_slug,
       amount_cents: intent.amount,
-      paypal_order_id: paymentIntentId, // ← réutilisation de la colonne (cf. v20 UNIQUE)
+      paypal_order_id: paymentIntentId,
+      payment_provider: 'stripe',
+      card_brand: cardDetails.brand || null,
+      card_last4: cardDetails.last4 || null,
+      receipt_url: charge.receipt_url || null,
     })
 
     if (insertErr) {
       if (insertErr.code === '23505') {
-        // Duplicate (UNIQUE user_id+item_slug ou paypal_order_id) → idempotent
         return json(200, { ok: true, duplicate: true, itemSlug: md.item_slug })
       }
       return json(500, { error: 'db_insert_failed', detail: insertErr.message })

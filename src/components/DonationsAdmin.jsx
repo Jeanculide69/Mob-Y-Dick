@@ -143,21 +143,75 @@ export default function DonationsAdmin({ onClose }) {
             <div className="donations-admin-empty">Aucun don pour ce filtre.</div>
           ) : (
             <div className="donations-admin-list">
-              {pagedDonations.map(d => (
-                <div key={d.id} className="donations-admin-row">
-                  <div className="donations-admin-row-amount">{fmtMoney(d.amount_cents)}</div>
-                  <div className="donations-admin-row-content">
-                    <div className="donations-admin-row-header">
-                      <strong>{d.display_name}</strong>
-                      <span className="donations-admin-row-date">{fmtDate(d.created_at)}</span>
+              {pagedDonations.map(d => {
+                // Détecte le provider : prio à payment_provider (v22+), sinon
+                // fallback sur le format de paypal_order_id (pi_xxx = Stripe).
+                const provider = d.payment_provider
+                  || (d.paypal_order_id?.startsWith('pi_') ? 'stripe' : (d.paypal_order_id ? 'paypal' : null))
+                // URL vers le dashboard Stripe (live ou test selon le mode)
+                const stripeUrl = provider === 'stripe' && d.paypal_order_id
+                  ? `https://dashboard.stripe.com/payments/${d.paypal_order_id}`
+                  : null
+                return (
+                  <div key={d.id} className="donations-admin-row">
+                    <div className="donations-admin-row-amount">{fmtMoney(d.amount_cents)}</div>
+                    <div className="donations-admin-row-content">
+                      <div className="donations-admin-row-header">
+                        <strong>{d.display_name}</strong>
+                        <span className="donations-admin-row-date">{fmtDate(d.created_at)}</span>
+                      </div>
+                      {d.message && <div className="donations-admin-row-message">"{d.message}"</div>}
+
+                      {/* Infos payeur enrichies */}
+                      <div className="donations-admin-row-payer">
+                        {d.payer_email && (
+                          <a
+                            href={`mailto:${d.payer_email}`}
+                            className="donations-admin-row-email"
+                            title="Envoyer un mail au donateur"
+                          >📧 {d.payer_email}</a>
+                        )}
+                        {d.card_brand && d.card_last4 && (
+                          <span className="donations-admin-row-card">
+                            💳 {d.card_brand} •••• {d.card_last4}
+                          </span>
+                        )}
+                        {provider && (
+                          <span className={`donations-admin-row-provider provider-${provider}`}>
+                            {provider === 'stripe' ? '⚡ Stripe' : '💼 PayPal'}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Liens vers reçu + dashboard Stripe */}
+                      <div className="donations-admin-row-actions">
+                        {d.receipt_url && (
+                          <a
+                            href={d.receipt_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="donations-admin-row-link"
+                          >📄 Reçu</a>
+                        )}
+                        {stripeUrl && (
+                          <a
+                            href={stripeUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="donations-admin-row-link"
+                          >🔗 Voir sur Stripe</a>
+                        )}
+                      </div>
+
+                      {d.paypal_order_id && (
+                        <div className="donations-admin-row-meta">
+                          ID : <code>{d.paypal_order_id}</code>
+                        </div>
+                      )}
                     </div>
-                    {d.message && <div className="donations-admin-row-message">"{d.message}"</div>}
-                    {d.paypal_order_id && (
-                      <div className="donations-admin-row-meta">PayPal: {d.paypal_order_id}</div>
-                    )}
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
 

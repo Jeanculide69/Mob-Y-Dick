@@ -65,6 +65,10 @@ function DonationFormInner({ amount, pseudo, message, sessionId, onSuccess, onCa
   const [processing, setProcessing] = useState(false)
   const [cardError, setCardError] = useState(null)
   const [cardComplete, setCardComplete] = useState(false)
+  // Email optionnel — utile pour : (1) reçu Stripe automatique envoyé par
+  // mail au donateur, (2) traçabilité côté admin si quelqu'un dit "j'ai
+  // payé mais ça apparait pas", on a un moyen de retrouver son don.
+  const [payerEmail, setPayerEmail] = useState('')
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -85,6 +89,13 @@ function DonationFormInner({ amount, pseudo, message, sessionId, onSuccess, onCa
     setProcessing(true)
     setCardError(null)
 
+    // Validation email si renseigné
+    const trimmedEmail = payerEmail.trim()
+    if (trimmedEmail && (!trimmedEmail.includes('@') || trimmedEmail.length > 254)) {
+      setCardError('Format email invalide')
+      return
+    }
+
     try {
       // ── 1. Créer le PaymentIntent côté serveur ──
       const { data: intentData, error: intentErr } = await supabase.functions.invoke(
@@ -96,6 +107,7 @@ function DonationFormInner({ amount, pseudo, message, sessionId, onSuccess, onCa
             displayName: pseudo.slice(0, 80),
             message: (message || '').slice(0, 300),
             sessionId: sessionId || null,
+            payerEmail: trimmedEmail || null,
           },
         }
       )
@@ -145,6 +157,21 @@ function DonationFormInner({ amount, pseudo, message, sessionId, onSuccess, onCa
 
   return (
     <form className="stripe-form" onSubmit={handleSubmit}>
+      <label className="stripe-form-label">
+        Email <span style={{ fontWeight: 400, fontSize: '0.78rem', color: 'var(--text-muted)' }}>(optionnel — pour recevoir un reçu)</span>
+        <input
+          type="email"
+          inputMode="email"
+          autoComplete="email"
+          placeholder="ton@email.com"
+          value={payerEmail}
+          onChange={(e) => setPayerEmail(e.target.value)}
+          disabled={processing}
+          maxLength={254}
+          className="stripe-email-input"
+        />
+      </label>
+
       <label className="stripe-form-label">
         Informations de carte
         <div className="stripe-card-wrap">
