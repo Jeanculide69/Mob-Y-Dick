@@ -37,18 +37,39 @@ const SITE_VERSION = 'v2.0.0'
 const GoogleAd = ({ slot = '1234567890', format = 'auto', style = { display: 'block' }, navigate }) => {
   const [adStatus, setAdStatus] = useState('unfilled')
   const [adError, setAdError] = useState(false)
-  
+
+  // ⚠️ AdSense plante avec "No slot size for availableWidth=0" si on push
+  // l'ad quand son conteneur a 0px de large (= onglet caché, layout pas
+  // stabilisé, container display:none, mobile en chargement). Le fix : on
+  // attend que le <ins> ait une vraie largeur avant de pousher.
   useEffect(() => {
-    try {
-      if (window.adsbygoogle) {
-        (window.adsbygoogle || []).push({});
+    const insEl = document.querySelector(`ins[data-ad-slot="${slot}"]`)
+    if (!insEl || !window.adsbygoogle) return
+
+    let pushed = false
+    const tryPush = () => {
+      if (pushed) return
+      const w = insEl.getBoundingClientRect().width
+      if (w <= 0) return // container pas prêt, on retentera quand il aura une largeur
+      try {
+        (window.adsbygoogle || []).push({})
+        pushed = true
+      } catch (e) {
+        console.warn('Google AdSense push failed', e)
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setAdError(true)
       }
-    } catch (e) {
-      console.warn("Google AdSense loading failed or ad blocker active.", e);
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setAdError(true);
     }
-  }, [slot]);
+
+    // Premier essai immédiat (cas nominal, container déjà mesuré)
+    tryPush()
+    // Si ça n'a pas marché (width=0), on observe les changements de taille
+    if (!pushed && typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => tryPush())
+      ro.observe(insEl)
+      return () => ro.disconnect()
+    }
+  }, [slot])
 
   // Set up an observer to check if Google fills the ad
   useEffect(() => {
@@ -114,16 +135,30 @@ const SidebarAd = ({ side = 'left', navigate }) => {
   const [adError, setAdError] = useState(false)
   const slot = side === 'left' ? 'left-skyscraper' : 'right-skyscraper';
 
+  // Même pattern défensif que GoogleAd (cf. commentaire plus haut).
   useEffect(() => {
-    try {
-      if (window.adsbygoogle) {
-        (window.adsbygoogle || []).push({});
+    const insEl = document.querySelector(`ins[data-ad-slot="${slot}"]`)
+    if (!insEl || !window.adsbygoogle) return
+    let pushed = false
+    const tryPush = () => {
+      if (pushed) return
+      const w = insEl.getBoundingClientRect().width
+      if (w <= 0) return
+      try {
+        (window.adsbygoogle || []).push({})
+        pushed = true
+      } catch {
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setAdError(true)
       }
-    } catch {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setAdError(true);
     }
-  }, []);
+    tryPush()
+    if (!pushed && typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => tryPush())
+      ro.observe(insEl)
+      return () => ro.disconnect()
+    }
+  }, [slot]);
 
   useEffect(() => {
     const checkStatus = () => {
