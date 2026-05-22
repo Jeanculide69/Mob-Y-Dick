@@ -253,11 +253,6 @@ const NICKNAMES = {
 }
 
 
-const EVENTS = [
-  { title: 'Expo Éphémère', date: '2026-06-12', location: 'Lieu à définir', desc: 'Retrouvez nos dernières toiles et personnalisations en direct.' },
-  { title: 'Ride & Graffiti', date: '2026-07-20', location: 'Lieu à définir', desc: 'Session mob, peinture et bon son. Ouvert à tous.' },
-]
-
 const PRODUCTS = [
   { name: 'T-Shirt Custom', price: '35€', desc: 'Ton pseudo en style graffiti sur coton premium.', status: 'En stock', is_visible: true },
   { name: 'Sweat à Capuche', price: '55€', desc: 'Hoodie noir avec le logo Mob Y Dick brodé.', status: 'Coming soon', is_visible: true },
@@ -877,8 +872,10 @@ function App() {
   }, [isAdmin, dbTeam])
 
 
-  // Fix Javascript empty array traps for default fallback render cards
-  const displayEvents = (dbEvents && dbEvents.length > 0) ? dbEvents : EVENTS.map((e, i) => ({ ...e, id: i }))
+  // Source unique : la DB. Pas de fallback hardcodé — un site fraîchement
+  // déployé affiche un empty state propre tant que l'admin n'a pas saisi
+  // son premier événement.
+  const displayEvents = dbEvents || []
 
   // ── Tri + split passés / à venir ──
   // "Passé" = a une session associée avec status='finished' ou 'published',
@@ -985,19 +982,11 @@ function App() {
         if (error) throw error
       }
 
-      // 3. Initialize events if empty
-      if (!dbEvents || dbEvents.length === 0) {
-        const eventsToInsert = EVENTS.map(e => ({
-          title: e.title,
-          date: e.date,
-          location: e.location,
-          description: e.desc
-        }))
-        const { error } = await supabase.from('events').insert(eventsToInsert)
-        if (error) throw error
-      }
+      // Note : pas de seed pour les événements — on laisse l'admin saisir
+      // son premier événement réel via "➕ Ajouter un Événement" plutôt que
+      // d'afficher du fake content au lancement du site.
 
-      alert('Base de données initialisée avec succès ! Les produits, riders et événements par défaut sont maintenant modifiables.')
+      alert('Base de données initialisée ! Produits et riders par défaut chargés. Ajoute ton premier événement quand tu veux.')
       refreshData()
     } catch (err) {
       alert("Erreur lors de l'initialisation : " + err.message)
@@ -1874,9 +1863,34 @@ function App() {
                 if (list.length === 0) {
                   return (
                     <div className="events-empty">
-                      {eventsTab === 'upcoming'
-                        ? 'Aucun événement à venir pour le moment. Reviens bientôt !'
-                        : 'Aucun événement passé enregistré.'}
+                      {eventsTab === 'upcoming' ? (
+                        <>
+                          <div style={{ fontSize: '2.4rem', marginBottom: '12px' }}>📅</div>
+                          <p style={{ margin: '0 0 6px 0', fontWeight: 600, fontSize: '1.05rem' }}>
+                            Le prochain rassemblement se prépare
+                          </p>
+                          <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: '0.92rem' }}>
+                            Reviens bientôt pour découvrir nos prochaines dates,
+                            ou suis-nous sur les réseaux pour ne rien rater.
+                          </p>
+                          {hasPermission('manage_events') && (
+                            <button
+                              className="btn btn-primary"
+                              style={{ marginTop: '20px' }}
+                              onClick={() => handleOpenForm('event')}
+                            >
+                              ➕ Ajouter le premier événement
+                            </button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <div style={{ fontSize: '2.4rem', marginBottom: '12px' }}>🏁</div>
+                          <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+                            Aucun événement passé pour le moment.
+                          </p>
+                        </>
+                      )}
                     </div>
                   )
                 }
