@@ -526,6 +526,9 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'race_laps', filter: `session_id=eq.${session.id}` }, ({ new: row }) => {
         if (row?.id) setLaps(prev => prev.map(l => l.id === row.id ? row : l))
       })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'race_teams', filter: `session_id=eq.${session.id}` }, ({ new: row }) => {
+        if (row?.id) setTeams(prev => prev.map(t => t.id === row.id ? row : t))
+      })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'race_sessions', filter: `id=eq.${session.id}` }, ({ new: row }) => {
         setSession(prev => {
           // Détecter les transitions pour jouer le son de signal de course
@@ -799,8 +802,18 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       // Resync uniquement si on est resté >2s en arrière-plan (le socket
       // Supabase peut avoir raté des events pendant la suspension).
       if (Date.now() - lastVisibleAt > 2000) {
-        refetchLaps(sid)
-        supabase.from('race_sessions').select('*').eq('id', sid).maybeSingle()
+       // Refresh teams
+      supabase.from('race_teams').select('*').eq('session_id', sid).order('moto_number')
+        .then(({ data }) => {
+          if (data) {
+            setTeams(prev => {
+              if (JSON.stringify(prev) === JSON.stringify(data)) return prev
+              return data
+            })
+          }
+        })
+      // Refresh session
+      supabase.from('race_sessions').select('*').eq('id', sid).maybeSingle()
           .then(({ data }) => { if (data) setSession(data) })
       }
       lastVisibleAt = Date.now()
@@ -910,24 +923,25 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       const catTeams = cat === 'all' ? teams : teams.filter(t => t.category === cat)
       const sorted = catTeams.map(team => {
         const teamLaps = laps.filter(l => l.team_id === team.id).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
-        const totalLaps = teamLaps.length
+        const actualLapsCount = teamLaps.length
+        const totalLaps = Math.max(0, actualLapsCount - (team.penalty_laps || 0))
         let bestLap = null, lastLap = null, avgLap = null
-        if (totalLaps > 0) {
+        if (actualLapsCount > 0) {
           // Calcul des durées en une passe (reduce manuel, stack-safe)
           let bl = teamLaps[0].lap_time_ms
           let lastDur = teamLaps[0].lap_time_ms
-          for (let i = 1; i < totalLaps; i++) {
+          for (let i = 1; i < actualLapsCount; i++) {
             const dur = teamLaps[i].lap_time_ms - teamLaps[i - 1].lap_time_ms
             if (dur < bl) bl = dur
             lastDur = dur
           }
           bestLap = bl
           lastLap = lastDur
-          avgLap = Math.round(teamLaps[totalLaps - 1].lap_time_ms / totalLaps)
+          avgLap = Math.round(teamLaps[actualLapsCount - 1].lap_time_ms / actualLapsCount)
         }
         return {
           ...team, bestLap, avgLap, lastLap, totalLaps, laps: teamLaps,
-          lastPassageTime: totalLaps > 0 ? teamLaps[totalLaps - 1].lap_time_ms : Infinity
+          lastPassageTime: actualLapsCount > 0 ? teamLaps[actualLapsCount - 1].lap_time_ms : Infinity
         }
       }).filter(t => t.totalLaps > 0)
         .sort((a, b) => b.totalLaps !== a.totalLaps ? b.totalLaps - a.totalLaps : a.lastPassageTime - b.lastPassageTime)

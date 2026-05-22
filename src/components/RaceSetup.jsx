@@ -175,6 +175,12 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
     loadSession()
   }
 
+  const handleUpdatePenalty = async (teamId, newPenalty) => {
+    const { error } = await supabase.from('race_teams').update({ penalty_laps: newPenalty }).eq('id', teamId)
+    if (error) alert('Erreur mise à jour pénalité: ' + error.message)
+    else loadSession()
+  }
+
   const handleEditTeam = (team) => {
     setEditingTeam(team)
     setTeamForm({
@@ -267,20 +273,21 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
     const catTeams = cat === 'all' ? teams : teams.filter(t => t.category === cat)
     const sorted = catTeams.map(team => {
       const teamLaps = laps.filter(l => l.team_id === team.id).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
-      const totalLaps = teamLaps.length
+      const actualLapsCount = teamLaps.length
+      const totalLaps = Math.max(0, actualLapsCount - (team.penalty_laps || 0))
       
       let bestLap = null
       let lastLap = null
       let avgLap = null
       
-      if (totalLaps > 0) {
+      if (actualLapsCount > 0) {
         const durations = teamLaps.map((lap, idx) => {
           if (idx === 0) return lap.lap_time_ms
           return lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms
         })
         bestLap = Math.min(...durations)
-        lastLap = durations[totalLaps - 1]
-        avgLap = Math.round(teamLaps[totalLaps - 1].lap_time_ms / totalLaps)
+        lastLap = durations[actualLapsCount - 1]
+        avgLap = Math.round(teamLaps[actualLapsCount - 1].lap_time_ms / actualLapsCount)
       }
 
       return { 
@@ -290,7 +297,7 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
         lastLap, 
         totalLaps, 
         laps: teamLaps,
-        lastPassageTime: totalLaps > 0 ? teamLaps[totalLaps - 1].lap_time_ms : Infinity
+        lastPassageTime: actualLapsCount > 0 ? teamLaps[actualLapsCount - 1].lap_time_ms : Infinity
       }
     }).filter(t => t.totalLaps > 0)
       .sort((a, b) => {
@@ -337,10 +344,11 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
 
     const rankedFemale = femaleTeams.map(team => {
       const teamLaps = laps.filter(l => l.team_id === team.id).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
-      const totalLaps = teamLaps.length
+      const actualLapsCount = teamLaps.length
+      const totalLaps = Math.max(0, actualLapsCount - (team.penalty_laps || 0))
       
       let bestLap = null
-      if (totalLaps > 0) {
+      if (actualLapsCount > 0) {
         const durations = teamLaps.map((lap, idx) => {
           if (idx === 0) return lap.lap_time_ms
           return lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms
@@ -352,7 +360,7 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
         ...team,
         totalLaps,
         bestLap,
-        lastPassageTime: totalLaps > 0 ? teamLaps[totalLaps - 1].lap_time_ms : Infinity
+        lastPassageTime: actualLapsCount > 0 ? teamLaps[actualLapsCount - 1].lap_time_ms : Infinity
       }
     }).filter(t => t.totalLaps > 0)
       .sort((a, b) => {
@@ -895,7 +903,12 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
                         </div>
                       </div>
                       {canModify && (
-                        <div className="race-team-actions">
+                        <div className="race-team-actions" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          <div className="penalty-control" style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'rgba(255,0,0,0.1)', padding: '4px 8px', borderRadius: '4px' }}>
+                            <button onClick={() => handleUpdatePenalty(t.id, (t.penalty_laps || 0) - 1)} disabled={(t.penalty_laps || 0) <= 0} title="Retirer une pénalité" style={{ padding: '2px 6px', lineHeight: '1' }}>-</button>
+                            <span style={{ fontSize: '0.9em', fontWeight: 'bold' }}>{t.penalty_laps || 0} Pénalités</span>
+                            <button onClick={() => handleUpdatePenalty(t.id, (t.penalty_laps || 0) + 1)} title="Ajouter une pénalité" style={{ padding: '2px 6px', lineHeight: '1' }}>+</button>
+                          </div>
                           <button onClick={() => handleEditTeam(t)}>✏️</button>
                           <button onClick={() => handleDeleteTeam(t.id)}>🗑️</button>
                         </div>

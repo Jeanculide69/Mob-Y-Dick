@@ -151,10 +151,11 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
         const splits = sessLaps.map((l, i) =>
           i === 0 ? l.lap_time_ms : l.lap_time_ms - sessLaps[i - 1].lap_time_ms
         )
+        const actualLapsCount = sessLaps.length
         return {
           session: team.race_sessions,
           team,
-          totalLaps: sessLaps.length,
+          totalLaps: Math.max(0, actualLapsCount - (team.penalty_laps || 0)),
           bestLap: splits.length ? Math.min(...splits) : null,
         }
       })
@@ -179,7 +180,7 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
     setTeamHistory(history)
     setStats({
       sessions: history.length,
-      totalLaps: laps.length,
+      totalLaps: history.reduce((sum, h) => sum + h.totalLaps, 0),
       bestLap: allSplits.length ? Math.min(...allSplits) : null,
       wins,
       podiums,

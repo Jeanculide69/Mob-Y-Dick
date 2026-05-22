@@ -91,12 +91,13 @@ export default function Championnat() {
           const teamLaps = sessLaps
             .filter(l => l.team_id === team.id)
             .sort((a, b) => a.lap_time_ms - b.lap_time_ms)
-          const totalLaps = teamLaps.length
+          const actualLapsCount = teamLaps.length
+          const totalLaps = Math.max(0, actualLapsCount - (team.penalty_laps || 0))
           const splits = teamLaps.map((lap, idx) =>
             idx === 0 ? lap.lap_time_ms : lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms
           )
           const bestLap = splits.length ? Math.min(...splits) : null
-          const lastPassageTime = totalLaps > 0 ? teamLaps[totalLaps - 1].lap_time_ms : Infinity
+          const lastPassageTime = actualLapsCount > 0 ? teamLaps[actualLapsCount - 1].lap_time_ms : Infinity
           return { team, totalLaps, bestLap, lastPassageTime }
         })
         .filter(r => r.totalLaps > 0)

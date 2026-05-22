@@ -648,6 +648,17 @@ function App() {
     else localStorage.removeItem('myd_activeRaceTeams')
   }, [activeRaceTeams])
 
+  // Ecoute des modifications en direct des équipes (ex: pénalités)
+  useEffect(() => {
+    if (!supabase || !activeRaceSession) return
+    const ch = supabase.channel(`app-race-teams-${activeRaceSession.id}`)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'race_teams', filter: `session_id=eq.${activeRaceSession.id}` }, ({ new: row }) => {
+        if (row?.id) setActiveRaceTeams(prev => prev.map(t => t.id === row.id ? row : t))
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [activeRaceSession])
+
   useEffect(() => {
     if (viewingSessionId) localStorage.setItem('myd_viewingSessionId', viewingSessionId)
     else localStorage.removeItem('myd_viewingSessionId')

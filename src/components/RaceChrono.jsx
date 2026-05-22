@@ -381,6 +381,28 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
     if (error) alert('Erreur de réinitialisation du chrono: ' + error.message)
   }
 
+  const handleAddPenalty = async () => {
+    const num = parseInt(motoInput)
+    if (!num) return
+    const team = teams.find(t => t.moto_number === num)
+    if (!team) {
+      alert(`Moto #${num} non trouvée !`)
+      return
+    }
+    if (!confirm(`⚠️ Confirmer la PÉNALITÉ (-1 Tour) pour la moto #${num} ?`)) return
+
+    const { error } = await supabase.from('race_teams')
+      .update({ penalty_laps: (team.penalty_laps || 0) + 1 })
+      .eq('id', team.id)
+    if (error) {
+      alert('Erreur lors de la pénalité: ' + error.message)
+    } else {
+      setMotoInput('')
+      setLastLapFlash({ moto: num, time: 0, pilot: `PÉNALITÉ APPLIQUÉE (-1 Tour)` })
+      setTimeout(() => setLastLapFlash(null), 3000)
+    }
+  }
+
   const handleRecordLap = useCallback((overrideMoto) => {
     // Anti-double-fire (Enter key-repeat / double-tap mobile)
     if (Date.now() < recordingLockRef.current) return
@@ -556,12 +578,13 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
       const catTeams = teams.filter(t => t.category === cat)
       const teamResults = catTeams.map(team => {
         const teamLaps = laps.filter(l => l.team_id === team.id).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
-        const totalLaps = teamLaps.length
+        const actualLapsCount = teamLaps.length
+        const totalLaps = Math.max(0, actualLapsCount - (team.penalty_laps || 0))
         let bestLap = null
-        if (totalLaps > 0) {
+        if (actualLapsCount > 0) {
           // reduce manuel (safe pour 10k+ items, vs Math.min(...arr) qui peut stack-overflow)
           let bl = teamLaps[0].lap_time_ms
-          for (let i = 1; i < teamLaps.length; i++) {
+          for (let i = 1; i < actualLapsCount; i++) {
             const dur = teamLaps[i].lap_time_ms - teamLaps[i - 1].lap_time_ms
             if (dur < bl) bl = dur
           }
@@ -569,7 +592,7 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
         }
         return {
           ...team, bestLap, totalLaps, laps: teamLaps,
-          lastPassageTime: totalLaps > 0 ? teamLaps[totalLaps - 1].lap_time_ms : Infinity
+          lastPassageTime: actualLapsCount > 0 ? teamLaps[actualLapsCount - 1].lap_time_ms : Infinity
         }
       }).filter(t => t.totalLaps > 0)
         .sort((a, b) => b.totalLaps !== a.totalLaps ? b.totalLaps - a.totalLaps : a.lastPassageTime - b.lastPassageTime)
@@ -719,6 +742,15 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
                 disabled={!isRunning || !motoInput}
               >
                 ⏱️ ENREGISTRER
+              </button>
+              <button
+                className="btn btn-error chrono-penalty-btn"
+                onClick={() => handleAddPenalty()}
+                disabled={!motoInput}
+                style={{ marginLeft: '10px' }}
+                title="Ajouter une pénalité (-1 Tour)"
+              >
+                ⚠️ PÉNALITÉ
               </button>
             </div>
             {motoInput && previewTeam && (
