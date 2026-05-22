@@ -1448,7 +1448,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                   </button>
                 </div>
                 <div className="live-reactions-premium-grid">
-                  {shopItems.filter(item => item.type !== 'pack').map(item => {
+                  {shopItems.filter(item => item.type !== 'pack' && (item.category || 'emote') === 'emote').map(item => {
                     const isOwned = userPurchases.includes(item.slug) || userPurchases.includes('pack_premium_all');
                     return (
                       <button
@@ -1650,7 +1650,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
               <div className="live-fab-divider" />
               <div className="live-fab-menu-title">💎 Premium</div>
               <div className="live-fab-emoji-row">
-                {shopItems.filter(item => item.type !== 'pack').map(item => {
+                {shopItems.filter(item => item.type !== 'pack' && (item.category || 'emote') === 'emote').map(item => {
                   const isOwned = userPurchases.includes(item.slug) || userPurchases.includes('pack_premium_all');
                   return (
                     <button
