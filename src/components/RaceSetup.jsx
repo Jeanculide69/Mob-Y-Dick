@@ -1135,8 +1135,11 @@ function LiveVideoBroadcaster({ session, raceSession }) {
       }
 
       // 2. Request camera stream
+      // Résolution capture réduite (320x180 au lieu de 640x360) pour limiter
+      // l'egress Supabase Realtime sur le tier free (5 GB/mois cumulés).
+      // Avec ≤50 viewers, on tient ~1h de live mensuel à 2fps × ~12KB/frame.
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 640 }, height: { ideal: 360 } },
+        video: { facingMode: 'environment', width: { ideal: 320 }, height: { ideal: 180 } },
         audio: false
       })
 
@@ -1159,24 +1162,28 @@ function LiveVideoBroadcaster({ session, raceSession }) {
       channelRef.current = channel
       channel.subscribe()
 
-      // 5. Canvas capture interval (every 250ms -> ~4fps, extremely fast and light!)
+      // 5. Canvas capture interval — 2fps × 320x180 × JPEG 0.3 → frames de
+      // ~10-15KB au lieu de ~50KB. Combiné avec la réduction de résolution
+      // capture, on divise l'egress par ~8 (≤1h de live à 50 viewers/mois
+      // gratuit). Si on bascule un jour sur Supabase Pro ou YouTube Live
+      // embed, remonter à 4fps × 480x270 × 0.5 redonne la qualité d'origine.
       const canvas = document.createElement('canvas')
-      canvas.width = 480
-      canvas.height = 270
+      canvas.width = 320
+      canvas.height = 180
       const ctx = canvas.getContext('2d')
 
       intervalRef.current = setInterval(() => {
         if (videoRef.current && videoRef.current.readyState === 4) {
           ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
-          const base64Frame = canvas.toDataURL('image/jpeg', 0.5) // high compression for low payload!
-          
+          const base64Frame = canvas.toDataURL('image/jpeg', 0.3) // compression agressive (frames ~12KB)
+
           channel.send({
             type: 'broadcast',
             event: 'video-frame',
             payload: { image: base64Frame }
           })
         }
-      }, 250)
+      }, 500) // 2 fps — confort visuel ambiance, économie egress × 2
 
       setIsStreaming(true)
     } catch (err) {
