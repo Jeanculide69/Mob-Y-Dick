@@ -242,7 +242,7 @@ const slugToSound = {
 // passe au générateur un Proxy du ctx qui retourne un GainNode à la
 // place de `destination`. Le GainNode est branché sur le vrai
 // destination avec un volume réduit.
-const MASTER_GAIN = 0.15  // 15% du volume nominal des générateurs
+const MASTER_GAIN = 0.07  // Baissé pour ne pas couvrir les annonces (précédemment 0.15)
 
 const playWithMasterGain = (ctx, runGenerator) => {
   const master = ctx.createGain()
