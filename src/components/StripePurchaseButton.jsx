@@ -197,10 +197,29 @@ function PurchaseModalInner({ item, sessionId, authUser, authUserDisplayName, is
           itemSlug: item.slug,
         },
       })
-      if (error || !data?.ok) {
-        throw new Error(error?.message || data?.error || 'Simulation échouée')
+
+      // supabase-js v2 : sur non-2xx, `error` est un FunctionsHttpError dont
+      // le `.context` est la Response brute. On extrait le JSON pour avoir
+      // le message d'erreur précis ({error: 'xxx'}) au lieu du générique
+      // "Edge Function returned a non-2xx status code".
+      if (error) {
+        let detail = error.message
+        try {
+          const body = await error.context.json()
+          detail = body?.error || body?.detail || detail
+        } catch { /* body non-JSON, on garde le message générique */ }
+        console.error('[admin-simulate-purchase] error:', detail, error)
+        throw new Error(detail)
       }
-      toast.success(`🧪 Simulation envoyée — overlay live déclenché pour ${item.name}.`)
+      if (!data?.ok) throw new Error(data?.error || 'Simulation échouée')
+
+      // Si pas de session live active, l'Edge Function renvoie ok=true mais
+      // broadcasted=false avec un warning explicite.
+      if (data.broadcasted === false) {
+        toast.info(data.warning || 'Simulation enregistrée (pas de session live à diffuser).')
+      } else {
+        toast.success(`🧪 Simulation envoyée — overlay live déclenché pour ${item.name}.`)
+      }
       onSuccess?.()
     } catch (err) {
       setCardError(err.message || String(err))

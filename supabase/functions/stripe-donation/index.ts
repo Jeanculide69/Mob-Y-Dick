@@ -673,8 +673,17 @@ serve(async (req: Request) => {
     if (!Number.isFinite(amt) || amt < 1 || amt > 10000000) {
       return json(400, { error: 'invalid_amount' })
     }
+
+    // sessionId optionnel : si pas de session live active, on ne broadcast
+    // pas (rien n'écoute) mais on retourne ok=true pour confirmer que la
+    // simulation aurait fonctionné. L'admin reçoit un warning côté front.
     if (!sessionId || typeof sessionId !== 'string') {
-      return json(400, { error: 'missing_session_id' })
+      return json(200, {
+        ok: true,
+        simulated: true,
+        broadcasted: false,
+        warning: 'Pas de session live active — la simulation n\'a pas été diffusée.',
+      })
     }
 
     try {
@@ -708,7 +717,7 @@ serve(async (req: Request) => {
     } catch (err) {
       return json(502, { error: 'broadcast_failed', detail: String(err.message || err) })
     }
-    return json(200, { ok: true, simulated: true })
+    return json(200, { ok: true, simulated: true, broadcasted: true })
   }
 
   // Legacy actions removed (Stripe compliance v26) :
