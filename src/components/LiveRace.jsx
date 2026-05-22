@@ -676,21 +676,43 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
     const client = AgoraRTC.createClient({ mode: "live", codec: "vp8", role: "audience" })
     agoraClientRef.current = client
 
-    client.on("user-published", async (user, mediaType) => {
-      await client.subscribe(user, mediaType)
-      setBroadcasterUid(user.uid)
-      
-      if (mediaType === "video" && isMounted) {
-        setStreamReceiving(true)
-        if (streamDivRef.current) {
-          user.videoTrack.play(streamDivRef.current, { fit: "contain" })
-        }
+    // Helper unique pour subscribe + play. Appelé soit depuis l'event
+    // `user-published` (broadcaster qui démarre APRÈS notre join), soit
+    // depuis la boucle post-join pour rattraper le broadcaster qui était
+    // DÉJÀ là (sinon l'event ne se redéclenche pas et on reste figé).
+    const handleUserMedia = async (user, mediaType) => {
+      try {
+        await client.subscribe(user, mediaType)
+      } catch (subErr) {
+        console.error('[stream-viewer] subscribe failed:', subErr)
+        return
       }
-      if (mediaType === "audio" && isMounted) {
+      if (!isMounted) return
+      setBroadcasterUid(user.uid)
+
+      if (mediaType === "video") {
+        setStreamReceiving(true)
+        // Petit délai pour laisser React render le div (display:block après
+        // setStreamReceiving). Sans ça, play() peut tomber sur display:none
+        // et la vidéo ne s'affiche pas même si elle joue.
+        setTimeout(() => {
+          if (isMounted && streamDivRef.current && user.videoTrack) {
+            user.videoTrack.play(streamDivRef.current, { fit: "contain" })
+          }
+        }, 50)
+      }
+      if (mediaType === "audio") {
         remoteAudioTrackRef.current = user.audioTrack
         user.audioTrack.play()
         user.audioTrack.setVolume(isAudioMuted ? 0 : 100)
       }
+    }
+
+    client.on("user-published", handleUserMedia)
+
+    client.on("user-unpublished", (user, mediaType) => {
+      if (!isMounted) return
+      if (mediaType === "video") setStreamReceiving(false)
     })
 
     const joinAgora = async () => {
@@ -718,6 +740,14 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
         }
 
         await client.join(appId, channelName, agoraToken, viewerUid)
+
+        // Rattrapage : si le broadcaster publiait DÉJÀ avant notre join,
+        // l'event "user-published" ne se redéclenche pas — il faut subscribe
+        // manuellement à ce qui est déjà dans la room.
+        for (const remoteUser of client.remoteUsers) {
+          if (remoteUser.hasVideo) await handleUserMedia(remoteUser, 'video')
+          if (remoteUser.hasAudio) await handleUserMedia(remoteUser, 'audio')
+        }
       } catch (err) {
         console.error("Agora join error", err)
       }
