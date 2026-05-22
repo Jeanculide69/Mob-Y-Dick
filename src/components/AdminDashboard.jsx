@@ -109,11 +109,13 @@ export default function AdminDashboard({
   const pendingSponsors = dbSponsors.filter(s => s.status === 'En attente')
   const pendingAffiliations = dbAffiliations.filter(a => a.status === 'pending')
   const pendingContact = dbContactMessages.filter(m => m.status === 'nouveau')
+  const pendingPseudos = dbUsers.filter(u => u.display_name_status === 'pending')
 
   const latestPendingOrder = pendingOrders[0]
   const latestPendingSponsor = pendingSponsors[0]
   const latestPendingAffiliation = pendingAffiliations[0]
   const latestPendingContact = pendingContact[0]
+  const latestPendingPseudo = pendingPseudos[0]
 
   // ─── Stats froides ──────────────────────────────────────────────
   const upcomingEvents = dbEvents.filter(e => {
@@ -159,10 +161,22 @@ export default function AdminDashboard({
         <div className="admin-dash-section-header">
           <h2>⚡ À traiter</h2>
           <span className="admin-dash-section-meta">
-            {pendingOrders.length + pendingSponsors.length + pendingAffiliations.length + pendingContact.length} item(s) en attente
+            {pendingOrders.length + pendingSponsors.length + pendingAffiliations.length + pendingContact.length + pendingPseudos.length} item(s) en attente
           </span>
         </div>
         <div className="admin-dash-grid admin-dash-grid-priority">
+          <PriorityCard
+            icon="✏️"
+            title="Pseudos"
+            count={pendingPseudos.length}
+            accent="red"
+            ctaLabel="Voir les pseudos"
+            latest={latestPendingPseudo && {
+              text: `${latestPendingPseudo.email || '?'} ➔ ${latestPendingPseudo.pending_display_name || '?'}`,
+              date: null,
+            }}
+            onClick={() => onOpenForm('users_admin')}
+          />
           <PriorityCard
             icon="📦"
             title="Commandes"

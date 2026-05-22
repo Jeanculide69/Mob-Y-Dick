@@ -3164,7 +3164,8 @@ function App() {
                 </div>
               </div>
             ) : (
-              <form onSubmit={handleFormSubmit} className="admin-form">
+              <div style={{ width: '100%' }}>
+                <form onSubmit={handleFormSubmit} className="admin-form">
                 {activeForm === 'event' && (
                   <>
                     <input type="text" placeholder="Titre de l'événement" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} required />
@@ -3393,6 +3394,74 @@ function App() {
                   {uploading ? 'Enregistrement en cours...' : 'Enregistrer'}
                 </button>
               </form>
+
+              {/* ─── ADMIN LISTS ─── */}
+              {activeForm === 'event' && dbEvents && (
+                <div className="admin-list" style={{ marginTop: '30px' }}>
+                  <h3>Événements ({dbEvents.length})</h3>
+                  {dbEvents.map(ev => (
+                    <div key={ev.id} className="admin-list-item">
+                      <div><strong>{ev.title}</strong><span className="admin-date" style={{ marginLeft: '10px', fontSize: '0.85rem' }}>{new Date(ev.date).toLocaleDateString('fr-FR')}</span><span className="admin-location" style={{ marginLeft: '10px', fontSize: '0.85rem' }}>📍 {ev.location}</span></div>
+                      <div className="admin-item-actions">
+                        <button type="button" onClick={() => handleOpenForm('event', ev)}>✏️</button>
+                        <button type="button" onClick={() => handleDeleteItem('events', ev.id)}>🗑️</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {activeForm === 'gallery' && dbGallery && (
+                <div className="admin-list" style={{ marginTop: '30px' }}>
+                  <h3>Galerie ({dbGallery.length})</h3>
+                  {dbGallery.map(item => (
+                    <div key={item.id} className="admin-list-item">
+                      <div className="admin-gallery-item">
+                        {item.type === 'photo' && item.source !== 'embed' ? <img src={item.url} alt="" className="admin-thumb" style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px', marginRight: '10px' }} /> : <span className="admin-video-icon" style={{ marginRight: '10px' }}>{item.type === 'photo' ? '📸' : '🎥'}</span>}
+                        <div><strong>{item.title}</strong><span className="admin-type" style={{ marginLeft: '10px', fontSize: '0.8rem', color: 'var(--text-muted)' }}>{item.source === 'embed' ? '🔗 Embed' : '📁 Upload'}</span></div>
+                      </div>
+                      <div className="admin-item-actions">
+                        <button type="button" onClick={() => handleOpenForm('gallery', item)}>✏️</button>
+                        <button type="button" onClick={() => handleDeleteItem('gallery', item.id, item)}>🗑️</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {activeForm === 'product' && dbProducts && (
+                <div className="admin-list" style={{ marginTop: '30px' }}>
+                  <h3>Produits ({dbProducts.length})</h3>
+                  {dbProducts.map(p => (
+                    <div key={p.id} className="admin-list-item">
+                      <div><strong>{p.name}</strong><span className="admin-date" style={{ marginLeft: '10px', fontSize: '0.85rem' }}>{p.price}</span></div>
+                      <div className="admin-item-actions">
+                        <button type="button" onClick={() => handleOpenForm('product', p)}>✏️</button>
+                        <button type="button" onClick={() => handleDeleteItem('products', p.id, p)}>🗑️</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {activeForm === 'team' && dbTeam && (
+                <div className="admin-list" style={{ marginTop: '30px' }}>
+                  <h3>Membres de l'équipe ({dbTeam.length})</h3>
+                  {dbTeam.map(m => (
+                    <div key={m.id} className="admin-list-item">
+                      <div className="admin-gallery-item">
+                        {m.image_url ? <img src={m.image_url} alt="" className="admin-thumb" style={{ width: '40px', height: '40px', objectFit: 'cover', borderRadius: '4px', marginRight: '10px' }} /> : <span className="admin-video-icon" style={{ marginRight: '10px' }}>👤</span>}
+                        <strong>{m.name}</strong>
+                      </div>
+                      <div className="admin-item-actions">
+                        <button type="button" onClick={() => handleOpenForm('team', m)}>✏️</button>
+                        <button type="button" onClick={() => handleDeleteItem('team', m.id)}>🗑️</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              </div>
             )}
           </div>
         </div>
