@@ -1098,16 +1098,21 @@ function LiveVideoBroadcaster({ session, raceSession }) {
   const [isStreaming, setIsStreaming] = useState(false)
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState(null)
+  const [isMuted, setIsMuted] = useState(false)
   
   const videoRef = useRef(null)
   const clientRef = useRef(null)
   const trackRef = useRef(null)
+  const audioTrackRef = useRef(null)
 
   // Auto clean-up on unmount
   useEffect(() => {
     return () => {
       if (trackRef.current) {
         trackRef.current.close()
+      }
+      if (audioTrackRef.current) {
+        audioTrackRef.current.close()
       }
       if (clientRef.current) {
         clientRef.current.leave().catch(console.error)
@@ -1149,18 +1154,24 @@ function LiveVideoBroadcaster({ session, raceSession }) {
       const channelName = `live-stream-${raceSession.id}`;
       await client.join(appId, channelName, null, session.user.id)
 
-      // 3. Create local video track (720p at 30fps for high quality race streaming)
+      // 3. Create local video & audio tracks
       const videoTrack = await AgoraRTC.createCameraVideoTrack({
-        encoderConfig: "720p_2",
+        encoderConfig: "1080p_2",
         facingMode: "environment", // Try to use rear camera by default
         optimizationMode: "motion" // Prioritize framerate over resolution when network drops
       })
+      const audioTrack = await AgoraRTC.createMicrophoneAudioTrack()
+      
       trackRef.current = videoTrack
+      audioTrackRef.current = audioTrack
+      
+      // Enable Dual Stream for adaptive bitrate
+      await client.enableDualStream()
 
       // 4. (Video preview is handled by the useEffect above once isStreaming=true renders the div)
 
       // 5. Publish to Agora
-      await client.publish(videoTrack)
+      await client.publish([videoTrack, audioTrack])
 
       // 6. Update DB
       await supabase.from('race_sessions').update({
@@ -1176,6 +1187,10 @@ function LiveVideoBroadcaster({ session, raceSession }) {
       if (trackRef.current) {
         trackRef.current.close()
         trackRef.current = null
+      }
+      if (audioTrackRef.current) {
+        audioTrackRef.current.close()
+        audioTrackRef.current = null
       }
       if (clientRef.current) {
         await clientRef.current.leave()
@@ -1207,10 +1222,22 @@ function LiveVideoBroadcaster({ session, raceSession }) {
     }
   }
 
+  const toggleMute = () => {
+    if (audioTrackRef.current) {
+      const currentMuted = !isMuted;
+      audioTrackRef.current.setMuted(currentMuted);
+      setIsMuted(currentMuted);
+    }
+  }
+
   const stopStreaming = async () => {
     if (trackRef.current) {
       trackRef.current.close()
       trackRef.current = null
+    }
+    if (audioTrackRef.current) {
+      audioTrackRef.current.close()
+      audioTrackRef.current = null
     }
     if (clientRef.current) {
       try {
@@ -1258,18 +1285,25 @@ function LiveVideoBroadcaster({ session, raceSession }) {
               DIFFUSION EN COURS
             </span>
           </div>
-          <div style={{ display: 'flex', gap: '10px' }}>
+          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+            <button 
+              className="btn btn-outline" 
+              onClick={toggleMute}
+              style={{ flex: '1 1 45%', padding: '8px', borderColor: isMuted ? '#ff4444' : '#fff', color: isMuted ? '#ff4444' : '#fff' }}
+            >
+              {isMuted ? '🔇 Micro Coupé' : '🎙️ Couper Micro'}
+            </button>
             <button 
               className="btn btn-outline" 
               onClick={switchCamera}
-              style={{ flex: 1, borderColor: '#fff', color: '#fff' }}
+              style={{ flex: '1 1 45%', padding: '8px', borderColor: '#fff', color: '#fff' }}
             >
-              🔄 Retourner Caméra
+              🔄 Caméra
             </button>
             <button 
               className="btn btn-outline" 
               onClick={stopStreaming}
-              style={{ flex: 1, borderColor: '#ff4444', color: '#ff4444' }}
+              style={{ flex: '1 1 100%', padding: '8px', borderColor: '#ff4444', color: '#ff4444' }}
             >
               🛑 Arrêter le Live
             </button>

@@ -173,10 +173,55 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   // Agora gère l'injection de la vidéo directement dans la div
   const streamDivRef = useRef(null)
   const agoraClientRef = useRef(null)
+  const remoteAudioTrackRef = useRef(null)
+  const videoWrapperRef = useRef(null)
+  
+  const [broadcasterUid, setBroadcasterUid] = useState(null)
+  const [isAudioMuted, setIsAudioMuted] = useState(true)
+  const [videoQuality, setVideoQuality] = useState('auto') // 'auto', 'high', 'low'
+  
   // Booléen state pour afficher le panneau vidéo dès qu'une frame arrive
   // (avant ça, on affiche un placeholder "En attente du signal"). On dépend
   // aussi de session.live_stream_active pour montrer/cacher l'encadré.
   const [streamReceiving, setStreamReceiving] = useState(false)
+
+  // Gestion du volume quand le state change
+  useEffect(() => {
+    if (remoteAudioTrackRef.current) {
+      remoteAudioTrackRef.current.setVolume(isAudioMuted ? 0 : 100)
+    }
+  }, [isAudioMuted])
+
+  // Gestion de la qualité et du dual stream
+  useEffect(() => {
+    if (!agoraClientRef.current || !broadcasterUid) return
+    const client = agoraClientRef.current
+    try {
+      if (videoQuality === 'auto') {
+        client.setRemoteVideoStreamType(broadcasterUid, 0) // 0 = High
+        client.setStreamFallbackOption(broadcasterUid, 2) // 2 = Audio/Low
+      } else if (videoQuality === 'high') {
+        client.setStreamFallbackOption(broadcasterUid, 0) // 0 = Disable fallback
+        client.setRemoteVideoStreamType(broadcasterUid, 0)
+      } else if (videoQuality === 'low') {
+        client.setStreamFallbackOption(broadcasterUid, 0)
+        client.setRemoteVideoStreamType(broadcasterUid, 1) // 1 = Low
+      }
+    } catch (e) {
+      console.warn("Could not set dual stream options:", e)
+    }
+  }, [videoQuality, broadcasterUid])
+
+  const toggleFullscreen = () => {
+    if (!videoWrapperRef.current) return;
+    if (!document.fullscreenElement) {
+      videoWrapperRef.current.requestFullscreen().catch(err => {
+        console.error("Error attempting to enable fullscreen:", err);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  }
 
   // Flag "j'ai vu cette session en status='live' pendant que je la
   // regardais" → utilisé pour décider si l'overlay drapeau post-race
@@ -630,6 +675,8 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
 
     client.on("user-published", async (user, mediaType) => {
       await client.subscribe(user, mediaType)
+      setBroadcasterUid(user.uid)
+      
       if (mediaType === "video" && isMounted) {
         setStreamReceiving(true)
         if (streamDivRef.current) {
@@ -637,7 +684,9 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
         }
       }
       if (mediaType === "audio" && isMounted) {
+        remoteAudioTrackRef.current = user.audioTrack
         user.audioTrack.play()
+        user.audioTrack.setVolume(isAudioMuted ? 0 : 100)
       }
     })
 
@@ -1245,17 +1294,48 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
             n'a pas reçu la première frame, on affiche un placeholder. */}
         {session?.live_stream_active && (
           <div className="live-stream-card glass" style={{ marginBottom: '20px', padding: '14px', borderRadius: '14px', border: '1px solid rgba(255,85,0,0.25)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px', flexWrap: 'wrap', gap: '10px' }}>
               <h3 style={{ margin: 0, fontSize: '1rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <span style={{ width: '8px', height: '8px', background: '#ff3b30', borderRadius: '50%', animation: 'pulse 1.5s infinite' }} />
                 🎥 Diffusion en direct
               </h3>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <select 
+                  value={videoQuality} 
+                  onChange={(e) => setVideoQuality(e.target.value)}
+                  style={{ background: 'rgba(0,0,0,0.5)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '6px', padding: '4px 8px', fontSize: '0.8rem', cursor: 'pointer' }}
+                >
+                  <option value="auto">Qualité : Auto</option>
+                  <option value="high">Haute (1080p)</option>
+                  <option value="low">Éco (Data)</option>
+                </select>
+              </div>
             </div>
-            <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', borderRadius: '10px', overflow: 'hidden', background: '#000', border: '1px solid rgba(255,255,255,0.06)' }}>
+            <div ref={videoWrapperRef} style={{ position: 'relative', width: '100%', aspectRatio: '16/9', borderRadius: '10px', overflow: 'hidden', background: '#000', border: '1px solid rgba(255,255,255,0.06)' }}>
               <div
                 ref={streamDivRef}
                 style={{ width: '100%', height: '100%', display: streamReceiving ? 'block' : 'none' }}
               />
+              
+              {streamReceiving && (
+                <div style={{ position: 'absolute', bottom: '10px', right: '10px', display: 'flex', gap: '8px', zIndex: 20 }}>
+                  <button 
+                    onClick={() => setIsAudioMuted(!isAudioMuted)}
+                    title={isAudioMuted ? "Activer le son" : "Couper le son"}
+                    style={{ background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', width: '40px', height: '40px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', transition: '0.2s' }}
+                  >
+                    {isAudioMuted ? '🔇' : '🔊'}
+                  </button>
+                  <button 
+                    onClick={toggleFullscreen}
+                    title="Plein Écran"
+                    style={{ background: 'rgba(0,0,0,0.6)', border: '1px solid rgba(255,255,255,0.2)', color: '#fff', width: '40px', height: '40px', borderRadius: '50%', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.2rem', transition: '0.2s' }}
+                  >
+                    ⛶
+                  </button>
+                </div>
+              )}
+
               {!streamReceiving && (
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: 'var(--text-muted)' }}>
                   <div style={{ fontSize: '2rem' }}>📡</div>
@@ -1264,6 +1344,11 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                 </div>
               )}
             </div>
+            {isAudioMuted && streamReceiving && (
+               <div style={{ textAlign: 'center', marginTop: '12px', fontSize: '0.85rem', color: '#ffb347', fontWeight: 'bold' }}>
+                 🔇 Le son est désactivé. Cliquez sur le bouton dans la vidéo pour l'activer.
+               </div>
+            )}
           </div>
         )}
 
