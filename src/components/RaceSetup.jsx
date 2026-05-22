@@ -1144,7 +1144,8 @@ function LiveVideoBroadcaster({ session, raceSession }) {
 
       // 3. Create local video track (480p is a good balance for mobile streaming)
       const videoTrack = await AgoraRTC.createCameraVideoTrack({
-        encoderConfig: "480p_1" 
+        encoderConfig: "480p_1",
+        facingMode: "environment" // Try to use rear camera by default
       })
       trackRef.current = videoTrack
 
@@ -1177,6 +1178,27 @@ function LiveVideoBroadcaster({ session, raceSession }) {
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  const switchCamera = async () => {
+    if (!trackRef.current) return;
+    try {
+      const cams = await AgoraRTC.getCameras();
+      if (cams.length <= 1) return;
+      const currentId = trackRef.current.getDeviceId ? trackRef.current.getDeviceId() : null;
+      let nextCam;
+      if (currentId) {
+        const idx = cams.findIndex(c => c.deviceId === currentId);
+        nextCam = cams[(idx + 1) % cams.length];
+      } else {
+        nextCam = cams[1]; // fallback to the second camera
+      }
+      if (nextCam) {
+        await trackRef.current.setDevice(nextCam.deviceId);
+      }
+    } catch (e) {
+      console.error("Camera switch failed", e);
     }
   }
 
@@ -1231,13 +1253,22 @@ function LiveVideoBroadcaster({ session, raceSession }) {
               DIFFUSION EN COURS
             </span>
           </div>
-          <button 
-            className="btn btn-outline" 
-            onClick={stopStreaming}
-            style={{ borderColor: '#ff4444', color: '#ff4444', width: 'fit-content' }}
-          >
-            🛑 Arrêter le Live Vidéo
-          </button>
+          <div style={{ display: 'flex', gap: '10px' }}>
+            <button 
+              className="btn btn-outline" 
+              onClick={switchCamera}
+              style={{ flex: 1, borderColor: '#fff', color: '#fff' }}
+            >
+              🔄 Retourner Caméra
+            </button>
+            <button 
+              className="btn btn-outline" 
+              onClick={stopStreaming}
+              style={{ flex: 1, borderColor: '#ff4444', color: '#ff4444' }}
+            >
+              🛑 Arrêter le Live
+            </button>
+          </div>
         </div>
       ) : (
         <div>
