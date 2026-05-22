@@ -193,7 +193,7 @@ VALUES
   ('sponsor_candle',   'Payer la bougie',           'Finance la prochaine bougie du moteur. Message custom lu à l''antenne.',                            'sound', 200,  '🕯️', 'sponsoring', true, true, 201),
   ('sponsor_fuel_mix', 'Offrir un litre de mélange', 'Paye un litre du mélange pour la course. Message custom lu à l''antenne.',                          'sound', 300,  '⛽', 'sponsoring', true, true, 202),
   ('sponsor_oil',      'Payer l''huile moteur',     'Finance le bidon d''huile moteur du run. Message custom lu à l''antenne.',                          'sound', 1000, '🛢️', 'sponsoring', true, true, 203),
-  ('sponsor_tire',     'Financer un pneu',          'Sponsor d''un pneu complet pour la moto. Message custom lu à l''antenne + remerciement vidéo.',     'sound', 3000, '🏍️', 'sponsoring', true, true, 204)
+  ('sponsor_tire',     'Financer un pneu',          'Sponsor d''un pneu complet pour la moto. Message custom lu à l''antenne.',                          'sound', 3000, '🏍️', 'sponsoring', true, true, 204)
 ON CONFLICT (slug) DO UPDATE SET
   -- Permet de re-run la migration pour ajuster prix/description sans
   -- avoir à drop+recreate (idempotent friendly).

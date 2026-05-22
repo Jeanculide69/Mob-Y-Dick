@@ -131,7 +131,10 @@
 .stripe-purchase-overlay {
   position: fixed;
   inset: 0;
-  z-index: 10002; /* au-dessus du shop modal (qui est sur le live overlay) */
+  /* ⚠️ Doit rester > .premium-modal-overlay (z-index 10100 dans LiveRace.css)
+     sinon la modal de paiement est rendue derrière la modal boutique au clic
+     sur un produit sponsoring. */
+  z-index: 10200;
   background: rgba(0, 0, 0, 0.78);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
