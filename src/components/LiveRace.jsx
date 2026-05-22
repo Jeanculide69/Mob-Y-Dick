@@ -205,11 +205,19 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       if (head.type === 'donation') {
         playDonationSound()
         // Confetti néon : petites étincelles (≤10€) ou explosion massive
-        // multi-bursts (>10€ = MEGA DON), cf. playDonationSparks.
+        // multi-bursts (>10€ = MEGA SPONSOR), cf. playDonationSparks.
         playDonationSparks(head.amount || 0)
-        // TTS façon Twitch : "Pseudo vient de donner X euros, et dit : message"
+        // TTS façon Twitch : "Pseudo a offert une bière, et dit : message"
         // Joue ~800ms après le son de notification pour ne pas se chevaucher.
-        setTimeout(() => speakDonation(head), 800)
+        // On enrichit le payload avec le nom du produit si dispo, pour que
+        // le TTS lise "a offert une bière" au lieu du générique.
+        const itemForTTS = head.item_slug
+          ? shopItemsRef.current.find(s => s.slug === head.item_slug)
+          : null
+        setTimeout(() => speakDonation({
+          ...head,
+          item_name: itemForTTS?.name || null,
+        }), 800)
       } else if (head.type === 'premium-reaction') {
         const item = head.item
         const override = MEDIA_OVERRIDES[item.slug]
@@ -321,7 +329,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
 
   const triggerDonationAlert = (row) => {
     if (!row?.id) return
-    // Dedup : le polling fallback peut rattraper un don déjà notifié via
+    // Dedup : le polling fallback peut rattraper un message déjà notifié via
     // le channel realtime. On garde la trace des IDs déjà alertés.
     if (seenDonationIdsRef.current.has(row.id)) return
     seenDonationIdsRef.current.add(row.id)
@@ -331,6 +339,9 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       display_name: row.display_name,
       amount: row.amount_cents / 100,
       message: row.message,
+      // item_slug pour retrouver le nom du produit (Offrir une bière, etc.)
+      // côté render et TTS. Null pour les anciens dons legacy.
+      item_slug: row.item_slug || null,
     }].slice(-30))
   }
 
@@ -997,6 +1008,12 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
               const queueRest = activeAlerts.filter(a => a.type === 'donation').length - 1
               const amount = head.amount || 0
               const isMega = amount >= 10
+              // Retrouve le produit acheté pour personnaliser le texte
+              // ("a offert une bière" au lieu du générique "vient d'offrir").
+              // Null pour les anciens messages legacy sans item_slug.
+              const purchasedItem = head.item_slug
+                ? shopItems.find(s => s.slug === head.item_slug)
+                : null
               return (
                 <div key={head.id} className={`neon-donation-alert show ${isMega ? 'is-mega' : ''}`}>
                   <img
@@ -1007,13 +1024,17 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                   />
                   <div className="neon-content">
                     <div className="neon-header">
-                      {isMega ? '💎 MEGA DON 💎' : '💎 DON 💎'}
+                      {isMega ? '💎 MEGA SPONSOR 💎' : '💎 SPONSORING 💎'}
                       {queueRest > 0 && (
                         <span className="donation-alert-queue-badge">+{queueRest}</span>
                       )}
                     </div>
                     <div className="neon-main-text">
-                      <strong>{head.display_name}</strong> vient de soutenir avec{' '}
+                      <strong>{head.display_name}</strong>{' '}
+                      {purchasedItem
+                        ? <>a choisi <strong>{purchasedItem.name}</strong> pour</>
+                        : <>vient d'offrir</>}
+                      {' '}
                       <span className="neon-amount">{amount}€</span> !
                     </div>
                     {head.message && (

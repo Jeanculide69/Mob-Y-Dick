@@ -89,11 +89,11 @@ const cleanForTTS = (text) => {
 }
 
 /**
- * Lit à voix haute un don.
- * @param {object} d - { display_name, amount, message }
+ * Lit à voix haute un message de sponsoring (ou un ancien don legacy).
+ * @param {object} d - { display_name, amount, message, item_name? }
  * @param {object} [opts]
  * @param {number} [opts.rate=1.05]    — vitesse (0.5 à 2)
- * @param {number} [opts.pitch=1]      — hauteur (0 à 2)
+ * @param {number} [opts.pitch=1.15]   — hauteur (0 à 2)
  * @param {number} [opts.volume=0.85]  — volume (0 à 1)
  * @param {boolean} [opts.force=false] — ignore le toggle utilisateur
  */
@@ -105,13 +105,22 @@ export const speakDonation = (d, opts = {}) => {
   const name = (d.display_name || 'Quelqu\'un').trim().slice(0, 40)
   const amount = Number(d.amount || 0)
   const message = cleanForTTS(d.message)
+  // Nom du produit acheté, déjà lowercased pour s'enchaîner naturellement
+  // dans la phrase ("a choisi offrir une bière" devient "a choisi d'offrir
+  // une bière" via l'élision). On laisse le nom tel quel sinon.
+  const itemName = d.item_name ? String(d.item_name).trim() : null
 
   // Construction de la phrase, ton "présentatrice live" :
-  //   "Rider44 vient d'offrir 5 euros, et dit : Allez les gars !"
-  // (verbe "offrir" cohérent avec les produits "Offrir une bière / le mélange /
-  //  l'huile / un pneu" — plus de "donner" qui rappelait la cagnotte).
+  //   Avec produit : "Rider44 a choisi : Offrir une bière. Et dit : Allez les gars !"
+  //   Sans produit : "Rider44 vient d'offrir 5 euros, et dit : ..."
+  // (verbe "offrir" cohérent avec les produits — plus de "donner" qui
+  //  rappelait la cagnotte.)
   let phrase
-  if (amount >= 1) {
+  if (itemName && amount >= 1) {
+    const euros = Number.isInteger(amount) ? `${amount}` : amount.toFixed(2).replace('.', ',')
+    phrase = `${name} a choisi : ${itemName}, pour ${euros} euros`
+    if (message) phrase += `. Et dit : ${message}`
+  } else if (amount >= 1) {
     const euros = Number.isInteger(amount) ? `${amount}` : amount.toFixed(2).replace('.', ',')
     phrase = `${name} vient d'offrir ${euros} euros`
     if (message) phrase += `, et dit : ${message}`
