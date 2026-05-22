@@ -681,6 +681,14 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
     }
     if (sessions.length > 0) {
       const s = sessions[0]
+      // ⚠️ ORDRE CRITIQUE : on pré-remplit seenDonationIdsRef AVANT setSession.
+      // Sinon le polling useEffect (qui dep sur session?.id) fire son premier
+      // tick avant que le ref soit rempli → tous les dons existants
+      // re-déclenchent l'alerte à chaque navigation vers le live.
+      const { data: existingDonations } = await supabase
+        .from('donations').select('id').eq('session_id', s.id)
+      seenDonationIdsRef.current = new Set((existingDonations || []).map(d => d.id))
+
       setSession(s)
       const { data: ev } = await supabase.from('events').select('*').eq('id', s.event_id).single()
       setEventInfo(ev)
@@ -690,12 +698,6 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       setLaps(lapsData || [])
       const { data: annData } = await supabase.from('race_announcements').select('*').eq('session_id', s.id).order('created_at', { ascending: false })
       setAnnouncementsHistory(annData || [])
-      // Pré-charge les IDs des dons déjà existants : on ne veut PAS déclencher
-      // d'alerte pour les dons effectués avant que le viewer arrive sur le live.
-      // Seuls les futurs INSERT (via realtime ou polling) déclencheront une alerte.
-      const { data: existingDonations } = await supabase
-        .from('donations').select('id').eq('session_id', s.id)
-      seenDonationIdsRef.current = new Set((existingDonations || []).map(d => d.id))
     }
     setLoading(false)
   }
