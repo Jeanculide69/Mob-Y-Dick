@@ -1306,7 +1306,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                   style={{ background: 'rgba(0,0,0,0.5)', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', borderRadius: '6px', padding: '4px 8px', fontSize: '0.8rem', cursor: 'pointer' }}
                 >
                   <option value="auto">Qualité : Auto</option>
-                  <option value="high">Haute (1080p)</option>
+                  <option value="high">Max (Jusqu'à 2K)</option>
                   <option value="low">Éco (Data)</option>
                 </select>
               </div>
