@@ -168,7 +168,17 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   // quand le polling rattrape un don déjà reçu via le channel realtime.
   const seenDonationIdsRef  = useRef(new Set())
 
-  // (Vidéo par WebSocket supprimée pour des raisons de performance)
+  // ── Stream vidéo broadcaster (orga) → viewer ──
+  // RaceSetup.LiveVideoBroadcaster capture la caméra du téléphone de l'orga
+  // et envoie des frames JPEG base64 toutes les 250ms via le channel
+  // `live-stream-${sessionId}` event 'video-frame'. Ici on s'abonne au
+  // channel et on update directement le src de l'<img> via ref — pas de
+  // setState pour ne pas re-render à 4 fps un long string base64.
+  const streamImgRef = useRef(null)
+  // Booléen state pour afficher le panneau vidéo dès qu'une frame arrive
+  // (avant ça, on affiche un placeholder "En attente du signal"). On dépend
+  // aussi de session.live_stream_active pour montrer/cacher l'encadré.
+  const [streamReceiving, setStreamReceiving] = useState(false)
 
   // Flag "j'ai vu cette session en status='live' pendant que je la
   // regardais" → utilisé pour décider si l'overlay drapeau post-race
@@ -607,6 +617,32 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
     return () => clearInterval(elapsedRef.current)
   }, [session?.started_at, session?.status])
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  // ── Stream vidéo : subscribe au channel quand un live est actif ──
+  // On reçoit les frames JPEG base64 et on les pousse directement dans
+  // l'<img> via ref, sans setState (pour ne pas re-render React à 4 fps).
+  // Reset streamReceiving=false à chaque changement de session pour
+  // qu'un viewer qui zappe d'une course à l'autre voie le placeholder.
+  useEffect(() => {
+    if (!session?.id || !session?.live_stream_active) {
+      setStreamReceiving(false)
+      return
+    }
+    setStreamReceiving(false)
+    const ch = supabase.channel(`live-stream-${session.id}`)
+      .on('broadcast', { event: 'video-frame' }, ({ payload }) => {
+        if (!payload?.image) return
+        if (streamImgRef.current) {
+          streamImgRef.current.src = payload.image
+        }
+        // Bascule l'affichage du panneau dès la 1re frame (placeholder
+        // "En attente" → vidéo réelle). Une seule fois pour éviter de
+        // setState à chaque frame.
+        setStreamReceiving(prev => prev || true)
+      })
+      .subscribe()
+    return () => supabase.removeChannel(ch)
+  }, [session?.id, session?.live_stream_active])
 
   // ── Initial load ──
   const loadLiveSession = async () => {
@@ -1185,6 +1221,34 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
             </div>
           </div>
         </div>
+
+        {/* ── Stream vidéo live (broadcast par l'orga depuis son téléphone) ──
+            Visible uniquement si session.live_stream_active=true. Tant qu'on
+            n'a pas reçu la première frame, on affiche un placeholder. */}
+        {session?.live_stream_active && (
+          <div className="live-stream-card glass" style={{ marginBottom: '20px', padding: '14px', borderRadius: '14px', border: '1px solid rgba(255,85,0,0.25)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+              <h3 style={{ margin: 0, fontSize: '1rem', color: '#fff', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ width: '8px', height: '8px', background: '#ff3b30', borderRadius: '50%', animation: 'pulse 1.5s infinite' }} />
+                🎥 Diffusion en direct
+              </h3>
+            </div>
+            <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', borderRadius: '10px', overflow: 'hidden', background: '#000', border: '1px solid rgba(255,255,255,0.06)' }}>
+              <img
+                ref={streamImgRef}
+                alt="Diffusion live de l'organisateur"
+                style={{ width: '100%', height: '100%', objectFit: 'cover', display: streamReceiving ? 'block' : 'none' }}
+              />
+              {!streamReceiving && (
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: 'var(--text-muted)' }}>
+                  <div style={{ fontSize: '2rem' }}>📡</div>
+                  <div style={{ fontSize: '0.9rem' }}>En attente du signal vidéo…</div>
+                  <div style={{ fontSize: '0.75rem', opacity: 0.7 }}>L'organisateur active sa caméra</div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* ── Best lap / Meilleur chrono ── */}
         {bestTeam && (
