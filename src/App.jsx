@@ -844,7 +844,7 @@ function App() {
   // additionnelles stockees dans profile.permissions.
   const ROLE_BASELINE_PERMISSIONS = {
     organisateur: ['manage_races', 'manage_events'],
-    moderator: ['moderate_content', 'manage_products', 'manage_team', 'manage_gallery'],
+    moderator: ['moderate_content', 'manage_products', 'manage_team', 'manage_gallery', 'manage_bikes'],
   }
   const hasPermission = (perm) => {
     if (isAdmin) return true
@@ -1192,7 +1192,7 @@ function App() {
         }
         const allUrls = [...(formData.image_urls || []), ...uploadedUrls]
         const finalImageUrl = allUrls.join(',')
-        
+
         const bikePayload = {
           title: formData.title,
           plate: formData.plate,
@@ -1201,9 +1201,24 @@ function App() {
           specs: formData.specs,
           sort_order: formData.sort_order
         }
-        
-        const { error } = await supabase.from('bikes').update(bikePayload).eq('id', formData.id)
+
+        // UPSERT par sort_order (clé stable : 0=rouge, 1=orange, 2=noir).
+        // Avant V32 le code faisait UPDATE WHERE id=formData.id, mais id
+        // pouvait être un slug 'rouge' / 'orange' / 'noir' alors que les
+        // vraies lignes en DB ont des UUID → 0 ligne mise à jour, échec
+        // silencieux. La V32 ajoute UNIQUE(sort_order) pour permettre
+        // ce pattern UPSERT-by-sort_order.
+        const { data: upserted, error } = await supabase
+          .from('bikes')
+          .upsert([bikePayload], { onConflict: 'sort_order' })
+          .select()
         if (error) throw error
+        if (!upserted || upserted.length === 0) {
+          throw new Error(
+            "La sauvegarde n'a affecté aucune ligne. La table 'bikes' n'est " +
+            "peut-être pas correctement configurée (migration V32 manquante ?)."
+          )
+        }
       }
       setActiveForm(null)
       setEditingItem(null)
