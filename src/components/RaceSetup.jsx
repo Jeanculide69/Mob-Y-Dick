@@ -659,7 +659,7 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
               <form onSubmit={handleAddManualLap} className="manual-lap-form glass" style={{ marginBottom: '20px', padding: '20px' }}>
                 <h4 style={{ margin: '0 0 15px 0' }}>➕ Ajouter un passage manuellement (Temps Cumulé)</h4>
                 <div className="race-form-row">
-                  <div className="race-form-group" style={{ width: '60px', flex: 'none' }}>
+                  <div className="race-form-group" style={{ width: '75px', flex: 'none', marginRight: '15px' }}>
                     <label>Moto #</label>
                     <input 
                       type="number"
@@ -669,7 +669,7 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
                       required
                     />
                   </div>
-                  <div className="race-form-group" style={{ width: '60px', flex: 'none' }}>
+                  <div className="race-form-group" style={{ flex: 1 }}>
                     <label>Heures</label>
                     <input 
                       type="number"
@@ -700,7 +700,7 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
                       max="59"
                     />
                   </div>
-                  <div className="race-form-group" style={{ flex: 1 }}>
+                  <div className="race-form-group" style={{ flex: 1.3 }}>
                     <label>Millisecondes</label>
                     <input 
                       type="number"
