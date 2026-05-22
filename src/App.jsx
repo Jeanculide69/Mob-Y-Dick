@@ -1345,21 +1345,34 @@ function App() {
     refreshData()
   }
 
+  // Mapping sort_order DB → slug front (rouge / orange / noir).
+  // sort_order est la clé fonctionnelle stable depuis V32 (UNIQUE), l'UUID
+  // change à chaque réinsertion donc on ne peut pas l'utiliser pour matcher
+  // avec les tabs hardcodés du front.
+  const SORT_ORDER_TO_SLUG = { 0: 'rouge', 1: 'orange', 2: 'noir' }
+
   const getBikesList = () => {
+    // Démarre avec les valeurs hardcodées comme filet de sécurité, puis
+    // on overlay les données DB par slug. Comme ça si une moto manque en
+    // base, le front ne crashe pas — il affiche juste l'ancien contenu.
+    const list = { ...BIKES_LIST }
     if (dbBikes && dbBikes.length > 0) {
-      const list = {}
       dbBikes.forEach(b => {
-        list[b.id] = {
+        const slug = SORT_ORDER_TO_SLUG[b.sort_order]
+        if (!slug) return // ignore les motos avec un sort_order inattendu
+        list[slug] = {
           title: b.title,
           plate: b.plate,
           description: b.description,
           images: b.images ? b.images.split(',').filter(Boolean) : [],
-          specs: typeof b.specs === 'string' ? JSON.parse(b.specs) : b.specs
+          specs: (() => {
+            if (!b.specs) return {}
+            return typeof b.specs === 'string' ? JSON.parse(b.specs) : b.specs
+          })()
         }
       })
-      return list
     }
-    return BIKES_LIST
+    return list
   }
 
   return (
@@ -1625,6 +1638,17 @@ function App() {
                 {/* Bike Showcase details */}
                 {(() => {
                   const bikeData = getBikesList()[selectedBike];
+                  // Garde-fou : si le slug courant ne mappe vers rien (DB pas
+                  // encore chargée, ou sort_order non standard), on évite le
+                  // crash en affichant un état neutre.
+                  if (!bikeData || !bikeData.images || bikeData.images.length === 0) {
+                    return (
+                      <div className="bike-showcase glass" style={{ padding: '40px', borderRadius: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                        <div style={{ fontSize: '2.4rem', marginBottom: '12px' }}>🏍️</div>
+                        <p style={{ margin: 0 }}>Chargement des informations de la moto…</p>
+                      </div>
+                    )
+                  }
                   const activeImg = bikeData.images[selectedBikeImgIndex] || bikeData.images[0];
                   return (
                     <div className="bike-showcase glass fade-in" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '40px', padding: '40px', borderRadius: '20px', border: '1px solid var(--border-subtle)', background: 'var(--bg-glass)' }}>
