@@ -1115,7 +1115,7 @@ function LiveVideoBroadcaster({ session, raceSession }) {
   // Start playing the local video once the container is rendered
   useEffect(() => {
     if (isStreaming && videoRef.current && trackRef.current) {
-      trackRef.current.play(videoRef.current)
+      trackRef.current.play(videoRef.current, { fit: "contain" })
     }
   }, [isStreaming])
 

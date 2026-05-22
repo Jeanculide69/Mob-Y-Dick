@@ -680,7 +680,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       if (mediaType === "video" && isMounted) {
         setStreamReceiving(true)
         if (streamDivRef.current) {
-          user.videoTrack.play(streamDivRef.current)
+          user.videoTrack.play(streamDivRef.current, { fit: "contain" })
         }
       }
       if (mediaType === "audio" && isMounted) {
