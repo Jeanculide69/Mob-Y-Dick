@@ -1983,7 +1983,7 @@ function App() {
                             </div>
                           )
                         }
-                        if (eventSession.status === 'finished' || eventSession.status === 'published') {
+                        if (eventSession.status === 'published') {
                           return (
                             <button 
                               className="btn btn-sm btn-outline event-results-btn"
