@@ -698,7 +698,26 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
         const appId = import.meta.env.VITE_AGORA_APP_ID;
         if (!appId) return;
         const channelName = `live-stream-${session.id}`
-        await client.join(appId, channelName, null, null)
+
+        // Identifiant viewer : auth.uid pour les users connectés, sinon
+        // un UUID aléatoire stable pour la session (anonyme).
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        const viewerUid = authUser?.id || `viewer-${crypto.randomUUID()}`
+
+        // Récupère un token Agora (audience) — nécessaire en Secured Mode.
+        // Fallback silencieux sur null si l'Edge Function n'est pas dispo
+        // (cas Testing Mode : le join sans token marche encore).
+        let agoraToken = null
+        try {
+          const { data: tokenData } = await supabase.functions.invoke('agora-token', {
+            body: { channelName, uid: viewerUid, role: 'audience' },
+          })
+          if (tokenData?.token) agoraToken = tokenData.token
+        } catch (tokenErr) {
+          console.warn('[stream-viewer] agora-token KO, fallback no-token:', tokenErr?.message || tokenErr)
+        }
+
+        await client.join(appId, channelName, agoraToken, viewerUid)
       } catch (err) {
         console.error("Agora join error", err)
       }

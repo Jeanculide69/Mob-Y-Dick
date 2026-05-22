@@ -1263,16 +1263,41 @@ function LiveVideoBroadcaster({ session, raceSession }) {
       clientRef.current = client
 
       const channelName = `live-stream-${raceSession.id}`
+
+      // 2.bis Récupère un token Agora via l'Edge Function (Secured Mode).
+      // Si la function n'est pas déployée OU répond 500 "missing_secrets",
+      // on retombe sur un join sans token (Testing Mode). Comme ça la migration
+      // vers Secured Mode est non-bloquante.
+      let agoraToken = null
       try {
-        await client.join(appId, channelName, null, session.user.id)
+        const { data: tokenData, error: tokenErr } = await supabase.functions.invoke('agora-token', {
+          body: { channelName, uid: session.user.id, role: 'publisher' },
+        })
+        if (tokenErr) throw tokenErr
+        if (tokenData?.token) {
+          agoraToken = tokenData.token
+        } else if (tokenData?.error) {
+          console.warn('[stream] agora-token a renvoyé une erreur, fallback no-token:', tokenData)
+        }
+      } catch (tokenFetchErr) {
+        console.warn('[stream] agora-token introuvable ou en erreur, fallback no-token:', tokenFetchErr?.message || tokenFetchErr)
+      }
+
+      try {
+        await client.join(appId, channelName, agoraToken, session.user.id)
       } catch (joinErr) {
         // Messages Agora typiques : CAN_NOT_GET_GATEWAY_SERVER, INVALID_PARAMS,
-        // dynamic key timeout, etc.
+        // UNEXPECTED_RESPONSE: invalid appid (= projet en Secured Mode mais
+        // token manquant/invalide), dynamic key timeout, etc.
         const code = joinErr?.code || joinErr?.name
+        const isAuthIssue = /invalid appid|dynamic key|token/i.test(joinErr?.message || '')
+        const hint = isAuthIssue
+          ? `Le projet Agora est probablement en "Secured Mode". ` +
+            `Déploie l'Edge Function agora-token (cf. supabase/functions/agora-token/) ` +
+            `OU repasse temporairement le projet en "Testing Mode" dans la console Agora.`
+          : `Si le problème persiste, rafraîchis la page.`
         throw new Error(
-          `Connexion Agora refusée (${code || 'erreur API'}): ${joinErr.message || joinErr}. ` +
-          `Si le problème persiste, vérifie que le projet Agora est en mode "Testing" ` +
-          `(App ID sans token) ou rafraîchis la page.`,
+          `Connexion Agora refusée (${code || 'erreur API'}): ${joinErr.message || joinErr}. ${hint}`,
           { cause: joinErr }
         )
       }
