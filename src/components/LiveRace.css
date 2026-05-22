@@ -1558,6 +1558,16 @@
   filter: drop-shadow(0 10px 20px rgba(0,0,0,0.5));
 }
 
+/* Vidéos custom (upload admin) : on les laisse respirer beaucoup plus
+   qu'un emoji statique pour qu'on profite vraiment du clip. Limité par
+   60vw/60vh pour rester safe sur les écrans courts. */
+video.live-premium-emote-img {
+  width: min(60vw, 480px);
+  height: auto;
+  max-height: 60vh;
+  aspect-ratio: auto;
+}
+
 .live-premium-emote-user {
   background: rgba(0, 0, 0, 0.75);
   border: 1px solid var(--accent);
@@ -1571,6 +1581,18 @@
   z-index: 10;
   letter-spacing: 1px;
   box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+  max-width: 90vw;
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Quand on a une vidéo en cours, on retire le position:absolute pour
+   placer le badge user JUSTE en dessous (flex column de l'alert wrapper).
+   Avec une vidéo en 480px+, le bottom:10% le ferait recouvrir le clip. */
+.live-premium-emote-alert:has(video.live-premium-emote-img)
+  .live-premium-emote-user {
+  position: static;
+  margin-top: 14px;
 }
 
 .live-premium-emote-user span {
@@ -1911,6 +1933,61 @@ body.shake-heavy  { animation: pemoteCameraShakeHeavy 1s ease-in-out; }
   padding: 15px 24px 24px;
   overflow-y: auto;
   flex: 1;
+}
+
+/* ─── Modal de don / boutique : version compacte mobile ───
+   Avant : sur petit écran le formulaire (pseudo + message + email + carte
+   + boutons) dépassait, max-height 90vh laissait juste assez pour scroller
+   le bouton "Donner" en bas → impression de "drawer en bas".
+   Maintenant : centré + plus compact + max-height en dvh pour s'aligner
+   sur la zone vraiment visible (iOS barre Safari incluse). */
+@media (max-width: 600px) {
+  .premium-modal-overlay {
+    padding: 12px;
+    /* dvh tient compte de la barre Safari dynamique sur iOS ; fallback vh */
+    align-items: center;
+    justify-content: center;
+  }
+  .premium-modal {
+    max-width: 100%;
+    max-height: 92vh;
+    max-height: 92dvh;
+    border-radius: 16px;
+  }
+  .premium-modal-header {
+    padding: 14px 16px 10px;
+  }
+  .premium-modal-title-area h2 {
+    font-size: 1.15rem;
+  }
+  .premium-modal-subtitle {
+    font-size: 0.78rem;
+  }
+  .premium-modal-tabs {
+    margin: 10px 16px 6px;
+  }
+  .premium-modal-tab {
+    padding: 8px;
+    font-size: 0.82rem;
+  }
+  .premium-modal-content {
+    padding: 12px 16px 18px;
+  }
+  /* Formulaire de don : on resserre les gaps pour rentrer sans scroll
+     sur la plupart des téléphones (~640dp de hauteur dispo). */
+  .donation-form,
+  .stripe-form {
+    gap: 10px;
+  }
+  .donation-form input,
+  .donation-form textarea,
+  .stripe-email-input {
+    padding: 10px 12px;
+    font-size: 0.9rem;
+  }
+  .stripe-card-wrap {
+    padding: 10px 12px;
+  }
 }
 
 /* Boutique items layout */

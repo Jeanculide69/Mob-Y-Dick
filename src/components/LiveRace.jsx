@@ -308,8 +308,10 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
 
       // ── Programmer le retrait ──
       // - donation        : 8s (le temps de lire le message)
-      // - premium video   : 10s (cap large ; le <video onEnded> finit en réalité
-      //                          au bout de sa durée réelle 1-10s)
+      // - premium video   : 30s (safety net ; le retrait normal vient du
+      //                          <video onEnded> qui dismisse à la durée
+      //                          RÉELLE du clip). Avant : 10s coupait les
+      //                          vidéos custom plus longues que ça.
       // - premium non-vid : 7s (GIF/image animée + son synth ~1-2s)
       let duration
       if (head.type === 'donation') {
@@ -317,7 +319,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       } else if (head.type === 'premium-reaction') {
         const item = head.item
         const isVideo = item.media_type === 'mp4' || /\.(mp4|webm)($|\?)/i.test(item.media_url || item.animation_url || '')
-        duration = isVideo ? 10000 : 7000
+        duration = isVideo ? 30000 : 7000
       } else {
         duration = 7000
       }
