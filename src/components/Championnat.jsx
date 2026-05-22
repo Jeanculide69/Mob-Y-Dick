@@ -108,8 +108,8 @@ export default function Championnat() {
 
         ranked.forEach((r, i) => {
           const pts = POINTS_TABLE[i] || 0
-          const pilotName = r.team.pilot_1_name
-          addPoints(pilotName, cat, pts, sess.name, i + 1, r.bestLap)
+          const identifier = `Moto ${r.team.moto_number}`
+          addPoints(identifier, cat, pts, sess.name, i + 1, r.bestLap)
         })
       })
     })
@@ -278,7 +278,7 @@ export default function Championnat() {
                   <thead>
                     <tr>
                       <th className="champ-th-pos">POS</th>
-                      <th>PILOTE</th>
+                      <th>MOTO</th>
                       <th className="champ-th-num">POINTS</th>
                       <th className="champ-th-num">VICTOIRES</th>
                       <th className="champ-th-num">PODIUMS</th>
