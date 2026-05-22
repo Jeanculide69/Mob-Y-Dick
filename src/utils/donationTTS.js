@@ -105,20 +105,31 @@ export const speakDonation = (d, opts = {}) => {
   const name = (d.display_name || 'Quelqu\'un').trim().slice(0, 40)
   const amount = Number(d.amount || 0)
   const message = cleanForTTS(d.message)
-  // Nom du produit acheté, déjà lowercased pour s'enchaîner naturellement
-  // dans la phrase ("a choisi offrir une bière" devient "a choisi d'offrir
-  // une bière" via l'élision). On laisse le nom tel quel sinon.
   const itemName = d.item_name ? String(d.item_name).trim() : null
 
+  // Transforme "Offrir une bière" → "d'offrir une bière"
+  //            "Payer la bougie" → "de payer la bougie"
+  //            "Financer un pneu" → "de financer un pneu"
+  // Tous les produits commencent par un verbe à l'infinitif → on les
+  // enchaîne avec "a choisi" via la préposition "de" (élision "d'" si
+  // le verbe commence par une voyelle ou h muet).
+  const itemNameToInfinitive = (rawName) => {
+    if (!rawName) return null
+    const lower = rawName.charAt(0).toLowerCase() + rawName.slice(1)
+    const startsWithVowel = /^[aeiouâêîôûéèëïh]/i.test(lower)
+    return (startsWithVowel ? "d'" : 'de ') + lower
+  }
+
   // Construction de la phrase, ton "présentatrice live" :
-  //   Avec produit : "Rider44 a choisi : Offrir une bière. Et dit : Allez les gars !"
+  //   Avec produit : "Rider44 a choisi d'offrir une bière pour 1 euros. Et dit : ..."
   //   Sans produit : "Rider44 vient d'offrir 5 euros, et dit : ..."
   // (verbe "offrir" cohérent avec les produits — plus de "donner" qui
   //  rappelait la cagnotte.)
   let phrase
   if (itemName && amount >= 1) {
     const euros = Number.isInteger(amount) ? `${amount}` : amount.toFixed(2).replace('.', ',')
-    phrase = `${name} a choisi : ${itemName}, pour ${euros} euros`
+    const verb = itemNameToInfinitive(itemName)
+    phrase = `${name} a choisi ${verb} pour ${euros} euros`
     if (message) phrase += `. Et dit : ${message}`
   } else if (amount >= 1) {
     const euros = Number.isInteger(amount) ? `${amount}` : amount.toFixed(2).replace('.', ',')
