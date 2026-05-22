@@ -1220,7 +1220,19 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
               )}
               {isLive && (
                 <div className="live-stat live-stat-spectators">
-                  <span className="live-stat-value">👁 {spectatorCount}</span>
+                  <span className="live-stat-value">
+                    👁 {spectatorCount}
+                    {/* Indicateur santé du canal Realtime : vert pulsé = temps
+                        réel actif via WebSocket, jaune = fallback polling 3s
+                        (couverture safe mais latence visible). */}
+                    <span
+                      className={`live-rt-pip ${channelHealthy ? 'is-live' : 'is-fallback'}`}
+                      title={channelHealthy
+                        ? 'Temps réel actif (WebSocket)'
+                        : 'Fallback polling 3s — WebSocket en reconnexion'}
+                      aria-label={channelHealthy ? 'Temps réel actif' : 'Polling fallback'}
+                    />
+                  </span>
                   <span className="live-stat-label">Spectateurs</span>
                 </div>
               )}

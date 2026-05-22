@@ -975,6 +975,36 @@
 .live-stat-spectators .live-stat-value {
   font-size: 1.1rem;
   color: #a78bfa;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Indicateur santé du canal Realtime à côté du compteur spectateurs.
+   - is-live    : vert pulsant = temps réel actif (WebSocket Supabase OK)
+   - is-fallback : jaune statique = polling 3s (WebSocket en reconnexion)
+   Le rendu est discret (8px) pour ne pas voler la vedette au chiffre. */
+.live-rt-pip {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  vertical-align: middle;
+  cursor: help;
+}
+.live-rt-pip.is-live {
+  background: #00cc66;
+  box-shadow: 0 0 0 0 rgba(0, 204, 102, 0.5);
+  animation: liveRtPulse 1.6s ease-out infinite;
+}
+.live-rt-pip.is-fallback {
+  background: #ffaa00;
+  box-shadow: 0 0 5px rgba(255, 170, 0, 0.5);
+}
+@keyframes liveRtPulse {
+  0%   { box-shadow: 0 0 0 0   rgba(0, 204, 102, 0.55); }
+  70%  { box-shadow: 0 0 0 7px rgba(0, 204, 102, 0);    }
+  100% { box-shadow: 0 0 0 0   rgba(0, 204, 102, 0);    }
 }
 
 /* ─── Table Scroll Wrapper ─── */
