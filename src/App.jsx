@@ -21,6 +21,7 @@ const UserManagement = lazy(() => import('./components/UserManagement'))
 const EmoteAdmin     = lazy(() => import('./components/EmoteAdmin'))
 const LiveMessagesAdmin = lazy(() => import('./components/LiveMessagesAdmin'))
 const ContactMessagesAdmin = lazy(() => import('./components/ContactMessagesAdmin'))
+const AdminDashboard = lazy(() => import('./components/AdminDashboard'))
 const RaceSetup      = lazy(() => import('./components/RaceSetup'))
 const RaceChrono     = lazy(() => import('./components/RaceChrono'))
 const Championnat    = lazy(() => import('./components/Championnat'))
@@ -477,7 +478,6 @@ function App() {
   const [selectedBikeImgIndex, setSelectedBikeImgIndex] = useState(0)
   const [showIntroSplash, setShowIntroSplash] = useState(false)
   const [fadeIntro, setFadeIntro] = useState(false)
-  const [adminMenuOpen, setAdminMenuOpen] = useState(false)
   const [introMuted, setIntroMuted] = useState(true)
   const [showTeaserModal, setShowTeaserModal] = useState(false)
   const [sponsorName, setSponsorName] = useState('')
@@ -1399,81 +1399,25 @@ function App() {
               Accueil
             </button>
 
-            {/* Admin menu : visible uniquement pour les admins, juste après Accueil */}
+            {/* Admin menu : bouton qui navigue vers le Cockpit Admin dédié.
+                Badge agrégé pour aperçu rapide depuis n'importe quelle page. */}
             {isAdmin && (() => {
               const pendingOrders = dbOrders.filter(o => o.status === 'En attente de paiement').length
               const pendingSponsors = dbSponsors.filter(s => s.status === 'En attente').length
               const pendingAffiliations = dbAffiliations.filter(a => a.status === 'pending').length
               const pendingContact = dbContactMessages.filter(m => m.status === 'nouveau').length
               const totalNotifs = pendingOrders + pendingSponsors + pendingAffiliations + pendingContact
-              const closeMenu = () => { setAdminMenuOpen(false); setMobileMenuOpen(false); }
-              const adminMenuItems = [
-                ...((!dbProducts || dbProducts.length === 0) ? [{
-                  id: 'init', icon: '🚀', label: 'Remplir la base',
-                  onClick: () => { closeMenu(); handleInitializeDatabase() },
-                  highlight: true,
-                }] : []),
-                { id: 'orders', icon: '📦', label: 'Commandes', badge: pendingOrders,
-                  onClick: () => { closeMenu(); handleOpenForm('orders') } },
-                { id: 'socials', icon: '🔗', label: 'Réseaux',
-                  onClick: () => { closeMenu(); handleOpenForm('socials') } },
-                { id: 'bikes', icon: '🏍️', label: 'Motos',
-                  onClick: () => { closeMenu(); handleOpenForm('bikes_admin') } },
-                { id: 'sponsors', icon: '🤝', label: 'Sponsors', badge: pendingSponsors,
-                  onClick: () => { closeMenu(); handleOpenForm('sponsors_admin') } },
-                { id: 'affiliations', icon: '🏍️', label: 'Affiliations', badge: pendingAffiliations,
-                  onClick: () => { closeMenu(); handleOpenForm('affiliations_admin') } },
-                { id: 'emotes', icon: '🎉', label: 'Emotes & Sons',
-                  onClick: () => { closeMenu(); handleOpenForm('emotes_admin') } },
-                { id: 'donations', icon: '💬', label: 'Messages live',
-                  onClick: () => { closeMenu(); handleOpenForm('donations_admin') } },
-                { id: 'contact', icon: '📩', label: 'Messages contact', badge: pendingContact,
-                  onClick: () => { closeMenu(); handleOpenForm('contact_admin') } },
-                { id: 'users', icon: '👥', label: 'Utilisateurs',
-                  onClick: () => { closeMenu(); handleOpenForm('users_admin') } },
-              ]
               return (
-                <div className="nav-admin-wrap">
-                  <button
-                    className={`nav-link nav-admin-trigger ${adminMenuOpen ? 'open' : ''}`}
-                    onClick={() => setAdminMenuOpen(o => !o)}
-                    aria-haspopup="menu"
-                    aria-expanded={adminMenuOpen}
-                  >
-                    🛠️ Admin
-                    {totalNotifs > 0 && (
-                      <span className="nav-admin-badge">{totalNotifs}</span>
-                    )}
-                    <span className={`nav-admin-chevron ${adminMenuOpen ? 'open' : ''}`}>▾</span>
-                  </button>
-                  {adminMenuOpen && (
-                    <>
-                      <div className="admin-menu-overlay" onClick={closeMenu} />
-                      <div className="admin-menu-dropdown glass" role="menu">
-                        <div className="admin-menu-dropdown-header">
-                          <span>🛠️ Espace admin</span>
-                          <button className="admin-menu-dropdown-close" onClick={closeMenu} aria-label="Fermer">✕</button>
-                        </div>
-                        <div className="admin-menu-dropdown-list">
-                          {adminMenuItems.map(item => (
-                            <button
-                              key={item.id}
-                              role="menuitem"
-                              className={`admin-menu-item ${item.highlight ? 'highlight' : ''}`}
-                              onClick={item.onClick}
-                            >
-                              <span className="admin-menu-item-icon">{item.icon}</span>
-                              <span className="admin-menu-item-label">{item.label}</span>
-                              {item.badge > 0 && (
-                                <span className="admin-menu-item-badge">{item.badge}</span>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </>
+                <button
+                  className={`nav-link nav-admin-trigger ${activeTab === 'admin' ? 'active' : ''}`}
+                  onClick={() => navigate('admin')}
+                  aria-label="Ouvrir le cockpit admin"
+                >
+                  🛠️ Admin
+                  {totalNotifs > 0 && (
+                    <span className="nav-admin-badge">{totalNotifs}</span>
                   )}
-                </div>
+                </button>
               )
             })()}
 
@@ -2361,9 +2305,31 @@ function App() {
         </section>
       )}
 
+      {/* ─── ADMIN COCKPIT (page dédiée, remplace l'ancien dropdown) ─── */}
+      {activeTab === 'admin' && isAdmin && (
+        <Suspense fallback={<LazyLoader />}>
+          <AdminDashboard
+            dbOrders={dbOrders}
+            dbSponsors={dbSponsors}
+            dbAffiliations={dbAffiliations}
+            dbContactMessages={dbContactMessages}
+            dbEvents={dbEvents}
+            dbGallery={dbGallery}
+            dbProducts={dbProducts}
+            dbTeam={dbTeam}
+            dbBikes={dbBikes}
+            dbUsers={dbUsers}
+            onOpenForm={handleOpenForm}
+            onInitializeDatabase={handleInitializeDatabase}
+            onNavigateHome={() => navigate('home')}
+            siteVersion={SITE_VERSION}
+          />
+        </Suspense>
+      )}
+
       {/* ─── USER PROFILE / ORDER HISTORY ─── */}
       {activeTab === 'profile' && session && (
-        <ProfilePage 
+        <ProfilePage
           session={session}
           profile={profile}
           onLogout={handleLogout}

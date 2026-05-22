@@ -1,0 +1,388 @@
+/* ============================================
+   AdminDashboard — Cockpit admin Mob Y Dick
+   ============================================ */
+
+.admin-dashboard {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 32px 24px 80px;
+  color: #fff;
+  animation: adminDashFadeIn 0.35s ease-out;
+}
+
+@keyframes adminDashFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Header ─── */
+.admin-dash-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 36px;
+  flex-wrap: wrap;
+}
+
+.admin-dash-title {
+  font-size: 2.2rem;
+  font-weight: 800;
+  margin: 0 0 4px 0;
+  letter-spacing: -0.5px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-dash-title-emoji {
+  font-size: 1.8rem;
+  filter: drop-shadow(0 0 12px rgba(255, 85, 0, 0.3));
+}
+
+.admin-dash-subtitle {
+  margin: 0;
+  color: var(--text-muted, rgba(255,255,255,0.55));
+  font-size: 0.95rem;
+}
+
+.admin-dash-version {
+  color: rgba(255,255,255,0.35);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 0.78rem;
+}
+
+.admin-dash-back {
+  font-size: 0.9rem;
+}
+
+/* ─── Init banner (DB vide) ─── */
+.admin-dash-init-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  background: linear-gradient(135deg, rgba(255, 85, 0, 0.18), rgba(255, 85, 0, 0.06));
+  border: 1px solid rgba(255, 85, 0, 0.4);
+  border-radius: 14px;
+  margin-bottom: 28px;
+}
+
+.admin-dash-init-banner > div {
+  flex: 1;
+}
+
+.admin-dash-init-banner strong {
+  display: block;
+  font-size: 1.02rem;
+  margin-bottom: 2px;
+}
+
+.admin-dash-init-banner p {
+  margin: 0;
+  font-size: 0.88rem;
+  color: rgba(255,255,255,0.7);
+}
+
+.admin-dash-init-icon {
+  font-size: 1.8rem;
+  filter: drop-shadow(0 0 8px rgba(255, 85, 0, 0.4));
+}
+
+/* ─── Section wrapper ─── */
+.admin-dash-section {
+  margin-bottom: 40px;
+}
+
+.admin-dash-section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.admin-dash-section-header h2 {
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: 0.2px;
+}
+
+.admin-dash-section-meta {
+  font-size: 0.82rem;
+  color: rgba(255,255,255,0.45);
+}
+
+/* ─── Grid ─── */
+.admin-dash-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.admin-dash-grid-priority {
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.admin-dash-grid-tools {
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+
+/* ─── Cartes "À traiter" (priority) ─── */
+.admin-dash-card {
+  background: rgba(20, 20, 24, 0.6);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 20px;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.18s, border-color 0.18s, background 0.18s, box-shadow 0.18s;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: #fff;
+  font-family: inherit;
+}
+
+.admin-dash-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at top right, var(--accent-color, rgba(255,85,0,0.15)), transparent 60%);
+  opacity: 0;
+  transition: opacity 0.25s;
+  pointer-events: none;
+}
+
+.admin-dash-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent-border, rgba(255, 85, 0, 0.5));
+  box-shadow: 0 12px 32px rgba(0,0,0,0.4);
+}
+
+.admin-dash-card:hover::before {
+  opacity: 1;
+}
+
+.admin-dash-priority-orange { --accent-color: rgba(255, 140, 0, 0.18); --accent-border: rgba(255, 140, 0, 0.5); }
+.admin-dash-priority-purple { --accent-color: rgba(170, 110, 255, 0.18); --accent-border: rgba(170, 110, 255, 0.5); }
+.admin-dash-priority-blue   { --accent-color: rgba(80, 160, 255, 0.18); --accent-border: rgba(80, 160, 255, 0.5); }
+.admin-dash-priority-green  { --accent-color: rgba(100, 200, 120, 0.18); --accent-border: rgba(100, 200, 120, 0.5); }
+
+.admin-dash-priority-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.admin-dash-icon {
+  font-size: 1.9rem;
+  line-height: 1;
+}
+
+.admin-dash-count-badge {
+  font-size: 1.4rem;
+  font-weight: 800;
+  padding: 4px 14px;
+  border-radius: 100px;
+  background: var(--accent-color);
+  border: 1px solid var(--accent-border);
+  color: #fff;
+  min-width: 40px;
+  text-align: center;
+}
+
+.admin-dash-count-badge.admin-dash-count-zero {
+  background: rgba(255,255,255,0.04);
+  border-color: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.35);
+  font-weight: 600;
+}
+
+.admin-dash-priority-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.admin-dash-priority-latest {
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.6);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: baseline;
+  min-height: 38px;
+}
+
+.admin-dash-priority-empty {
+  color: rgba(255,255,255,0.4);
+  font-style: italic;
+}
+
+.admin-dash-latest-label {
+  color: rgba(255,255,255,0.4);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.admin-dash-latest-text {
+  color: rgba(255,255,255,0.85);
+  font-weight: 500;
+}
+
+.admin-dash-latest-date {
+  color: rgba(255,255,255,0.4);
+  font-size: 0.75rem;
+  margin-left: auto;
+}
+
+.admin-dash-cta {
+  margin-top: auto;
+  font-size: 0.85rem;
+  color: var(--accent-border);
+  font-weight: 600;
+  transition: transform 0.18s;
+}
+
+.admin-dash-card:hover .admin-dash-cta {
+  transform: translateX(3px);
+}
+
+/* ─── Stat tiles ─── */
+.admin-dash-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.admin-dash-stat {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.admin-dash-stat-icon {
+  font-size: 1.6rem;
+  opacity: 0.8;
+}
+
+.admin-dash-stat-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.admin-dash-stat-value {
+  font-size: 1.6rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.5px;
+}
+
+.admin-dash-stat-label {
+  font-size: 0.78rem;
+  color: rgba(255,255,255,0.55);
+  margin-top: 4px;
+}
+
+/* ─── Tool cards (Gestion) ─── */
+.admin-dash-tool {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s, background 0.15s;
+  color: #fff;
+  font-family: inherit;
+  position: relative;
+}
+
+.admin-dash-tool:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255,255,255,0.2);
+  background: rgba(255,255,255,0.06);
+}
+
+.admin-dash-tool-icon {
+  font-size: 1.8rem;
+}
+
+.admin-dash-tool-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.admin-dash-tool-count {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 100px;
+  background: rgba(255,255,255,0.08);
+  color: rgba(255,255,255,0.7);
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* ─── Responsive mobile ─── */
+@media (max-width: 720px) {
+  .admin-dashboard {
+    padding: 20px 14px 60px;
+  }
+
+  .admin-dash-title {
+    font-size: 1.7rem;
+  }
+
+  .admin-dash-header {
+    margin-bottom: 24px;
+  }
+
+  .admin-dash-section {
+    margin-bottom: 28px;
+  }
+
+  .admin-dash-grid-priority {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-dash-grid-tools {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .admin-dash-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .admin-dash-init-banner {
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+  }
+
+  .admin-dash-init-banner .btn {
+    width: 100%;
+  }
+}
+
+@media (max-width: 380px) {
+  .admin-dash-grid-tools {
+    grid-template-columns: 1fr;
+  }
+}
