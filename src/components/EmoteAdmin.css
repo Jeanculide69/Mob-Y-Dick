@@ -130,6 +130,44 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Saisie directe de la position : remplace l'ancien <span> #N. Visuel
+   minimaliste (pas de bordure au repos) ; bordure + accent au focus. */
+.emote-admin-reorder-pos-input {
+  width: 36px;
+  height: 24px;
+  padding: 0 2px;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid transparent;
+  border-radius: 5px;
+  font-variant-numeric: tabular-nums;
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+.emote-admin-reorder-pos-input::-webkit-outer-spin-button,
+.emote-admin-reorder-pos-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.emote-admin-reorder-pos-input:hover:not(:disabled) {
+  background: rgba(255, 85, 0, 0.08);
+  border-color: rgba(255, 85, 0, 0.35);
+  color: var(--text-primary);
+}
+.emote-admin-reorder-pos-input:focus {
+  outline: none;
+  background: rgba(255, 85, 0, 0.14);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.emote-admin-reorder-pos-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
 /* ─── Preview ─── */
 .emote-admin-preview {
   flex: 0 0 110px;

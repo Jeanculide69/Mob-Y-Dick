@@ -152,6 +152,50 @@ export default function EmoteAdmin({ onClose }) {
     }
   }
 
+  // Repositionner à une position arbitraire (ex : taper "5" pour passer en #5).
+  // Contrairement à handleMove qui swap juste deux voisins, ici on splice et
+  // on réécrit toute la séquence de sort_order de 1 à N — c'est le seul moyen
+  // fiable de garantir la position visuelle voulue (les sort_order pouvaient
+  // avoir des trous accumulés au fil des swaps).
+  const handleSetPosition = async (item, newPosRaw) => {
+    const newPos = parseInt(newPosRaw, 10)
+    const oldIdx = items.findIndex(i => i.id === item.id)
+    if (oldIdx === -1) return
+    // Hors plage ou identique → no-op (le `key` du input forcera la remise
+    // à la bonne valeur visuelle au prochain render).
+    if (!Number.isInteger(newPos) || newPos < 1 || newPos > items.length) return
+    const newIdx = newPos - 1
+    if (newIdx === oldIdx) return
+
+    // Optimistic UI : on réordonne localement avant le round-trip
+    const reordered = [...items]
+    reordered.splice(oldIdx, 1)
+    reordered.splice(newIdx, 0, item)
+    setItems(reordered)
+
+    setSavingId(item.id)
+    try {
+      // Réassigne sort_order = position+1 pour TOUS les items qui ont
+      // changé de position. Filtre les inchangés pour minimiser les writes.
+      const updates = reordered
+        .map((it, i) => ({ id: it.id, sort_order: i + 1, prev: it.sort_order }))
+        .filter(u => u.prev !== u.sort_order)
+      const results = await Promise.all(
+        updates.map(u =>
+          supabase.from('shop_items').update({ sort_order: u.sort_order }).eq('id', u.id)
+        )
+      )
+      const firstError = results.find(r => r.error)?.error
+      if (firstError) throw firstError
+      await load()
+    } catch (err) {
+      alert(`Erreur de tri : ${err.message}`)
+      await load() // resync DB en cas d'échec
+    } finally {
+      setSavingId(null)
+    }
+  }
+
   // Réordonner : swap du sort_order entre l'item et son voisin (haut ou bas).
   // Marche même si les sort_order ont des trous (1, 3, 7…) : on échange juste
   // les deux valeurs existantes au lieu de réécrire toute la séquence.
@@ -279,7 +323,10 @@ export default function EmoteAdmin({ onClose }) {
 
           return (
             <div key={item.id} className={`emote-admin-row ${isPack ? 'is-pack' : ''} ${!item.is_visible ? 'is-hidden' : ''}`}>
-              {/* Reorder arrows */}
+              {/* Reorder : flèches pour décaler d'un cran + input pour
+                  taper directement la position cible (1..N) puis Enter/blur.
+                  Le `key` lié à idx force le re-mount du champ quand la
+                  position change, pour resynchroniser defaultValue. */}
               <div className="emote-admin-reorder">
                 <button
                   type="button"
@@ -289,7 +336,30 @@ export default function EmoteAdmin({ onClose }) {
                   title="Monter"
                   aria-label="Monter"
                 >▲</button>
-                <span className="emote-admin-reorder-pos">#{idx + 1}</span>
+                <input
+                  key={`pos-${item.id}-${idx}`}
+                  type="number"
+                  min={1}
+                  max={items.length}
+                  defaultValue={idx + 1}
+                  className="emote-admin-reorder-pos-input"
+                  disabled={saving}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      e.currentTarget.blur()
+                    } else if (e.key === 'Escape') {
+                      e.currentTarget.value = String(idx + 1)
+                      e.currentTarget.blur()
+                    }
+                  }}
+                  onBlur={(e) => {
+                    const v = parseInt(e.target.value, 10)
+                    if (Number.isInteger(v) && v !== idx + 1) handleSetPosition(item, v)
+                  }}
+                  title={`Position actuelle : ${idx + 1}. Tape un numéro (1-${items.length}) + Entrée pour repositionner.`}
+                  aria-label={`Position (actuellement ${idx + 1}, sur ${items.length})`}
+                />
                 <button
                   type="button"
                   className="emote-admin-reorder-btn"
