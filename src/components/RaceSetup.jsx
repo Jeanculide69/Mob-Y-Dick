@@ -1003,14 +1003,6 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
           {/* ─── Import actions ─── */}
           {teams.length === 0 && (
             <div style={{ display: 'flex', gap: '12px', marginBottom: '20px', flexWrap: 'wrap', width: '100%' }}>
-              <button 
-                type="button"
-                className="btn btn-outline" 
-                onClick={handleImportDemoTeams}
-                style={{ flex: 1, minWidth: '240px', borderColor: 'var(--accent)', color: 'var(--accent)', background: 'rgba(255, 85, 0, 0.05)', fontWeight: 'bold' }}
-              >
-                🚀 Importer la Liste Démo (20 équipes de test)
-              </button>
               {previousSessions.length > 0 && (
                 <button 
                   type="button"
