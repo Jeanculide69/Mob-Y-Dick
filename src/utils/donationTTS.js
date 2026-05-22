@@ -51,6 +51,17 @@ const pickFrenchVoice = () => {
       || null
 }
 
+/** Cherche une voix française féminine (Amélie/Marie sur Mac, Hortense/Julie sur
+ *  Windows, Audrey/Léa sur Android Google TTS). Fallback : première voix française. */
+const pickFrenchFemaleVoice = () => {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return null
+  const voices = window.speechSynthesis.getVoices()
+  const frenchVoices = voices.filter(v => v.lang?.startsWith('fr'))
+  // Liste large : noms d'OS connus + heuristiques Google ("Female", "Femme")
+  const female = frenchVoices.find(v => /(amelie|amélie|marie|hortense|julie|audrey|léa|virginie|female|femme|google français)/i.test(v.name))
+  return female || frenchVoices.find(v => v.lang === 'fr-FR') || frenchVoices[0] || null
+}
+
 /** Cherche une voix française masculine (Thomas sur Mac, Paul sur Windows). */
 const pickFrenchMaleVoice = () => {
   if (typeof window === 'undefined' || !window.speechSynthesis) return null
@@ -95,29 +106,36 @@ export const speakDonation = (d, opts = {}) => {
   const amount = Number(d.amount || 0)
   const message = cleanForTTS(d.message)
 
-  // Construction de la phrase. Comme sur Twitch :
-  //   "Rider44 vient de donner 5 euros, il dit : Allez les gars !"
-  // Si pas de message, on s'arrête au montant.
+  // Construction de la phrase, ton "présentatrice live" :
+  //   "Rider44 vient d'offrir 5 euros, et dit : Allez les gars !"
+  // (verbe "offrir" cohérent avec les produits "Offrir une bière / le mélange /
+  //  l'huile / un pneu" — plus de "donner" qui rappelait la cagnotte).
   let phrase
   if (amount >= 1) {
     const euros = Number.isInteger(amount) ? `${amount}` : amount.toFixed(2).replace('.', ',')
-    phrase = `${name} vient de donner ${euros} euros`
+    phrase = `${name} vient d'offrir ${euros} euros`
     if (message) phrase += `, et dit : ${message}`
   } else {
     phrase = `${name} envoie un message`
     if (message) phrase += ` : ${message}`
   }
 
-  // Cancel ce qui était en cours (anti-empilage si plusieurs dons rapprochés)
+  // Cancel ce qui était en cours (anti-empilage si plusieurs messages rapprochés)
   try { window.speechSynthesis.cancel() } catch { /* ignore */ }
 
   const utterance = new SpeechSynthesisUtterance(phrase)
   utterance.lang = 'fr-FR'
   utterance.rate = opts.rate ?? 1.05
-  utterance.pitch = opts.pitch ?? 1
+  // Pitch légèrement remonté pour renforcer la couleur féminine, surtout
+  // utile sur les OS où aucune voix féminine n'est installée (le pitch
+  // s'applique à la voix par défaut).
+  utterance.pitch = opts.pitch ?? 1.15
   utterance.volume = opts.volume ?? 0.85
 
-  const frenchVoice = pickFrenchVoice()
+  // Voix féminine en priorité (cohérent avec l'ancienne expérience SuperChat
+  // façon Twitch). Fallback sur la première voix française dispo si l'OS
+  // n'en a pas (sera juste neutre).
+  const frenchVoice = pickFrenchFemaleVoice() || pickFrenchVoice()
   if (frenchVoice) utterance.voice = frenchVoice
 
   try { window.speechSynthesis.speak(utterance) }
