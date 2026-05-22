@@ -3,7 +3,7 @@ import { supabase } from '../supabaseClient'
 import AgoraRTC from 'agora-rtc-sdk-ng'
 import './RaceSetup.css'
 
-const DEFAULT_CATEGORIES = ['Prototype', 'Cadre en V', 'Origine', '50cc', '70cc']
+const DEFAULT_CATEGORIES = ['Cadre en V serie A 50cc', 'Cadre en V serie B 70cc', 'Scoopette', 'Cadre tubulaire', 'Proto']
 
 const DEMO_TEAMS = [
   { moto_number: 11, category: 'Prototype', pilot_1_name: 'Maxime Durand', pilot_1_sex: 'M', pilot_2_name: 'Lucas Martin', pilot_2_sex: 'M' },
