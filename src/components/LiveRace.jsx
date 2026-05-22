@@ -277,13 +277,17 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       } else if (head.type === 'premium-reaction') {
         const item = head.item
         const override = MEDIA_OVERRIDES[item.slug]
-        // Pour le klaxon (et tout futur override), on remplace le son par
-        // l'asset local hardcodé — peu importe ce qui est dans Supabase.
-        const soundUrl = override?.soundSrc || item.sound_url
-        const overrideIsVideo = override?.mediaType === 'mp4'
-        const supabaseIsVideo = item.media_type === 'mp4' ||
-          /\.(mp4|webm)($|\?)/i.test(item.media_url || item.animation_url || '')
-        const isVideo = override ? overrideIsVideo : supabaseIsVideo
+        // Priorité : ce que l'admin a uploadé dans Supabase via EmoteAdmin
+        // GAGNE sur le hardcoded override (qui ne sert plus que de fallback
+        // pour les emotes sans upload custom). Avant : l'override forçait
+        // toujours le PNG local → un MP4 uploadé ne se jouait jamais.
+        const hasSupabaseMedia = !!(item.media_url || item.animation_url)
+        const hasSupabaseSound = !!item.sound_url
+        const soundUrl = hasSupabaseSound ? item.sound_url : (override?.soundSrc || null)
+        const isVideo = hasSupabaseMedia
+          ? (item.media_type === 'mp4' ||
+             /\.(mp4|webm)($|\?)/i.test(item.media_url || item.animation_url || ''))
+          : (override?.mediaType === 'mp4')
 
         if (soundUrl) {
           try {
@@ -1096,13 +1100,16 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
 
           {/* ── Premium Emote Overlays (une à la fois aussi) ── */}
           {activeAlerts.filter(a => a.type === 'premium-reaction').slice(0, 1).map(a => {
-            // Override prioritaire pour les emotes au visuel hardcodé (ex: klaxon).
-            // Sinon : media_url (v15 admin upload) → fallback animation_url (legacy).
+            // Priorité : ce que l'admin a uploadé dans Supabase (via EmoteAdmin)
+            // GAGNE sur le hardcoded MEDIA_OVERRIDES — l'override n'est qu'un
+            // fallback pour les emotes sans upload custom. Avant : l'override
+            // forçait toujours le PNG, donc un MP4 uploadé n'apparaissait pas.
             const override = MEDIA_OVERRIDES[a.item.slug]
-            const mediaSrc = override?.mediaSrc || a.item.media_url || a.item.animation_url
-            const isVideo = override
-              ? override.mediaType === 'mp4'
-              : (a.item.media_type === 'mp4' || /\.(mp4|webm)($|\?)/i.test(mediaSrc || ''))
+            const supabaseMedia = a.item.media_url || a.item.animation_url
+            const mediaSrc = supabaseMedia || override?.mediaSrc
+            const isVideo = supabaseMedia
+              ? (a.item.media_type === 'mp4' || /\.(mp4|webm)($|\?)/i.test(supabaseMedia))
+              : (override?.mediaType === 'mp4')
             // Classe CSS d'animation spécifique au slug — override emotePopIn
             // sur le wrapper (cf. règle :has() dans LiveRace.css).
             // ON N'APPLIQUE PAS la classe slug sur les vidéos : les keyframes
@@ -1110,8 +1117,8 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
             // 5s+. L'image disparaîtrait avant la fin du clip. Les vidéos
             // ont déjà leur propre choré interne.
             const animClass = isVideo ? '' : (SLUG_ANIM_CLASS[a.item.slug] || '')
-            // Son séparé : présent côté Supabase OU forcé par l'override (klaxon).
-            const hasSeparateSound = !!(override?.soundSrc || a.item.sound_url)
+            // Son séparé : prio au sound_url Supabase, fallback sur l'override.
+            const hasSeparateSound = !!(a.item.sound_url || (!supabaseMedia && override?.soundSrc))
             return (
               <div key={a.id} className="live-emote-overlay-stage">
                 <div className="live-premium-emote-alert">
