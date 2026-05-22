@@ -115,7 +115,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   const [userPurchases, setUserPurchases] = useState([])
   const [activeAlerts, setActiveAlerts] = useState([])
   const [shopOpen, setShopOpen] = useState(false)
-  // Filtre catégorie de la boutique : 'all' | 'emote' | 'dedication' | 'sponsoring'
+  // Filtre catégorie de la boutique : 'all' | 'emote' | 'sponsoring'
   const [shopCategoryFilter, setShopCategoryFilter] = useState('all')
   const [fabOpen, setFabOpen] = useState(false) // floating action button
   const fabLastToggleRef = useRef(0) // debounce hard contre double-fire mobile
@@ -1428,8 +1428,8 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
               <div className="live-reactions glass">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <h3 className="live-reactions-title" style={{ margin: 0 }}>💬 Réagir</h3>
-                  <button className="live-premium-support-btn" onClick={() => { setShopCategoryFilter('dedication'); setShopOpen(true); }}>
-                    🎤 Dédicace Live
+                  <button className="live-premium-support-btn" onClick={() => { setShopCategoryFilter('sponsoring'); setShopOpen(true); }}>
+                    🏍️ Sponsoriser la Team
                   </button>
                 </div>
                 <div className="live-reactions-grid">
@@ -1502,16 +1502,18 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
          centrée sur le viewport, surtout visible sur mobile où la section
          est plus haute que l'écran.
 
-         Un seul écran, filtres par catégorie (toutes / emotes / dédicaces /
-         sponsoring). Plus aucun montant libre : chaque achat passe par un
-         produit shop_items à prix fixe (conformité Stripe v26). */}
+         Un seul écran, filtres par catégorie (toutes / emotes / sponsoring).
+         Plus aucun montant libre : chaque achat passe par un produit
+         shop_items à prix fixe (conformité Stripe v26). Le sponsoring
+         (bière, bougie, mélange, huile, pneu) ouvre une modal avec pseudo
+         + message custom comme l'ancien formulaire de don. */}
       {shopOpen && createPortal(
         <div className="premium-modal-overlay" onClick={() => setShopOpen(false)}>
           <div className="premium-modal glass" onClick={(e) => e.stopPropagation()}>
             <div className="premium-modal-header">
               <div className="premium-modal-title-area">
                 <h2>🛍️ Boutique Live</h2>
-                <p className="premium-modal-subtitle">Animez le direct avec emotes, dédicaces et sponsoring !</p>
+                <p className="premium-modal-subtitle">Animez le direct avec nos emotes et sponsorisez la team !</p>
               </div>
               <button className="btn btn-ghost" onClick={() => setShopOpen(false)} style={{ padding: '4px 8px', fontSize: '1.2rem', color: 'var(--text-muted)' }}>✕</button>
             </div>
@@ -1521,7 +1523,6 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
               {[
                 { key: 'all',         label: '🛒 Tout' },
                 { key: 'emote',       label: '🎭 Emotes' },
-                { key: 'dedication',  label: '🎤 Dédicaces' },
                 { key: 'sponsoring',  label: '🏍️ Sponsoring' },
               ].map(({ key, label }) => (
                 <button
@@ -1538,14 +1539,14 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
               <div className="premium-shop-grid">
                 {!authUser && shopCategoryFilter === 'emote' && (
                   <div style={{ padding: '15px', background: 'rgba(255,85,0,0.1)', border: '1px solid var(--accent)', borderRadius: '12px', textAlign: 'center', marginBottom: '15px', color: '#fff' }}>
-                    <p style={{ margin: '0 0 10px 0', fontSize: '0.85rem' }}>💡 Connecte-toi pour acheter et débloquer définitivement des emotes premium. Dédicaces et sponsoring peuvent être achetés sans compte.</p>
+                    <p style={{ margin: '0 0 10px 0', fontSize: '0.85rem' }}>💡 Connecte-toi pour acheter et débloquer définitivement des emotes premium. Le sponsoring peut être acheté sans compte.</p>
                   </div>
                 )}
                 {shopItems
                   .filter(item => shopCategoryFilter === 'all' || (item.category || 'emote') === shopCategoryFilter)
                   .map(item => {
                     // Seuls les items non-repeatable peuvent être "owned" (emotes / packs).
-                    // Les services repeatable (dédicaces, sponsoring) sont achetables N fois.
+                    // Les services repeatable (sponsoring) sont achetables N fois.
                     const isRepeatable = !!item.repeatable;
                     const isOwned = !isRepeatable && (userPurchases.includes(item.slug) || userPurchases.includes('pack_premium_all'));
                     const isPack = item.type === 'pack';
@@ -1601,7 +1602,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                         amountCents: 500,
                         message: 'Simulation d\'achat (Admin) — test d\'overlay live',
                         sessionId: session?.id || null,
-                        itemSlug: 'dedication_5',
+                        itemSlug: 'sponsor_beer',
                       },
                     });
                     if (error || !data?.ok) {
@@ -1616,7 +1617,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
               )}
 
               <div style={{ marginTop: '15px', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', lineHeight: '1.4' }}>
-                <p style={{ margin: 0 }}>Chaque achat est un service de divertissement à prix fixe (animation live, dédicace audio, sponsoring symbolique).</p>
+                <p style={{ margin: 0 }}>Chaque achat est un service de divertissement à prix fixe (animation live, sponsoring symbolique avec message lu à l'antenne).</p>
                 <p style={{ margin: '4px 0 0 0' }}>Paiement sécurisé via Stripe. Achat ferme et définitif, sans remboursement ultérieur (service immédiat consommé en direct).</p>
               </div>
             </div>
@@ -1674,8 +1675,8 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                 <button className="live-fab-action-btn" onClick={() => { setShopCategoryFilter('all'); setShopOpen(true); setFabOpen(false); }}>
                   🛍️ Boutique
                 </button>
-                <button className="live-fab-action-btn donation" onClick={() => { setShopCategoryFilter('dedication'); setShopOpen(true); setFabOpen(false); }}>
-                  🎤 Dédicace Live
+                <button className="live-fab-action-btn donation" onClick={() => { setShopCategoryFilter('sponsoring'); setShopOpen(true); setFabOpen(false); }}>
+                  🏍️ Sponsoriser
                 </button>
               </div>
 

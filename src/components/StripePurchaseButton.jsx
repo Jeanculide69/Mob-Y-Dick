@@ -1,8 +1,8 @@
 /**
  * StripePurchaseButton — Bouton + modal pour acheter un produit shop_items
  *
- * Affiche un bouton "Acheter Xe" sur une carte produit (emote / dédicace /
- * sponsoring). Au clic, ouvre une modal avec :
+ * Affiche un bouton "Acheter Xe" sur une carte produit (emote ou sponsoring).
+ * Au clic, ouvre une modal avec :
  *  - Récap : nom + emoji + prix
  *  - Si item.allows_custom_message :
  *      • champ pseudo (auto-rempli depuis le profil si connecté, sinon saisie)

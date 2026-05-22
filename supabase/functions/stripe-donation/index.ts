@@ -13,7 +13,7 @@
  *
  * ─── Actions front (POST JSON avec `action`) ───
  *   - create-purchase-intent  → PaymentIntent pour un produit shop_items
- *                                (emote, dédicace, sponsoring) à prix fixe.
+ *                                (emote ou sponsoring) à prix fixe.
  *                                Accepte customMessage/displayName/sessionId
  *                                pour les items avec allows_custom_message.
  *                                Achat anonyme autorisé si category != 'emote'.
@@ -222,7 +222,7 @@ async function processIntentSucceeded(intent: any, supabase: any) {
     const allowsMsg = !!item?.allows_custom_message
 
     // user_id peut être vide string ('') pour les achats anonymes (un
-    // visiteur non connecté qui paie une dédicace). NULL en DB.
+    // visiteur non connecté qui paie un sponsoring). NULL en DB.
     const userId = md.user_id && md.user_id !== '' ? md.user_id : null
 
     const { data: purchaseRow, error: insertErr } = await supabase
@@ -365,7 +365,7 @@ serve(async (req: Request) => {
 
   const { action } = body
 
-  // Auth user (optionnel pour les achats anonymes de dédicace/sponsoring)
+  // Auth user (optionnel pour les achats anonymes de sponsoring)
   let authUserId: string | null = null
   const authHeader = req.headers.get('Authorization')
   if (authHeader?.startsWith('Bearer ')) {
@@ -378,11 +378,11 @@ serve(async (req: Request) => {
 
   // ──────────────────────────────────────
   // 1. CREATE-PURCHASE-INTENT
-  //    Achat d'un produit shop_items (emote / dédicace / sponsoring).
+  //    Achat d'un produit shop_items (emote ou sponsoring).
   //    Prix lu en DB côté serveur (anti-tampering client).
   //
   //    Auth required uniquement si item.category === 'emote' (déblocage
-  //    permanent attaché à un compte). Pour dédicaces et sponsoring,
+  //    permanent attaché à un compte). Pour le sponsoring,
   //    l'achat anonyme est autorisé.
   //
   //    `repeatable=false` ET déjà possédé → refuse l'achat.

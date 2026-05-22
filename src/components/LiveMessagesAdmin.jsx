@@ -1,6 +1,6 @@
 /**
- * LiveMessagesAdmin — Historique des messages live (achats avec dédicace)
- * et des déclenchements d'emotes.
+ * LiveMessagesAdmin — Historique des messages live (achats de sponsoring
+ * avec message custom) et des déclenchements d'emotes.
  *
  * Trois onglets :
  *  - 💬 Messages live (live_messages) : journal des achats avec message
