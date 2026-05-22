@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '../supabaseClient'
+import AgoraRTC from 'agora-rtc-sdk-ng'
 import LiveTeamDrawer from './LiveTeamDrawer'
 // Lazy-load du composant Stripe : il charge le SDK stripe.js (~50 KB) via
 // loadStripe() au niveau module. Avec lazy, ce coût est payé seulement quand
@@ -169,12 +170,9 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   const seenDonationIdsRef  = useRef(new Set())
 
   // ── Stream vidéo broadcaster (orga) → viewer ──
-  // RaceSetup.LiveVideoBroadcaster capture la caméra du téléphone de l'orga
-  // et envoie des frames JPEG base64 toutes les 250ms via le channel
-  // `live-stream-${sessionId}` event 'video-frame'. Ici on s'abonne au
-  // channel et on update directement le src de l'<img> via ref — pas de
-  // setState pour ne pas re-render à 4 fps un long string base64.
-  const streamImgRef = useRef(null)
+  // Agora gère l'injection de la vidéo directement dans la div
+  const streamDivRef = useRef(null)
+  const agoraClientRef = useRef(null)
   // Booléen state pour afficher le panneau vidéo dès qu'une frame arrive
   // (avant ça, on affiche un placeholder "En attente du signal"). On dépend
   // aussi de session.live_stream_active pour montrer/cacher l'encadré.
@@ -618,30 +616,50 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   }, [session?.started_at, session?.status])
   /* eslint-enable react-hooks/set-state-in-effect */
 
-  // ── Stream vidéo : subscribe au channel quand un live est actif ──
-  // On reçoit les frames JPEG base64 et on les pousse directement dans
-  // l'<img> via ref, sans setState (pour ne pas re-render React à 4 fps).
-  // Reset streamReceiving=false à chaque changement de session pour
-  // qu'un viewer qui zappe d'une course à l'autre voie le placeholder.
+  // ── Stream vidéo : subscribe au channel Agora quand un live est actif ──
   useEffect(() => {
     if (!session?.id || !session?.live_stream_active) {
       setStreamReceiving(false)
       return
     }
     setStreamReceiving(false)
-    const ch = supabase.channel(`live-stream-${session.id}`)
-      .on('broadcast', { event: 'video-frame' }, ({ payload }) => {
-        if (!payload?.image) return
-        if (streamImgRef.current) {
-          streamImgRef.current.src = payload.image
+    let isMounted = true
+
+    const client = AgoraRTC.createClient({ mode: "live", codec: "vp8", role: "audience" })
+    agoraClientRef.current = client
+
+    client.on("user-published", async (user, mediaType) => {
+      await client.subscribe(user, mediaType)
+      if (mediaType === "video" && isMounted) {
+        setStreamReceiving(true)
+        if (streamDivRef.current) {
+          user.videoTrack.play(streamDivRef.current)
         }
-        // Bascule l'affichage du panneau dès la 1re frame (placeholder
-        // "En attente" → vidéo réelle). Une seule fois pour éviter de
-        // setState à chaque frame.
-        setStreamReceiving(prev => prev || true)
-      })
-      .subscribe()
-    return () => supabase.removeChannel(ch)
+      }
+      if (mediaType === "audio" && isMounted) {
+        user.audioTrack.play()
+      }
+    })
+
+    const joinAgora = async () => {
+      try {
+        const appId = import.meta.env.VITE_AGORA_APP_ID;
+        if (!appId) return;
+        const channelName = `live-stream-${session.id}`
+        await client.join(appId, channelName, null, null)
+      } catch (err) {
+        console.error("Agora join error", err)
+      }
+    }
+    joinAgora()
+
+    return () => {
+      isMounted = false
+      if (agoraClientRef.current) {
+        agoraClientRef.current.leave().catch(console.error)
+        agoraClientRef.current = null
+      }
+    }
   }, [session?.id, session?.live_stream_active])
 
   // ── Initial load ──
@@ -1222,7 +1240,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
           </div>
         </div>
 
-        {/* ── Stream vidéo live (broadcast par l'orga depuis son téléphone) ──
+        {/* ── Stream vidéo live (broadcast par l'orga via Agora) ──
             Visible uniquement si session.live_stream_active=true. Tant qu'on
             n'a pas reçu la première frame, on affiche un placeholder. */}
         {session?.live_stream_active && (
@@ -1234,10 +1252,9 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
               </h3>
             </div>
             <div style={{ position: 'relative', width: '100%', aspectRatio: '16/9', borderRadius: '10px', overflow: 'hidden', background: '#000', border: '1px solid rgba(255,255,255,0.06)' }}>
-              <img
-                ref={streamImgRef}
-                alt="Diffusion live de l'organisateur"
-                style={{ width: '100%', height: '100%', objectFit: 'cover', display: streamReceiving ? 'block' : 'none' }}
+              <div
+                ref={streamDivRef}
+                style={{ width: '100%', height: '100%', display: streamReceiving ? 'block' : 'none' }}
               />
               {!streamReceiving && (
                 <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '8px', color: 'var(--text-muted)' }}>

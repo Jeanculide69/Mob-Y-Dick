@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../supabaseClient'
+import AgoraRTC from 'agora-rtc-sdk-ng'
 import './RaceSetup.css'
 
 const DEFAULT_CATEGORIES = ['Prototype', 'Cadre en V', 'Origine', '50cc', '70cc']
@@ -1099,20 +1100,17 @@ function LiveVideoBroadcaster({ session, raceSession }) {
   const [errorMsg, setErrorMsg] = useState(null)
   
   const videoRef = useRef(null)
-  const streamRef = useRef(null)
-  const intervalRef = useRef(null)
-  const channelRef = useRef(null)
+  const clientRef = useRef(null)
+  const trackRef = useRef(null)
 
   // Auto clean-up on unmount
   useEffect(() => {
     return () => {
-      // Clear capture loop
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
+      if (trackRef.current) {
+        trackRef.current.close()
       }
-      // Stop camera track
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop())
+      if (clientRef.current) {
+        clientRef.current.leave().catch(console.error)
       }
     }
   }, [])
@@ -1134,83 +1132,66 @@ function LiveVideoBroadcaster({ session, raceSession }) {
         throw new Error("⚠️ Un live est déjà en cours de diffusion sur cette course par un autre organisateur.")
       }
 
-      // 2. Request camera stream
-      // Résolution capture réduite (320x180 au lieu de 640x360) pour limiter
-      // l'egress Supabase Realtime sur le tier free (5 GB/mois cumulés).
-      // Avec ≤50 viewers, on tient ~1h de live mensuel à 2fps × ~12KB/frame.
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment', width: { ideal: 320 }, height: { ideal: 180 } },
-        audio: false
+      // 2. Initialize Agora Client
+      const client = AgoraRTC.createClient({ mode: "live", codec: "vp8", role: "host" })
+      clientRef.current = client
+      
+      const appId = import.meta.env.VITE_AGORA_APP_ID;
+      if (!appId) throw new Error("VITE_AGORA_APP_ID est manquant dans la configuration.")
+      
+      const channelName = `live-stream-${raceSession.id}`;
+      await client.join(appId, channelName, null, session.user.id)
+
+      // 3. Create local video track (480p is a good balance for mobile streaming)
+      const videoTrack = await AgoraRTC.createCameraVideoTrack({
+        encoderConfig: "480p_1" 
       })
+      trackRef.current = videoTrack
 
-      streamRef.current = stream
-      // Small timeout to allow video tag to mount and be ready
-      setTimeout(() => {
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream
-        }
-      }, 100)
+      // 4. Play local track in video container
+      if (videoRef.current) {
+        videoTrack.play(videoRef.current)
+      }
 
-      // 3. Update DB
+      // 5. Publish to Agora
+      await client.publish(videoTrack)
+
+      // 6. Update DB
       await supabase.from('race_sessions').update({
         live_stream_active: true,
         live_stream_user_id: session.user.id
       }).eq('id', raceSession.id)
 
-      // 4. Initialize Signaling / Frame Channel
-      const channel = supabase.channel(`live-stream-${raceSession.id}`)
-      channelRef.current = channel
-      channel.subscribe()
-
-      // 5. Canvas capture interval — 2fps × 320x180 × JPEG 0.3 → frames de
-      // ~10-15KB au lieu de ~50KB. Combiné avec la réduction de résolution
-      // capture, on divise l'egress par ~8 (≤1h de live à 50 viewers/mois
-      // gratuit). Si on bascule un jour sur Supabase Pro ou YouTube Live
-      // embed, remonter à 4fps × 480x270 × 0.5 redonne la qualité d'origine.
-      const canvas = document.createElement('canvas')
-      canvas.width = 320
-      canvas.height = 180
-      const ctx = canvas.getContext('2d')
-
-      intervalRef.current = setInterval(() => {
-        if (videoRef.current && videoRef.current.readyState === 4) {
-          ctx.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height)
-          const base64Frame = canvas.toDataURL('image/jpeg', 0.3) // compression agressive (frames ~12KB)
-
-          channel.send({
-            type: 'broadcast',
-            event: 'video-frame',
-            payload: { image: base64Frame }
-          })
-        }
-      }, 500) // 2 fps — confort visuel ambiance, économie egress × 2
-
       setIsStreaming(true)
     } catch (err) {
       console.error(err)
       setErrorMsg(err.message)
+      // Cleanup if failed
+      if (trackRef.current) {
+        trackRef.current.close()
+        trackRef.current = null
+      }
+      if (clientRef.current) {
+        await clientRef.current.leave()
+        clientRef.current = null
+      }
     } finally {
       setLoading(false)
     }
   }
 
   const stopStreaming = async () => {
-    // Clear capture loop
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current)
-      intervalRef.current = null
+    if (trackRef.current) {
+      trackRef.current.close()
+      trackRef.current = null
     }
-
-    // Stop camera track
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(track => track.stop())
-      streamRef.current = null
-    }
-
-    // Clean channels
-    if (channelRef.current) {
-      supabase.removeChannel(channelRef.current)
-      channelRef.current = null
+    if (clientRef.current) {
+      try {
+        await clientRef.current.leave()
+      } catch(e) {
+        console.error("Agora leave error", e)
+      }
+      clientRef.current = null
     }
 
     // Update DB
@@ -1241,12 +1222,9 @@ function LiveVideoBroadcaster({ session, raceSession }) {
       {isStreaming ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '15px' }}>
           <div style={{ position: 'relative', width: '100%', maxWidth: '360px', aspectRatio: '16/9', borderRadius: '8px', overflow: 'hidden', background: '#000', border: '1px solid rgba(255,255,255,0.1)' }}>
-            <video 
+            <div 
               ref={videoRef} 
-              autoPlay 
-              playsInline 
-              muted 
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              style={{ width: '100%', height: '100%' }}
             />
             <span style={{ position: 'absolute', top: '10px', left: '10px', background: '#ff3b30', color: '#fff', fontSize: '0.75rem', padding: '3px 8px', borderRadius: '20px', fontWeight: 'bold', display: 'flex', alignItems: 'center', gap: '5px', zIndex: 10 }}>
               <span style={{ width: '6px', height: '6px', background: '#fff', borderRadius: '50%', animation: 'pulse 1.5s infinite' }} />
