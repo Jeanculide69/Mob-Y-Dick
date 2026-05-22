@@ -187,6 +187,9 @@
 
 .race-form-group input,
 .race-form-group select {
+  width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
   padding: 8px 12px;
   background: rgba(0, 0, 0, 0.3);
   border: 1px solid var(--border-subtle);
@@ -194,6 +197,16 @@
   color: var(--text-primary);
   font-size: 0.9rem;
   font-family: var(--font-body);
+}
+
+/* Hide spin buttons for cleaner look */
+.race-form-group input[type=number]::-webkit-inner-spin-button, 
+.race-form-group input[type=number]::-webkit-outer-spin-button { 
+  -webkit-appearance: none; 
+  margin: 0; 
+}
+.race-form-group input[type=number] {
+  -moz-appearance: textfield;
 }
 
 .race-form-group input:focus,
