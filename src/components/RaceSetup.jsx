@@ -139,24 +139,41 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
 
   const handleTeamSubmit = async (e) => {
     e.preventDefault()
-    if (!raceSession) return
+    if (!raceSession) {
+      alert("Aucune session de course créée. Cliquez d'abord sur \"Créer la session\".")
+      return
+    }
+
+    const motoNum = parseInt(teamForm.moto_number)
+    if (!motoNum || isNaN(motoNum)) {
+      alert("Numéro de moto invalide.")
+      return
+    }
+    if (!teamForm.pilot_1_name?.trim()) {
+      alert("Le nom du pilote 1 est obligatoire.")
+      return
+    }
 
     const payload = {
       session_id: raceSession.id,
-      moto_number: parseInt(teamForm.moto_number),
+      moto_number: motoNum,
       category: teamForm.category,
-      pilot_1_name: teamForm.pilot_1_name,
+      pilot_1_name: teamForm.pilot_1_name.trim(),
       pilot_1_sex: teamForm.pilot_1_sex,
-      pilot_2_name: teamForm.pilot_2_name || null,
-      pilot_2_sex: teamForm.pilot_2_name ? teamForm.pilot_2_sex : null,
-      pilot_3_name: teamForm.pilot_3_name || null,
-      pilot_3_sex: teamForm.pilot_3_name ? teamForm.pilot_3_sex : null,
+      pilot_2_name: teamForm.pilot_2_name?.trim() || null,
+      pilot_2_sex: teamForm.pilot_2_name?.trim() ? teamForm.pilot_2_sex : null,
+      pilot_3_name: teamForm.pilot_3_name?.trim() || null,
+      pilot_3_sex: teamForm.pilot_3_name?.trim() ? teamForm.pilot_3_sex : null,
     }
 
-    if (editingTeam) {
-      await supabase.from('race_teams').update(payload).eq('id', editingTeam.id)
-    } else {
-      await supabase.from('race_teams').insert([payload])
+    const { error } = editingTeam
+      ? await supabase.from('race_teams').update(payload).eq('id', editingTeam.id)
+      : await supabase.from('race_teams').insert([payload])
+
+    if (error) {
+      console.error('race_teams insert/update error:', error)
+      alert(`Erreur lors de l'enregistrement de l'équipe : ${error.message}`)
+      return
     }
 
     setTeamForm({
@@ -1206,8 +1223,17 @@ function LiveVideoBroadcaster({ session, raceSession }) {
   const startStreaming = async () => {
     setLoading(true)
     setErrorMsg(null)
+
+    // Cascade de qualités : si la caméra refuse 1440p (OverconstrainedError),
+    // on retombe sur 1080p puis 720p avant d'abandonner.
+    const QUALITY_PROFILES = [
+      { label: '1440p', width: 2560, height: 1440, frameRate: 30, bitrateMin: 3000, bitrateMax: 7000 },
+      { label: '1080p', width: 1920, height: 1080, frameRate: 30, bitrateMin: 2000, bitrateMax: 4500 },
+      { label: '720p',  width: 1280, height: 720,  frameRate: 30, bitrateMin: 1000, bitrateMax: 2500 },
+    ]
+
     try {
-      // 1. Concurrency Check: Check if someone else is already streaming
+      // 1. Concurrency Check : un autre organisateur est-il déjà en train de streamer ?
       const { data: latestSession, error: checkError } = await supabase
         .from('race_sessions')
         .select('live_stream_active, live_stream_user_id')
@@ -1220,62 +1246,110 @@ function LiveVideoBroadcaster({ session, raceSession }) {
         throw new Error("⚠️ Un live est déjà en cours de diffusion sur cette course par un autre organisateur.")
       }
 
-      // 2. Initialize Agora Client
+      // Si c'est NOTRE propre verrou orphelin (crash précédent, fermeture brutale),
+      // on le libère silencieusement avant de relancer.
+      if (latestSession.live_stream_active && latestSession.live_stream_user_id === session.user.id) {
+        await supabase.from('race_sessions').update({
+          live_stream_active: false,
+          live_stream_user_id: null
+        }).eq('id', raceSession.id)
+      }
+
+      // 2. Init Agora client
+      const appId = import.meta.env.VITE_AGORA_APP_ID
+      if (!appId) throw new Error("VITE_AGORA_APP_ID est manquant dans la configuration.")
+
       const client = AgoraRTC.createClient({ mode: "live", codec: "vp8", role: "host" })
       clientRef.current = client
-      
-      const appId = import.meta.env.VITE_AGORA_APP_ID;
-      if (!appId) throw new Error("VITE_AGORA_APP_ID est manquant dans la configuration.")
-      
-      const channelName = `live-stream-${raceSession.id}`;
-      await client.join(appId, channelName, null, session.user.id)
 
-      // 3. Create local video & audio tracks
-      const videoTrack = await AgoraRTC.createCameraVideoTrack({
-        encoderConfig: {
-          width: 2560,
-          height: 1440,
-          frameRate: 30,
-          bitrateMin: 3000,
-          bitrateMax: 7000
-        },
-        facingMode: "environment", // Try to use rear camera by default
-        optimizationMode: "detail" // Prioritize image clarity/sharpness over framerate
-      })
-      const audioTrack = await AgoraRTC.createMicrophoneAudioTrack()
-      
+      const channelName = `live-stream-${raceSession.id}`
+      try {
+        await client.join(appId, channelName, null, session.user.id)
+      } catch (joinErr) {
+        // Messages Agora typiques : CAN_NOT_GET_GATEWAY_SERVER, INVALID_PARAMS,
+        // dynamic key timeout, etc.
+        const code = joinErr?.code || joinErr?.name
+        throw new Error(
+          `Connexion Agora refusée (${code || 'erreur API'}): ${joinErr.message || joinErr}. ` +
+          `Si le problème persiste, vérifie que le projet Agora est en mode "Testing" ` +
+          `(App ID sans token) ou rafraîchis la page.`,
+          { cause: joinErr }
+        )
+      }
+
+      // 3. Création des pistes vidéo + audio (avec fallback de résolution)
+      let videoTrack = null
+      let lastVideoErr = null
+      for (const profile of QUALITY_PROFILES) {
+        try {
+          videoTrack = await AgoraRTC.createCameraVideoTrack({
+            encoderConfig: {
+              width: profile.width,
+              height: profile.height,
+              frameRate: profile.frameRate,
+              bitrateMin: profile.bitrateMin,
+              bitrateMax: profile.bitrateMax,
+            },
+            facingMode: "environment",
+            optimizationMode: "detail"
+          })
+          console.info(`[stream] Caméra ouverte en ${profile.label}`)
+          break
+        } catch (camErr) {
+          lastVideoErr = camErr
+          console.warn(`[stream] ${profile.label} refusé, on tente plus bas:`, camErr?.message || camErr)
+        }
+      }
+      if (!videoTrack) {
+        throw new Error(
+          `Impossible d'ouvrir la caméra (${lastVideoErr?.name || 'erreur'}): ` +
+          `${lastVideoErr?.message || lastVideoErr}. Vérifie les autorisations caméra du navigateur.`,
+          { cause: lastVideoErr }
+        )
+      }
+
+      let audioTrack = null
+      try {
+        audioTrack = await AgoraRTC.createMicrophoneAudioTrack()
+      } catch (micErr) {
+        throw new Error(
+          `Impossible d'ouvrir le micro (${micErr?.name || 'erreur'}): ` +
+          `${micErr?.message || micErr}. Vérifie les autorisations micro du navigateur.`,
+          { cause: micErr }
+        )
+      }
+
       trackRef.current = videoTrack
       audioTrackRef.current = audioTrack
-      
-      // Enable Dual Stream for adaptive bitrate
-      await client.enableDualStream()
 
-      // 4. (Video preview is handled by the useEffect above once isStreaming=true renders the div)
+      // Dual stream pour bitrate adaptatif
+      try { await client.enableDualStream() } catch (dualErr) { console.warn('enableDualStream failed:', dualErr) }
 
-      // 5. Publish to Agora
+      // 4. Publish
       await client.publish([videoTrack, audioTrack])
 
-      // 6. Update DB
-      await supabase.from('race_sessions').update({
+      // 5. Update DB
+      const { error: updateErr } = await supabase.from('race_sessions').update({
         live_stream_active: true,
         live_stream_user_id: session.user.id
       }).eq('id', raceSession.id)
+      if (updateErr) throw updateErr
 
       setIsStreaming(true)
     } catch (err) {
-      console.error(err)
-      setErrorMsg(err.message)
-      // Cleanup if failed
+      console.error('[stream] startStreaming failed:', err)
+      setErrorMsg(err.message || String(err))
+      // Cleanup en cas d'échec
       if (trackRef.current) {
-        trackRef.current.close()
+        try { trackRef.current.close() } catch { /* ignore */ }
         trackRef.current = null
       }
       if (audioTrackRef.current) {
-        audioTrackRef.current.close()
+        try { audioTrackRef.current.close() } catch { /* ignore */ }
         audioTrackRef.current = null
       }
       if (clientRef.current) {
-        await clientRef.current.leave()
+        try { await clientRef.current.leave() } catch { /* ignore */ }
         clientRef.current = null
       }
     } finally {
