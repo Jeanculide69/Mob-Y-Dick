@@ -428,12 +428,14 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
     const nextLapNum = teamLaps.length + 1
 
     const { error } = await supabase.from('race_laps').insert([{
+      client_id: crypto.randomUUID(),
       session_id: raceSession.id,
       team_id: team.id,
       moto_number: motoNum,
       lap_time_ms: totalMs,
       lap_number: nextLapNum,
-      recorded_by: session.user.id
+      recorded_by: session.user.id,
+      recorded_at: new Date().toISOString()
     }])
 
     if (error) {
