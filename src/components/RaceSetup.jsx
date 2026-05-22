@@ -1152,7 +1152,8 @@ function LiveVideoBroadcaster({ session, raceSession }) {
       // 3. Create local video track (720p at 30fps for high quality race streaming)
       const videoTrack = await AgoraRTC.createCameraVideoTrack({
         encoderConfig: "720p_2",
-        facingMode: "environment" // Try to use rear camera by default
+        facingMode: "environment", // Try to use rear camera by default
+        optimizationMode: "motion" // Prioritize framerate over resolution when network drops
       })
       trackRef.current = videoTrack
 
