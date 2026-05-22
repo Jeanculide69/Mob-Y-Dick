@@ -34,7 +34,7 @@ const LazyLoader = () => (
   </div>
 )
 
-const SITE_VERSION = 'v3.0.0'
+const SITE_VERSION = 'v3.1.0'
 
 // Reusable Google AdSense component with highly premium, warm fallback mockup
 const GoogleAd = ({ slot = '1234567890', format = 'auto', style = { display: 'block' }, navigate }) => {
