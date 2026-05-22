@@ -61,6 +61,11 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   // Santé du canal Realtime : drive le fallback de polling (uniquement
   // actif quand le socket est en erreur, sinon coût nul).
   const [channelHealthy, setChannelHealthy] = useState(true)
+  // Génération du channel realtime : incrémenté à chaque CLOSED/TIMED_OUT
+  // pour forcer la recréation complète du channel via les deps du useEffect.
+  // Sans ça, supabase-js peut laisser le channel en CLOSED définitif (le
+  // socket sous-jacent se reconnecte mais ne re-join pas toujours le channel).
+  const [channelGen, setChannelGen] = useState(0)
   const [floatingEmojis, setFloatingEmojis] = useState([])
   const [announcement, setAnnouncement]     = useState(null)
   const [positionDeltas, setPositionDeltas] = useState({}) // teamId → signed int
@@ -222,6 +227,10 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   const elapsedRef          = useRef(null)
   const prevRankingsRef     = useRef({})
   const extrasChannelRef    = useRef(null)
+  // IDs des dons déjà notifiés en alerte (live realtime OU polling fallback).
+  // Permet d'appeler triggerDonationAlert sans risque de double déclenchement
+  // quand le polling rattrape un don déjà reçu via le channel realtime.
+  const seenDonationIdsRef  = useRef(new Set())
 
   // (Vidéo par WebSocket supprimée pour des raisons de performance)
 
@@ -369,6 +378,11 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   }
 
   const triggerDonationAlert = (row) => {
+    if (!row?.id) return
+    // Dedup : le polling fallback peut rattraper un don déjà notifié via
+    // le channel realtime. On garde la trace des IDs déjà alertés.
+    if (seenDonationIdsRef.current.has(row.id)) return
+    seenDonationIdsRef.current.add(row.id)
     setActiveAlerts(prev => [...prev, {
       id: newAlertId(),
       type: 'donation',
@@ -547,17 +561,22 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
         if (status === 'SUBSCRIBED') {
           setChannelHealthy(true)
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          console.warn('[LiveRace] Realtime channel status:', status, '→ activation du fallback polling')
+          console.warn('[LiveRace] Realtime channel status:', status, '→ recréation du channel + fallback polling')
           setChannelHealthy(false)
           // Resync immédiat pour rattraper ce qu'on a raté pendant le down
           refetchLaps(session.id)
           supabase.from('race_sessions').select('*').eq('id', session.id).maybeSingle()
             .then(({ data }) => { if (data) setSession(data) })
+          // Force la recréation complète du channel après un court backoff.
+          // Sans ça, supabase-js peut rester en CLOSED indéfiniment (le
+          // socket se reconnecte mais ne re-join pas toujours le channel).
+          // Le backoff de 2s évite un thundering retry sur un réseau down.
+          setTimeout(() => setChannelGen(g => g + 1), 2000)
         }
       })
     return () => supabase.removeChannel(ch)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session?.id])
+  }, [session?.id, channelGen])
 
   // ── Presence — spectator count ──
   useEffect(() => {
@@ -606,18 +625,24 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       .on('broadcast', { event: 'premium-reaction' }, ({ payload }) => {
         triggerPremiumReaction(payload.slug, payload.userDisplayName)
       })
-      // Note sécurité : on N'écoute PLUS `donation-simu` en broadcast.
-      // Avant, n'importe quel viewer pouvait envoyer ce broadcast depuis
-      // sa console DevTools et faire apparaître un faux MEGA DON à
-      // l'écran de tous les spectateurs (le check admin était client-side
-      // donc bypassable). Les dons de test admin passent désormais par un
-      // INSERT direct dans `donations` (RLS-protégé) → le realtime sur la
-      // table relaie automatiquement à tous les viewers, et seuls les
-      // admins authentifiés peuvent y arriver.
-      .subscribe()
+      // Simulation de don admin : émise par l'edge function `stripe-donation`
+      // (action='admin-simulate-donation') via la HTTP Realtime API en
+      // service_role. Le seul chemin d'émission passe par cette function
+      // qui exige role='admin' côté serveur → pas de spoof possible par
+      // les viewers. AUCUN insert en BDD : c'est purement de l'animation.
+      .on('broadcast', { event: 'donation-simu' }, ({ payload }) => {
+        triggerDonationAlert(payload)
+      })
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          // Recréation après backoff — sinon les broadcasts (réactions emojis,
+          // annonces orga, donation-simu) tombent au moindre déco socket.
+          setTimeout(() => setChannelGen(g => g + 1), 2000)
+        }
+      })
     extrasChannelRef.current = ch
     return () => supabase.removeChannel(ch)
-  }, [session?.id])
+  }, [session?.id, channelGen])
 
   // ── Elapsed timer ──
   // Deps spécifiques (avant : `[session]`, donc relancé à chaque remplacement
@@ -665,6 +690,12 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       setLaps(lapsData || [])
       const { data: annData } = await supabase.from('race_announcements').select('*').eq('session_id', s.id).order('created_at', { ascending: false })
       setAnnouncementsHistory(annData || [])
+      // Pré-charge les IDs des dons déjà existants : on ne veut PAS déclencher
+      // d'alerte pour les dons effectués avant que le viewer arrive sur le live.
+      // Seuls les futurs INSERT (via realtime ou polling) déclencheront une alerte.
+      const { data: existingDonations } = await supabase
+        .from('donations').select('id').eq('session_id', s.id)
+      seenDonationIdsRef.current = new Set((existingDonations || []).map(d => d.id))
     }
     setLoading(false)
   }
@@ -739,21 +770,19 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
     }
   }, [session?.id, refetchLaps])
 
-  // ── Fallback de polling (UNIQUEMENT si le canal Realtime est mort) ──
-  // Le Realtime est le chemin principal : INSERT/UPDATE/DELETE arrivent en
-  // patch en place quasi instantanément. Le polling ne tourne que quand le
-  // socket est en CHANNEL_ERROR/TIMED_OUT/CLOSED → coût Supabase nul en
-  // marche nominale (vs 3 requêtes/5s × N viewers du heartbeat précédent).
-  // Quand actif : tick à 10s, comparaison robuste (deep diff sur les champs
-  // critiques pour ne pas jeter d'updates comme le bug initial).
+  // ── Fallback de polling ──
+  // Tourne en permanence pour garantir la mise à jour des données même quand
+  // le channel realtime Supabase est down (Wi-Fi flottant, JWT renouvelé, etc.).
+  // Tick à 3s — assez court pour que la "page d'attente" (pre-race overlay)
+  // se ferme rapidement quand le chrono démarre, et que les classements +
+  // donations live restent à jour si le WebSocket meurt.
   useEffect(() => {
-    if (!session?.id || channelHealthy) return
+    if (!session?.id) return
     const sid = session.id
-    console.warn('[LiveRace] Fallback polling actif (canal Realtime KO)')
+    console.warn('[LiveRace] Fallback polling actif (3s)')
 
     const tick = () => {
-      // 1. Session : remplace si N'IMPORTE QUEL champ a changé (avant : 4 champs
-      //    hardcodés, on ratait les changements de name/categories/etc.)
+      // 1. Session : remplace si N'IMPORTE QUEL champ a changé
       supabase.from('race_sessions').select('*').eq('id', sid).maybeSingle()
         .then(({ data }) => {
           if (!data) return
@@ -798,9 +827,26 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
             return prev
           })
         })
+
+      // 4. Donations : déclenche l'alerte live pour tout NOUVEL ID non vu.
+      //    Le triggerDonationAlert dédup déjà via seenDonationIdsRef, donc
+      //    sans danger de re-trigger sur ceux déjà reçus via realtime.
+      //    Crucial pour que les dons s'affichent même quand le WebSocket
+      //    Supabase est down (cf. issue : "dons ne s'affichent plus en live").
+      supabase.from('donations').select('*').eq('session_id', sid)
+        .order('created_at', { ascending: false })
+        .limit(20)
+        .then(({ data }) => {
+          if (!data) return
+          // On parcourt du plus ancien au plus récent pour que la file
+          // d'alertes garde un ordre chronologique cohérent.
+          for (let i = data.length - 1; i >= 0; i--) {
+            triggerDonationAlert(data[i])
+          }
+        })
     }
     tick()
-    const interval = setInterval(tick, 10000)
+    const interval = setInterval(tick, 3000)
     return () => clearInterval(interval)
   }, [session?.id, channelHealthy])
 

@@ -35,7 +35,12 @@ export default function DonationsAdmin({ onClose }) {
   const load = async () => {
     setLoading(true)
     const [d, p, t, s, sh, pr] = await Promise.all([
-      supabase.from('donations').select('*').order('created_at', { ascending: false }),
+      // `payment_provider='simu'` = anciens dons admin de simulation, on les
+      // exclut de l'historique réel (ils peuvent encore exister en BDD pour
+      // les bases pré-migration vers le broadcast-only).
+      supabase.from('donations').select('*')
+        .or('payment_provider.is.null,payment_provider.neq.simu')
+        .order('created_at', { ascending: false }),
       supabase.from('user_purchases').select('*').order('purchased_at', { ascending: false }),
       supabase.from('emote_triggers').select('*').order('triggered_at', { ascending: false }),
       supabase.from('race_sessions').select('id, name, created_at').order('created_at', { ascending: false }),
@@ -197,7 +202,10 @@ export default function DonationsAdmin({ onClose }) {
                         )}
                         {provider && (
                           <span className={`donations-admin-row-provider provider-${provider}`}>
-                            {provider === 'stripe' ? '⚡ Stripe' : '💼 PayPal'}
+                            {provider === 'stripe' ? '⚡ Stripe'
+                              : provider === 'paypal' ? '💼 PayPal'
+                              : provider === 'simu' ? '🧪 Simu'
+                              : `❓ ${provider}`}
                           </span>
                         )}
                       </div>
@@ -339,7 +347,10 @@ export default function DonationsAdmin({ onClose }) {
                         )}
                         {provider && (
                           <span className={`donations-admin-row-provider provider-${provider}`}>
-                            {provider === 'stripe' ? '⚡ Stripe' : '💼 PayPal'}
+                            {provider === 'stripe' ? '⚡ Stripe'
+                              : provider === 'paypal' ? '💼 PayPal'
+                              : provider === 'simu' ? '🧪 Simu'
+                              : `❓ ${provider}`}
                           </span>
                         )}
                         {/* Badge état activation */}

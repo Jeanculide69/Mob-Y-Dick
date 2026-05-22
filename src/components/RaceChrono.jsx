@@ -49,6 +49,9 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
   )
   // Compteur affiché de laps en attente de synchronisation (visibilité offline)
   const [pendingCount, setPendingCount] = useState(0)
+  // Génération du channel realtime : incrémentée à chaque CLOSED pour forcer
+  // la recréation. Garantit la reprise du temps réel sans intervention user.
+  const [channelGen, setChannelGen] = useState(0)
 
   const inputRef         = useRef(null)
   const intervalRef      = useRef(null)
@@ -251,10 +254,14 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
         setLaps(prev => prev.filter(l => l.id !== row.id))
       })
       .subscribe((status) => {
-        // Socket mort → on resync (mobile en pit-lane, 4G qui dégrade, etc.)
+        // Socket mort → on resync ET on force la recréation du channel.
+        // Sans recréation, supabase-js peut rester CLOSED indéfiniment
+        // (le socket se reconnecte mais ne re-join pas le channel),
+        // forçant l'admin à rafraîchir pour récupérer du temps réel.
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
-          console.warn('[ChronoSync] Channel', status, '→ resync')
+          console.warn('[ChronoSync] Channel', status, '→ resync + recréation')
           loadLaps()
+          setTimeout(() => setChannelGen(g => g + 1), 2000)
         }
       })
 
@@ -268,7 +275,48 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
       supabase.removeChannel(channel)
       supabase.removeChannel(sessionChannel)
     }
-  }, [raceSession.id, loadLaps])
+  }, [raceSession.id, loadLaps, channelGen])
+
+  // ── Fallback polling inconditionnel (5s) ──
+  // Tourne en permanence pour compenser les configurations Supabase / RLS
+  // qui bloquent la propagation Realtime.
+  useEffect(() => {
+    if (!raceSession?.id) return
+    const sid = raceSession.id
+    const tick = () => {
+      // Refresh session
+      supabase.from('race_sessions').select('*').eq('id', sid).maybeSingle()
+        .then(({ data }) => {
+          if (data) {
+            setSessionData(prev => {
+              if (JSON.stringify(prev) === JSON.stringify(data)) return prev
+              return data
+            })
+          }
+        })
+      // Refresh laps
+      supabase.from('race_laps').select('*').eq('session_id', sid).order('recorded_at', { ascending: false })
+        .then(({ data }) => {
+          if (!data) return
+          setLaps(prev => {
+            const dbRows = data || []
+            const dbClientIds = new Set(dbRows.map(r => r.client_id).filter(Boolean))
+            const localOnly = queueRef.current
+              .filter(q => !dbClientIds.has(q.client_id))
+              .map(q => ({ ...q, id: `local-${q.client_id}` }))
+            const nextLaps = [...localOnly, ...dbRows]
+            if (prev.length !== nextLaps.length) return nextLaps
+            const prevIds = new Set(prev.map(l => l.id))
+            for (const l of nextLaps) {
+              if (!prevIds.has(l.id)) return nextLaps
+            }
+            return prev
+          })
+        })
+    }
+    const interval = setInterval(tick, 5000)
+    return () => clearInterval(interval)
+  }, [raceSession.id])
 
   // ── Chrono timer ──
   // 100ms suffit pour un affichage MM:SS/HH:MM:SS fluide. Le lap_time_ms

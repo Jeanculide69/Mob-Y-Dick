@@ -731,12 +731,17 @@ serve(async (req: Request) => {
 
   // ──────────────────────────────────────
   // 7. ADMIN-SIMULATE-DONATION
-  //    Remplace l'ancien broadcast `donation-simu` côté LiveRace, qui
-  //    était falsifiable par n'importe quel viewer en console. Ici on
-  //    insère une vraie ligne `donations` taguée `payment_provider='simu'` ;
-  //    le realtime Supabase relaie automatiquement à tous les viewers
-  //    par le chemin standard. Seuls les admins authentifiés y arrivent.
-  //    Pour distinguer dans DonationsAdmin, filtrer sur payment_provider.
+  //    Joue juste l'animation de don sur le live sans rien stocker en DB
+  //    (l'admin veut tester l'overlay, pas polluer l'historique).
+  //
+  //    Sécurité : on broadcast côté serveur via la HTTP Realtime API en
+  //    service_role. Comme c'est l'edge function qui émet (après vérif
+  //    admin), un viewer ne peut PAS falsifier en envoyant lui-même un
+  //    broadcast `donation-simu` depuis sa console (sauf à passer par
+  //    cette même action — laquelle exige `role='admin'`).
+  //
+  //    Le front s'abonne à `donation-simu` sur le channel `live-extras-${sid}`
+  //    et déclenche `triggerDonationAlert` avec un faux row éphémère.
   // ──────────────────────────────────────
   if (action === 'admin-simulate-donation') {
     if (!authUserId) return json(401, { error: 'auth_required' })
@@ -760,21 +765,41 @@ serve(async (req: Request) => {
     if (!Number.isFinite(amt) || amt < 1 || amt > 10000000) {
       return json(400, { error: 'invalid_amount' })
     }
+    if (!sessionId || typeof sessionId !== 'string') {
+      return json(400, { error: 'missing_session_id' })
+    }
 
-    // paypal_order_id unique par appel (sinon UNIQUE constraint refuse
-    // les simulations successives avec mêmes params).
-    const fakeOrderId = `simu_${Date.now()}_${authUserId.slice(0, 8)}`
-
-    const { error } = await supabase.from('donations').insert({
-      user_id: authUserId,
-      display_name: displayName.slice(0, 80),
-      amount_cents: amt,
-      message: message ? String(message).slice(0, 300) : null,
-      session_id: sessionId || null,
-      paypal_order_id: fakeOrderId,
-      payment_provider: 'simu',
-    })
-    if (error) return json(500, { error: 'db_insert_failed', detail: error.message })
+    // Broadcast direct via l'API HTTP Realtime de Supabase. Ça relaie
+    // à tous les clients abonnés à `live-extras-${sessionId}` sur l'event
+    // `donation-simu` sans jamais toucher la BDD.
+    try {
+      const resp = await fetch(`${SUPABASE_URL}/realtime/v1/api/broadcast`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+          'apikey': SUPABASE_SERVICE_ROLE_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messages: [{
+            topic: `live-extras-${sessionId}`,
+            event: 'donation-simu',
+            payload: {
+              id: `simu-${Date.now()}-${authUserId.slice(0, 8)}`,
+              display_name: displayName.slice(0, 80),
+              amount_cents: amt,
+              message: message ? String(message).slice(0, 300) : null,
+            },
+          }],
+        }),
+      })
+      if (!resp.ok) {
+        const detail = await resp.text()
+        return json(502, { error: 'broadcast_failed', detail })
+      }
+    } catch (err) {
+      return json(502, { error: 'broadcast_failed', detail: String(err.message || err) })
+    }
     return json(200, { ok: true, simulated: true })
   }
 

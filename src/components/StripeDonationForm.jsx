@@ -152,6 +152,16 @@ function DonationFormInner({ amount, pseudo, message, sessionId, authUserEmail, 
       if (finalErr) throw new Error(finalErr.message || 'Erreur finalisation')
       if (!finalData?.ok) throw new Error(finalData?.error || 'Validation refusée')
 
+      // Logs de traçabilité — utile quand un don est encaissé Stripe mais
+      // qu'on ne voit pas la ligne dans DonationsAdmin. `duplicate: true`
+      // signifie que le webhook a déjà inséré la ligne avant nous : la ligne
+      // EXISTE bien en DB, juste insérée par l'autre chemin.
+      console.info('[Stripe finalize] ok', {
+        paymentIntentId: result.paymentIntent.id,
+        duplicate: !!finalData.duplicate,
+        amountCents: finalData.amountCents,
+      })
+
       // 🎉
       toast.success(`Merci pour ton don de ${amount}€ ! Ton message s'affiche en direct.`)
       onSuccess?.()
