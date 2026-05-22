@@ -19,7 +19,7 @@ const StripeOrderCheckout = lazy(() => import('./components/StripeOrderCheckout'
 // lambda qui regarde la home + le live. Suspense affiche un loader léger.
 const UserManagement = lazy(() => import('./components/UserManagement'))
 const EmoteAdmin     = lazy(() => import('./components/EmoteAdmin'))
-const DonationsAdmin = lazy(() => import('./components/DonationsAdmin'))
+const LiveMessagesAdmin = lazy(() => import('./components/LiveMessagesAdmin'))
 const RaceSetup      = lazy(() => import('./components/RaceSetup'))
 const RaceChrono     = lazy(() => import('./components/RaceChrono'))
 const Championnat    = lazy(() => import('./components/Championnat'))
@@ -1329,7 +1329,7 @@ function App() {
                   onClick: () => { closeMenu(); handleOpenForm('affiliations_admin') } },
                 { id: 'emotes', icon: '🎉', label: 'Emotes & Sons',
                   onClick: () => { closeMenu(); handleOpenForm('emotes_admin') } },
-                { id: 'donations', icon: '💰', label: 'Historique dons',
+                { id: 'donations', icon: '💬', label: 'Messages live',
                   onClick: () => { closeMenu(); handleOpenForm('donations_admin') } },
                 { id: 'users', icon: '👥', label: 'Utilisateurs',
                   onClick: () => { closeMenu(); handleOpenForm('users_admin') } },
@@ -2579,7 +2579,7 @@ function App() {
                 {activeForm === 'sponsors_admin' && '🤝 Propositions Sponsors'}
                 {activeForm === 'affiliations_admin' && '🏍️ Demandes d\'affiliation'}
                 {activeForm === 'emotes_admin' && '🎉 Emotes & Sons Premium'}
-                {activeForm === 'donations_admin' && '💰 Historique des Dons & Emotes'}
+                {activeForm === 'donations_admin' && '💬 Messages Live & Emotes'}
                 {activeForm === 'users_admin' && '👥 Gestion des Utilisateurs'}
               </h2>
               <button className="admin-close" onClick={() => { setActiveForm(null); setEditingItem(null) }}>✕</button>
@@ -2849,7 +2849,7 @@ function App() {
               </Suspense>
             ) : activeForm === 'donations_admin' ? (
               <Suspense fallback={<LazyLoader />}>
-                <DonationsAdmin onClose={() => setActiveForm(null)} />
+                <LiveMessagesAdmin onClose={() => setActiveForm(null)} />
               </Suspense>
             ) : activeForm === 'bikes_admin' ? (
               <div className="admin-orders-container" style={{ maxHeight: '75vh', overflowY: 'auto' }}>

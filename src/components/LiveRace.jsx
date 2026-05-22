@@ -2,11 +2,10 @@ import { useState, useEffect, useRef, useCallback, useMemo, lazy, Suspense } fro
 import { createPortal } from 'react-dom'
 import { supabase } from '../supabaseClient'
 import LiveTeamDrawer from './LiveTeamDrawer'
-// Lazy-load des composants Stripe : ils chargent le SDK stripe.js (~50 KB)
-// via loadStripe() au niveau module. Avec lazy, ce coût est payé seulement
-// quand le user ouvre vraiment la modal de don / boutique premium.
-// Pour le viewer qui regarde juste le live sans donner = 0 KB de Stripe.
-const StripeDonationForm   = lazy(() => import('./StripeDonationForm'))
+// Lazy-load du composant Stripe : il charge le SDK stripe.js (~50 KB) via
+// loadStripe() au niveau module. Avec lazy, ce coût est payé seulement quand
+// le user ouvre vraiment la boutique. Pour le viewer qui regarde juste le
+// live sans rien acheter = 0 KB de Stripe.
 const StripePurchaseButton = lazy(() => import('./StripePurchaseButton'))
 import RaceFlagOverlay from './RaceFlagOverlay'
 import { playPremiumSound, playDonationSound, playRaceSignalSound, playAnnouncementSound } from '../utils/soundEffects'
@@ -116,80 +115,17 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   const [userPurchases, setUserPurchases] = useState([])
   const [activeAlerts, setActiveAlerts] = useState([])
   const [shopOpen, setShopOpen] = useState(false)
-  const [modalTab, setModalTab] = useState('shop') // 'shop' | 'donation'
+  // Filtre catégorie de la boutique : 'all' | 'emote' | 'dedication' | 'sponsoring'
+  const [shopCategoryFilter, setShopCategoryFilter] = useState('all')
   const [fabOpen, setFabOpen] = useState(false) // floating action button
   const fabLastToggleRef = useRef(0) // debounce hard contre double-fire mobile
 
-  // Donation form state
-  const [donationPseudo, setDonationPseudo] = useState('')
-  const [donationMessage, setDonationMessage] = useState('')
-  const [donationAmount, setDonationAmount] = useState(5)
-  const [customAmount, setCustomAmount] = useState('')
-  // État de la vérification d'unicité du pseudo (anti-impersonation)
-  // - 'idle'    : pas de check en cours
-  // - 'checking': requête en vol
-  // - 'ok'      : pseudo libre OU appartient au user connecté
-  // - 'taken'   : pseudo déjà pris par quelqu'un d'autre
-  const [pseudoCheckState, setPseudoCheckState] = useState('idle')
-  // Pré-remplit le pseudo avec le display_name de l'user connecté, mais
-  // seulement s'il n'a rien tapé manuellement (= laisse la liberté de
-  // donner sous un pseudo différent si voulu). Effect dans la suite.
-  const pseudoPrefilledFromProfileRef = useRef(false)
-  useEffect(() => {
-    if (
-      userProfile?.display_name
-      && !donationPseudo
-      && !pseudoPrefilledFromProfileRef.current
-    ) {
-      setDonationPseudo(userProfile.display_name)
-      pseudoPrefilledFromProfileRef.current = true
-    }
-    // Si l'user se déconnecte, on reset le flag pour qu'un futur login
-    // pré-remplisse à nouveau.
-    if (!userProfile) {
-      pseudoPrefilledFromProfileRef.current = false
-    }
-  }, [userProfile, donationPseudo])
-
-  // Vérification d'unicité du pseudo (debounced 400ms). On query la
-  // table profiles côté client — c'est public en lecture (RLS) donc
-  // safe + ça donne un feedback instantané. Le serveur re-vérifie
-  // dans tous les cas avant de créer le PaymentIntent.
-  // Note lint : setState dans cet effect est légitime — c'est exactement
-  // le pattern "synchroniser un état React avec un système externe" (ici
-  // une query DB debouncée). On ne peut pas dériver pseudoCheckState
-  // synchroniquement du pseudo car ça nécessite un appel réseau.
-  /* eslint-disable react-hooks/set-state-in-effect */
-  useEffect(() => {
-    const trimmed = donationPseudo.trim()
-    if (!trimmed) {
-      setPseudoCheckState('idle')
-      return
-    }
-    // Cas trivial : si user connecté et pseudo === son display_name, OK direct
-    if (userProfile?.display_name && trimmed.toLowerCase() === userProfile.display_name.toLowerCase()) {
-      setPseudoCheckState('ok')
-      return
-    }
-    setPseudoCheckState('checking')
-    const debounceId = setTimeout(async () => {
-      const { data } = await supabase
-        .from('profiles')
-        .select('id')
-        .ilike('display_name', trimmed)
-        .limit(1)
-        .maybeSingle()
-      if (!data) {
-        setPseudoCheckState('ok')
-      } else if (authUser && data.id === authUser.id) {
-        setPseudoCheckState('ok')
-      } else {
-        setPseudoCheckState('taken')
-      }
-    }, 400)
-    return () => clearTimeout(debounceId)
-  }, [donationPseudo, userProfile, authUser])
-  /* eslint-enable react-hooks/set-state-in-effect */
+  // Note pivot Stripe (v26) : tout le state du formulaire de "don à montant
+  // libre" (donationPseudo, donationMessage, donationAmount, customAmount,
+  // pseudoCheckState) a été supprimé. Chaque produit shop_items a maintenant
+  // son propre prix fixe ; le pseudo + message custom (services live) sont
+  // gérés dans StripePurchaseButton.jsx, qui re-vérifie l'unicité du pseudo
+  // côté serveur via l'Edge Function avant de créer le PaymentIntent.
 
   // ── TTS warm-up : précharge les voix navigateur au mount (Chrome charge
   //    les voix de façon async, donc la 1re lecture peut tomber sur une
@@ -451,17 +387,6 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
     })
   }
 
-  // Callback appelé par <StripeDonationForm> quand le don est validé par
-  // l'Edge Function `stripe-donation` (status='succeeded' côté Stripe).
-  // Le toast et l'insert DB sont gérés DANS le composant Stripe — ici on
-  // reset juste l'UI locale. L'alerte live s'affiche automatiquement via
-  // le realtime subscriber sur la table donations.
-  const handleStripeDonationSuccess = () => {
-    setShopOpen(false)
-    setDonationPseudo('')
-    setDonationMessage('')
-    setCustomAmount('')
-  }
 
   // Note lint : setState dans cet effect = fetch initial async (shopItems,
   // userProfile, userPurchases) + abonnement onAuthStateChange. Pattern
@@ -560,7 +485,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'race_announcements', filter: `session_id=eq.${session.id}` }, ({ new: row }) => {
         setAnnouncementsHistory(prev => [row, ...prev])
       })
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'donations', filter: `session_id=eq.${session.id}` }, ({ new: row }) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'live_messages', filter: `session_id=eq.${session.id}` }, ({ new: row }) => {
         triggerDonationAlert(row)
       })
       .subscribe((status) => {
@@ -631,12 +556,12 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       .on('broadcast', { event: 'premium-reaction' }, ({ payload }) => {
         triggerPremiumReaction(payload.slug, payload.userDisplayName)
       })
-      // Simulation de don admin : émise par l'edge function `stripe-donation`
-      // (action='admin-simulate-donation') via la HTTP Realtime API en
+      // Simulation d'achat admin : émise par l'edge function `stripe-donation`
+      // (action='admin-simulate-purchase') via la HTTP Realtime API en
       // service_role. Le seul chemin d'émission passe par cette function
       // qui exige role='admin' côté serveur → pas de spoof possible par
       // les viewers. AUCUN insert en BDD : c'est purement de l'animation.
-      .on('broadcast', { event: 'donation-simu' }, ({ payload }) => {
+      .on('broadcast', { event: 'purchase-simu' }, ({ payload }) => {
         triggerDonationAlert(payload)
       })
       .subscribe((status) => {
@@ -689,11 +614,11 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       const s = sessions[0]
       // ⚠️ ORDRE CRITIQUE : on pré-remplit seenDonationIdsRef AVANT setSession.
       // Sinon le polling useEffect (qui dep sur session?.id) fire son premier
-      // tick avant que le ref soit rempli → tous les dons existants
+      // tick avant que le ref soit rempli → tous les messages existants
       // re-déclenchent l'alerte à chaque navigation vers le live.
-      const { data: existingDonations } = await supabase
-        .from('donations').select('id').eq('session_id', s.id)
-      seenDonationIdsRef.current = new Set((existingDonations || []).map(d => d.id))
+      const { data: existingMessages } = await supabase
+        .from('live_messages').select('id').eq('session_id', s.id)
+      seenDonationIdsRef.current = new Set((existingMessages || []).map(d => d.id))
 
       setSession(s)
       const { data: ev } = await supabase.from('events').select('*').eq('id', s.event_id).single()
@@ -836,12 +761,12 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
           })
         })
 
-      // 4. Donations : déclenche l'alerte live pour tout NOUVEL ID non vu.
+      // 4. live_messages : déclenche l'alerte live pour tout NOUVEL ID non vu.
       //    Le triggerDonationAlert dédup déjà via seenDonationIdsRef, donc
       //    sans danger de re-trigger sur ceux déjà reçus via realtime.
-      //    Crucial pour que les dons s'affichent même quand le WebSocket
-      //    Supabase est down (cf. issue : "dons ne s'affichent plus en live").
-      supabase.from('donations').select('*').eq('session_id', sid)
+      //    Crucial pour que les achats s'affichent même quand le WebSocket
+      //    Supabase est down (cf. issue : "alertes ne s'affichent plus en live").
+      supabase.from('live_messages').select('*').eq('session_id', sid)
         .order('created_at', { ascending: false })
         .limit(20)
         .then(({ data }) => {
@@ -1503,8 +1428,8 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
               <div className="live-reactions glass">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
                   <h3 className="live-reactions-title" style={{ margin: 0 }}>💬 Réagir</h3>
-                  <button className="live-premium-support-btn" onClick={() => { setModalTab('donation'); setShopOpen(true); }}>
-                    💸 Faire un Don
+                  <button className="live-premium-support-btn" onClick={() => { setShopCategoryFilter('dedication'); setShopOpen(true); }}>
+                    🎤 Dédicace Live
                   </button>
                 </div>
                 <div className="live-reactions-grid">
@@ -1518,7 +1443,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                 {/* Premium Reactions */}
                 <div className="live-reactions-premium-header">
                   <span className="live-reactions-premium-title">💎 Animations Premium</span>
-                  <button className="live-premium-support-btn" onClick={() => { setModalTab('shop'); setShopOpen(true); }}>
+                  <button className="live-premium-support-btn" onClick={() => { setShopCategoryFilter('emote'); setShopOpen(true); }}>
                     🛍️ Boutique
                   </button>
                 </div>
@@ -1533,7 +1458,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                           if (isOwned) {
                             sendPremiumReaction(item);
                           } else {
-                            setModalTab('shop');
+                            setShopCategoryFilter('emote');
                             setShopOpen(true);
                           }
                         }}
@@ -1569,54 +1494,66 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
         )
       })()}
 
-      {/* ── Boutique & SuperChat Modal ──
+      {/* ── Boutique Live ──
          Rendue via Portal sur document.body : sinon le `transform` de la
          section parente (animation pageEnter qui se fige en translateY(0))
          crée un containing block et casse le `position: fixed` du overlay
          → la modal apparaît au milieu/bas de la section au lieu d'être
          centrée sur le viewport, surtout visible sur mobile où la section
-         est plus haute que l'écran. */}
+         est plus haute que l'écran.
+
+         Un seul écran, filtres par catégorie (toutes / emotes / dédicaces /
+         sponsoring). Plus aucun montant libre : chaque achat passe par un
+         produit shop_items à prix fixe (conformité Stripe v26). */}
       {shopOpen && createPortal(
         <div className="premium-modal-overlay" onClick={() => setShopOpen(false)}>
           <div className="premium-modal glass" onClick={(e) => e.stopPropagation()}>
             <div className="premium-modal-header">
               <div className="premium-modal-title-area">
-                <h2>💎 Boutique & SuperChat Live</h2>
-                <p className="premium-modal-subtitle">Soutenez l'événement et animez le direct !</p>
+                <h2>🛍️ Boutique Live</h2>
+                <p className="premium-modal-subtitle">Animez le direct avec emotes, dédicaces et sponsoring !</p>
               </div>
               <button className="btn btn-ghost" onClick={() => setShopOpen(false)} style={{ padding: '4px 8px', fontSize: '1.2rem', color: 'var(--text-muted)' }}>✕</button>
             </div>
 
+            {/* Filtres par catégorie — remplace les anciens onglets Boutique/Don */}
             <div className="premium-modal-tabs">
-              <button
-                className={`premium-modal-tab ${modalTab === 'shop' ? 'active' : ''}`}
-                onClick={() => setModalTab('shop')}
-              >
-                🛍️ Boutique Emotes
-              </button>
-              <button
-                className={`premium-modal-tab ${modalTab === 'donation' ? 'active' : ''}`}
-                onClick={() => setModalTab('donation')}
-              >
-                💸 Envoyer un Don
-              </button>
+              {[
+                { key: 'all',         label: '🛒 Tout' },
+                { key: 'emote',       label: '🎭 Emotes' },
+                { key: 'dedication',  label: '🎤 Dédicaces' },
+                { key: 'sponsoring',  label: '🏍️ Sponsoring' },
+              ].map(({ key, label }) => (
+                <button
+                  key={key}
+                  className={`premium-modal-tab ${shopCategoryFilter === key ? 'active' : ''}`}
+                  onClick={() => setShopCategoryFilter(key)}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
 
             <div className="premium-modal-content">
-              {modalTab === 'shop' && (
-                <div className="premium-shop-grid">
-                  {!authUser && (
-                    <div style={{ padding: '15px', background: 'rgba(255,85,0,0.1)', border: '1px solid var(--accent)', borderRadius: '12px', textAlign: 'center', marginBottom: '15px', color: '#fff' }}>
-                      <p style={{ margin: '0 0 10px 0', fontSize: '0.85rem' }}>💡 Connecte-toi pour acheter et débloquer définitivement des emotes premium.</p>
-                    </div>
-                  )}
-                  {shopItems.map(item => {
-                    const isOwned = userPurchases.includes(item.slug) || userPurchases.includes('pack_premium_all');
+              <div className="premium-shop-grid">
+                {!authUser && shopCategoryFilter === 'emote' && (
+                  <div style={{ padding: '15px', background: 'rgba(255,85,0,0.1)', border: '1px solid var(--accent)', borderRadius: '12px', textAlign: 'center', marginBottom: '15px', color: '#fff' }}>
+                    <p style={{ margin: '0 0 10px 0', fontSize: '0.85rem' }}>💡 Connecte-toi pour acheter et débloquer définitivement des emotes premium. Dédicaces et sponsoring peuvent être achetés sans compte.</p>
+                  </div>
+                )}
+                {shopItems
+                  .filter(item => shopCategoryFilter === 'all' || (item.category || 'emote') === shopCategoryFilter)
+                  .map(item => {
+                    // Seuls les items non-repeatable peuvent être "owned" (emotes / packs).
+                    // Les services repeatable (dédicaces, sponsoring) sont achetables N fois.
+                    const isRepeatable = !!item.repeatable;
+                    const isOwned = !isRepeatable && (userPurchases.includes(item.slug) || userPurchases.includes('pack_premium_all'));
                     const isPack = item.type === 'pack';
+                    const isEmoteCategory = (item.category || 'emote') === 'emote';
                     return (
                       <div key={item.id} className={`premium-shop-card ${isOwned ? 'owned' : ''} ${isPack ? 'pack-card' : ''}`}>
                         <div className="premium-shop-card-emoji">
-                          {item.emoji || '🔊'}
+                          {item.emoji || '🛒'}
                         </div>
                         <div className="premium-shop-card-info">
                           <h3 className="premium-shop-card-title">
@@ -1627,170 +1564,61 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                         <div className="premium-shop-card-action">
                           {isOwned ? (
                             <span className="premium-shop-owned-badge">✓ Débloqué</span>
-                          ) : authUser ? (
+                          ) : (isEmoteCategory && !authUser) ? (
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                              Connexion requise
+                            </span>
+                          ) : (
                             <div style={{ width: '100%', minWidth: '120px' }}>
                               <Suspense fallback={<button className="btn btn-primary" style={{ width: '100%', opacity: 0.6 }} disabled>⏳…</button>}>
                                 <StripePurchaseButton
                                   item={item}
-                                  onPurchased={() => fetchUserPurchases(authUser.id)}
+                                  sessionId={session?.id || null}
+                                  authUser={authUser}
+                                  authUserDisplayName={userProfile?.display_name || null}
+                                  onPurchased={() => { if (authUser) fetchUserPurchases(authUser.id) }}
                                 />
                               </Suspense>
                             </div>
-                          ) : (
-                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                              Connexion requise
-                            </span>
                           )}
                         </div>
                       </div>
                     );
                   })}
-                </div>
+              </div>
+
+              {/* Outil admin : simulation d'achat sur le live (pas de débit) */}
+              {userProfile?.role === 'admin' && (
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  style={{ marginTop: '15px', width: '100%', borderColor: '#ff5555', color: '#ff5555' }}
+                  onClick={async () => {
+                    const { data, error } = await supabase.functions.invoke('stripe-donation', {
+                      body: {
+                        action: 'admin-simulate-purchase',
+                        displayName: userProfile?.display_name || 'Admin Simu',
+                        amountCents: 500,
+                        message: 'Simulation d\'achat (Admin) — test d\'overlay live',
+                        sessionId: session?.id || null,
+                        itemSlug: 'dedication_5',
+                      },
+                    });
+                    if (error || !data?.ok) {
+                      toast.error('Simulation échouée : ' + (error?.message || data?.error || 'inconnu'));
+                      return;
+                    }
+                    setShopOpen(false);
+                  }}
+                >
+                  🧪 Simuler un Achat sur le Live (Admin)
+                </button>
               )}
 
-              {modalTab === 'donation' && (
-                <div className="donation-form">
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-                    <div>
-                      <label>Pseudo (Affiché à l'écran)</label>
-                      <input
-                        type="text"
-                        placeholder="Ex: Rider44"
-                        value={donationPseudo}
-                        onChange={(e) => setDonationPseudo(e.target.value)}
-                        maxLength={25}
-                        className={pseudoCheckState === 'taken' ? 'pseudo-input-taken' : ''}
-                      />
-                      {pseudoCheckState === 'checking' && (
-                        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px', display: 'inline-block' }}>
-                          🔄 Vérification…
-                        </span>
-                      )}
-                      {pseudoCheckState === 'taken' && (
-                        <span style={{ fontSize: '0.75rem', color: '#ff5555', marginTop: '2px', display: 'inline-block' }}>
-                          ❌ Ce pseudo appartient à un membre. Choisis-en un autre.
-                        </span>
-                      )}
-                      {pseudoCheckState === 'ok' && donationPseudo.trim() && (
-                        <span style={{ fontSize: '0.72rem', color: '#00cc66', marginTop: '2px', display: 'inline-block' }}>
-                          ✓ Pseudo disponible
-                        </span>
-                      )}
-                    </div>
-                    <div>
-                      <label>Montant du Don</label>
-                      <div className="donation-input-wrapper">
-                        <input
-                          type="number"
-                          min="1"
-                          placeholder="Montant libre"
-                          value={customAmount}
-                          onChange={(e) => {
-                            setCustomAmount(e.target.value);
-                            setDonationAmount(parseFloat(e.target.value) || 0);
-                          }}
-                        />
-                        <span className="donation-currency-symbol">€</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="donation-amount-grid">
-                    {[5, 10, 20, 50].map(amt => (
-                      <button
-                        key={amt}
-                        type="button"
-                        className={`donation-amount-btn ${donationAmount === amt && !customAmount ? 'active' : ''}`}
-                        onClick={() => {
-                          setDonationAmount(amt);
-                          setCustomAmount('');
-                        }}
-                      >
-                        {amt}€
-                      </button>
-                    ))}
-                  </div>
-
-                  <div>
-                    <label>Message de soutien (S'affichera en direct)</label>
-                    <textarea
-                      placeholder="Votre message personnalisé..."
-                      rows={3}
-                      value={donationMessage}
-                      onChange={(e) => setDonationMessage(e.target.value)}
-                      maxLength={120}
-                    />
-                  </div>
-
-                  <div className="donation-summary-card">
-                    Don de <strong>{donationAmount > 0 ? donationAmount : 0}€</strong> par <strong>{donationPseudo || 'Anonyme'}</strong>
-                  </div>
-
-                  {donationAmount > 0 && donationPseudo.trim() && pseudoCheckState !== 'taken' && pseudoCheckState !== 'checking' ? (
-                    <div style={{ marginTop: '10px' }}>
-                      <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>⏳ Chargement du paiement sécurisé…</div>}>
-                        <StripeDonationForm
-                          amount={donationAmount}
-                          pseudo={donationPseudo}
-                          message={donationMessage}
-                          sessionId={session?.id || null}
-                          authUserEmail={authUser?.email || null}
-                          onSuccess={handleStripeDonationSuccess}
-                          onCancel={() => setShopOpen(false)}
-                        />
-                      </Suspense>
-                      {userProfile?.role === 'admin' && (
-                        <button
-                          type="button"
-                          className="btn btn-outline"
-                          style={{ marginTop: '15px', width: '100%', borderColor: '#ff5555', color: '#ff5555' }}
-                          onClick={async () => {
-                            // Sécu : avant on broadcastait `donation-simu` qui
-                            // était falsifiable par n'importe quel viewer en
-                            // console. Maintenant on insère une vraie ligne
-                            // donations via l'Edge function (admin-only,
-                            // service_role bypass RLS) → le realtime sur la
-                            // table déclenche l'alerte chez tous les viewers
-                            // par le chemin standard, impossible à spoofer.
-                            const { data, error } = await supabase.functions.invoke('stripe-donation', {
-                              body: {
-                                action: 'admin-simulate-donation',
-                                displayName: donationPseudo || 'Admin Simu',
-                                amountCents: Math.round(donationAmount * 100),
-                                message: donationMessage || 'Simulation de don (Admin)',
-                                sessionId: session?.id || null,
-                              },
-                            });
-                            if (error || !data?.ok) {
-                              toast.error('Simulation échouée : ' + (error?.message || data?.error || 'inconnu'));
-                              return;
-                            }
-                            setShopOpen(false);
-                            setDonationPseudo('');
-                            setDonationMessage('');
-                            setCustomAmount('');
-                          }}
-                        >
-                          🧪 Simuler le Don sur le Live (Admin)
-                        </button>
-                      )}
-                    </div>
-                  ) : (
-                    <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
-                      {pseudoCheckState === 'taken'
-                        ? '⛔ Choisis un pseudo qui n\'est pas déjà utilisé par un membre.'
-                        : pseudoCheckState === 'checking'
-                          ? '⏳ Vérification du pseudo…'
-                          : 'Renseigne un pseudo et un montant pour faire un don.'}
-                    </div>
-                  )}
-
-                  <div style={{ marginTop: '15px', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', lineHeight: '1.4' }}>
-                    <p style={{ margin: 0 }}>En effectuant ce don manuel, vous soutenez directement l'événement et l'équipe Mob Y Dick.</p>
-                    <p style={{ margin: '4px 0 0 0' }}>Conformément à la législation, ce don est définitif, volontaire, et ne donne droit à aucun remboursement ultérieur ou contrepartie physique.</p>
-                  </div>
-                </div>
-              )}
+              <div style={{ marginTop: '15px', fontSize: '0.75rem', color: 'var(--text-muted)', textAlign: 'center', lineHeight: '1.4' }}>
+                <p style={{ margin: 0 }}>Chaque achat est un service de divertissement à prix fixe (animation live, dédicace audio, sponsoring symbolique).</p>
+                <p style={{ margin: '4px 0 0 0' }}>Paiement sécurisé via Stripe. Achat ferme et définitif, sans remboursement ultérieur (service immédiat consommé en direct).</p>
+              </div>
             </div>
           </div>
         </div>,
@@ -1830,7 +1658,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                         if (isOwned) {
                           sendPremiumReaction(item);
                         } else {
-                          setModalTab('shop'); setShopOpen(true); setFabOpen(false);
+                          setShopCategoryFilter('emote'); setShopOpen(true); setFabOpen(false);
                         }
                       }}
                       title={isOwned ? item.name : `Débloquer ${item.name}`}
@@ -1843,11 +1671,11 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
               </div>
               <div className="live-fab-divider" />
               <div className="live-fab-actions">
-                <button className="live-fab-action-btn" onClick={() => { setModalTab('shop'); setShopOpen(true); setFabOpen(false); }}>
+                <button className="live-fab-action-btn" onClick={() => { setShopCategoryFilter('all'); setShopOpen(true); setFabOpen(false); }}>
                   🛍️ Boutique
                 </button>
-                <button className="live-fab-action-btn donation" onClick={() => { setModalTab('donation'); setShopOpen(true); setFabOpen(false); }}>
-                  💸 Faire un Don
+                <button className="live-fab-action-btn donation" onClick={() => { setShopCategoryFilter('dedication'); setShopOpen(true); setFabOpen(false); }}>
+                  🎤 Dédicace Live
                 </button>
               </div>
 
@@ -1866,13 +1694,13 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                     setTimeout(() => speakDonation({
                       display_name: 'Test',
                       amount: 0,
-                      message: 'La lecture vocale des dons est activée.',
+                      message: 'La lecture vocale des messages live est activée.',
                     }, { force: true }), 100)
                   }
                 }}
-                title={isDonationTTSEnabled() ? 'Désactiver la lecture vocale des dons' : 'Activer la lecture vocale des dons'}
+                title={isDonationTTSEnabled() ? 'Désactiver la lecture vocale des messages live' : 'Activer la lecture vocale des messages live'}
               >
-                {isDonationTTSEnabled() ? '🔊 Lecture des dons : ON' : '🔇 Lecture des dons : OFF'}
+                {isDonationTTSEnabled() ? '🔊 Lecture des messages : ON' : '🔇 Lecture des messages : OFF'}
               </button>
             </div>
           )}
@@ -1901,7 +1729,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
               fabLastToggleRef.current = now
               setFabOpen(o => !o)
             }}
-            aria-label={fabOpen ? 'Fermer le menu' : 'Emotes et Dons'}
+            aria-label={fabOpen ? 'Fermer le menu' : 'Boutique Live'}
           >
             <span className="live-fab-icon">{fabOpen ? '✕' : '🎉'}</span>
             <span className="live-fab-label">{fabOpen ? 'Fermer' : 'Réactions'}</span>

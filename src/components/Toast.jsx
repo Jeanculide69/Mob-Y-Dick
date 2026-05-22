@@ -7,7 +7,7 @@
  *
  * Usage :
  *   const toast = useToast()
- *   toast.success('Don enregistré !')
+ *   toast.success('Achat enregistré !')
  *   toast.error("Échec de l'upload")
  *   toast.info('Connexion au live...')
  *   const ok = await toast.confirm('Supprimer ce rider ?')

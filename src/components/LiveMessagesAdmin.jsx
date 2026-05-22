@@ -1,13 +1,17 @@
 /**
- * DonationsAdmin — Historique des dons et des déclenchements d'emotes
+ * LiveMessagesAdmin — Historique des messages live (achats avec dédicace)
+ * et des déclenchements d'emotes.
  *
- * Deux onglets :
- *  - 💰 Dons (donations) : liste paginée avec total + filtrage par session
- *  - 🎉 Triggers emotes (emote_triggers) : stats par emote + log brut
+ * Trois onglets :
+ *  - 💬 Messages live (live_messages) : journal des achats avec message
+ *    custom diffusé à l'antenne — inclut les anciens dons legacy
+ *    (is_legacy_donation=true) pour ne pas perdre l'historique
+ *  - 💎 Achats Premium (user_purchases) : tous les achats shop_items
+ *  - 🎉 Triggers emotes (emote_triggers) : stats par emote
  */
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabaseClient'
-import './DonationsAdmin.css'
+import './LiveMessagesAdmin.css'
 
 const PAGE_SIZE = 25
 
@@ -20,7 +24,7 @@ const fmtDate = (iso) => {
 
 const fmtMoney = (cents) => `${(cents / 100).toFixed(2)} €`
 
-export default function DonationsAdmin({ onClose }) {
+export default function LiveMessagesAdmin({ onClose }) {
   const [tab, setTab] = useState('donations')
   const [loading, setLoading] = useState(true)
   const [donations, setDonations] = useState([])
@@ -38,7 +42,11 @@ export default function DonationsAdmin({ onClose }) {
       // `payment_provider='simu'` = anciens dons admin de simulation, on les
       // exclut de l'historique réel (ils peuvent encore exister en BDD pour
       // les bases pré-migration vers le broadcast-only).
-      supabase.from('donations').select('*')
+      // Note v26 : la table `donations` a été renommée `live_messages` et
+      // contient désormais aussi les nouveaux messages d'achat (avec
+      // item_slug + user_purchase_id non NULL). Les anciens dons à montant
+      // libre y restent en mode legacy (is_legacy_donation=true).
+      supabase.from('live_messages').select('*')
         .or('payment_provider.is.null,payment_provider.neq.simu')
         .order('created_at', { ascending: false }),
       supabase.from('user_purchases').select('*').order('purchased_at', { ascending: false }),
@@ -109,7 +117,7 @@ export default function DonationsAdmin({ onClose }) {
           className={`donations-admin-tab ${tab === 'donations' ? 'active' : ''}`}
           onClick={() => { setTab('donations'); setPage(0) }}
         >
-          💰 Dons <span className="donations-admin-tab-count">{donations.length}</span>
+          💬 Messages live <span className="donations-admin-tab-count">{donations.length}</span>
         </button>
         <button
           className={`donations-admin-tab ${tab === 'purchases' ? 'active' : ''}`}
@@ -152,11 +160,11 @@ export default function DonationsAdmin({ onClose }) {
               <span className="donations-admin-stat-value">{fmtMoney(totalCents)}</span>
             </div>
             <div className="donations-admin-stat">
-              <span className="donations-admin-stat-label">Nombre de dons</span>
+              <span className="donations-admin-stat-label">Nombre de messages</span>
               <span className="donations-admin-stat-value">{filteredDonations.length}</span>
             </div>
             <div className="donations-admin-stat">
-              <span className="donations-admin-stat-label">Don moyen</span>
+              <span className="donations-admin-stat-label">Montant moyen</span>
               <span className="donations-admin-stat-value">
                 {filteredDonations.length ? fmtMoney(totalCents / filteredDonations.length) : '—'}
               </span>
@@ -164,7 +172,7 @@ export default function DonationsAdmin({ onClose }) {
           </div>
 
           {pagedDonations.length === 0 ? (
-            <div className="donations-admin-empty">Aucun don pour ce filtre.</div>
+            <div className="donations-admin-empty">Aucun message live pour ce filtre.</div>
           ) : (
             <div className="donations-admin-list">
               {pagedDonations.map(d => {
@@ -192,7 +200,7 @@ export default function DonationsAdmin({ onClose }) {
                           <a
                             href={`mailto:${d.payer_email}`}
                             className="donations-admin-row-email"
-                            title="Envoyer un mail au donateur"
+                            title="Envoyer un mail à l'acheteur"
                           >📧 {d.payer_email}</a>
                         )}
                         {d.card_brand && d.card_last4 && (

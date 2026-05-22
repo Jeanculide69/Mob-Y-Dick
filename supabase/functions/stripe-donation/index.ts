@@ -1,43 +1,43 @@
 /**
- * stripe-donation — Supabase Edge Function
+ * stripe-donation — Supabase Edge Function (Stripe Checkout)
  *
- * Crée et finalise tout paiement Stripe (dons / achats premium / commandes
- * boutique). Gère AUSSI les webhooks Stripe (anti-perte de paiement).
+ * ⚠️ NOM LEGACY : le dossier s'appelle encore `stripe-donation` pour préserver
+ * l'URL du webhook Stripe (déjà configurée dans le Stripe Dashboard pointant
+ * sur `/functions/v1/stripe-donation`). Côté business, cette function ne gère
+ * QUE des achats à prix fixe — aucun "don à montant libre" depuis v26.
+ *
+ * Pivot Stripe compliance (mai 2026) : suite à un avertissement Stripe sur
+ * les Restricted Businesses (cagnotte/financement participatif), les actions
+ * `create-intent` et `finalize` (anciens montants libres) ont été supprimées.
+ * Tout passe désormais par des produits/services référencés dans `shop_items`.
  *
  * ─── Actions front (POST JSON avec `action`) ───
- *   - create-intent             → PaymentIntent don
- *   - finalize                  → finalise un don (post confirmCardPayment)
- *   - create-purchase-intent    → PaymentIntent achat emote premium
- *   - finalize-purchase         → finalise un achat
- *   - create-order-intent       → PaymentIntent commande boutique
- *   - finalize-order            → finalise une commande
- *   - admin-simulate-donation   → simu admin (insert directement en DB)
+ *   - create-purchase-intent  → PaymentIntent pour un produit shop_items
+ *                                (emote, dédicace, sponsoring) à prix fixe.
+ *                                Accepte customMessage/displayName/sessionId
+ *                                pour les items avec allows_custom_message.
+ *                                Achat anonyme autorisé si category != 'emote'.
+ *   - finalize-purchase       → finalise l'achat (insert user_purchases +
+ *                                live_messages si allows_custom_message)
+ *   - create-order-intent     → PaymentIntent pour la boutique merch physique
+ *   - finalize-order          → finalise une commande merch
+ *   - admin-simulate-purchase → simu admin (broadcast sans débit ni DB write)
  *
  * ─── Webhook (POST avec header Stripe-Signature, AUCUN body.action) ───
  *   Stripe POST sur cette URL pour les events payment_intent.succeeded.
- *   Fallback SI le client a fermé sa tab entre confirm et finalize :
- *   le webhook insère le don/achat/commande à la place du client. Idempotent
- *   grâce aux contraintes UNIQUE sur paypal_order_id.
+ *   Anti-perte de paiement : si le client ferme sa tab entre confirm et
+ *   finalize, le webhook insère à sa place. Idempotent via les contraintes
+ *   UNIQUE sur paypal_order_id (= payment_intent_id Stripe).
  *
- * ─── Secrets requis (Supabase Dashboard → Settings → Edge Functions) ───
+ * ─── Secrets requis ───
  *   STRIPE_SECRET_KEY      = sk_live_... ou sk_test_...
- *   STRIPE_WEBHOOK_SECRET  = whsec_... (Stripe Dashboard → Webhooks → ton
- *                            endpoint → "Signing secret")
- *
- * ─── Setup webhook Stripe (à faire UNE fois côté Stripe Dashboard) ───
- *   1. Stripe Dashboard → Developers → Webhooks → Add endpoint
- *   2. URL : https://<project>.supabase.co/functions/v1/stripe-donation
- *   3. Events : `payment_intent.succeeded`
- *   4. Copier "Signing secret" → coller dans Supabase secret STRIPE_WEBHOOK_SECRET
- *   5. Redeploy : `supabase functions deploy stripe-donation --no-verify-jwt`
- *
- * ─── Setup côté front ───
- *   VITE_STRIPE_PUBLISHABLE_KEY = pk_live_... ou pk_test_... (Vercel env)
+ *   STRIPE_WEBHOOK_SECRET  = whsec_... (Stripe Dashboard → Webhooks)
  *
  * ─── Deploy ───
  *   supabase functions deploy stripe-donation --no-verify-jwt
- *   (no-verify-jwt car les dons peuvent être anonymes ET le webhook Stripe
- *   n'envoie pas de JWT Supabase. La sécurité = vérif Stripe-Signature.)
+ *   (no-verify-jwt car certains achats sont anonymes ET le webhook Stripe
+ *   n'envoie pas de JWT Supabase. La sécurité = vérif Stripe-Signature +
+ *   service_role bypass RLS.)
  */
 // @ts-nocheck — environnement Deno Edge Function
 import { serve } from 'https://deno.land/std@0.224.0/http/server.ts'
@@ -46,9 +46,6 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.0'
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 const STRIPE_SECRET_KEY = Deno.env.get('STRIPE_SECRET_KEY')!
-// Webhook secret (configuré dans Stripe Dashboard → Webhooks → ton endpoint
-// → "Signing secret"). Préfixe whsec_... Sans ça, on rejette les webhooks
-// pour éviter qu'un attaquant ne forge des événements payment_intent.succeeded.
 const STRIPE_WEBHOOK_SECRET = Deno.env.get('STRIPE_WEBHOOK_SECRET') || ''
 
 const STRIPE_API = 'https://api.stripe.com/v1'
@@ -105,8 +102,7 @@ async function stripeRequest(path: string, body?: Record<string, unknown>) {
 // Vérification de signature Stripe (HMAC-SHA256)
 // Format du header Stripe-Signature : `t=1234567890,v1=hash,v0=hash2`
 // On signe `${t}.${rawBody}` avec STRIPE_WEBHOOK_SECRET et on compare au `v1`.
-// Anti-replay : timestamp < 5min ; comparaison en temps constant pour éviter
-// les attaques par timing.
+// Anti-replay : timestamp < 5min ; comparaison en temps constant.
 // ──────────────────────────────────────
 async function verifyStripeSignature(rawBody: string, sigHeader: string, secret: string): Promise<boolean> {
   if (!secret) return false
@@ -119,7 +115,6 @@ async function verifyStripeSignature(rawBody: string, sigHeader: string, secret:
   const timestamp = parts.t
   const signature = parts.v1
   if (!timestamp || !signature) return false
-  // Anti-replay : 5 minutes de tolérance dans les deux sens
   const age = Math.floor(Date.now() / 1000) - parseInt(timestamp, 10)
   if (Math.abs(age) > 300) return false
 
@@ -134,21 +129,67 @@ async function verifyStripeSignature(rawBody: string, sigHeader: string, secret:
   const sig = await crypto.subtle.sign('HMAC', key, enc.encode(`${timestamp}.${rawBody}`))
   const hex = Array.from(new Uint8Array(sig)).map((b) => b.toString(16).padStart(2, '0')).join('')
 
-  // Comparaison constant-time pour ne pas leaker via timing
   if (hex.length !== signature.length) return false
   let diff = 0
   for (let i = 0; i < hex.length; i++) diff |= hex.charCodeAt(i) ^ signature.charCodeAt(i)
   return diff === 0
 }
 
+/**
+ * Insère une ligne dans live_messages quand un achat avec
+ * allows_custom_message=true se finalise. C'est ce que le bot TTS lit à
+ * l'antenne. Pour les achats sans message custom (ex: emote premium), pas
+ * d'insertion ici (l'animation visuelle suffit, pas de lecture vocale).
+ *
+ * Retourne null si pas d'insert nécessaire, sinon la row insérée (ou
+ * duplicate=true en cas de retry).
+ */
+async function maybeInsertLiveMessage(supabase: any, params: {
+  itemSlug: string
+  userPurchaseId: string
+  userId: string | null
+  displayName: string
+  customMessage: string | null
+  amountCents: number
+  sessionId: string | null
+  paymentIntentId: string
+  cardBrand: string | null
+  cardLast4: string | null
+  receiptUrl: string | null
+  payerEmail: string | null
+  allowsCustomMessage: boolean
+}) {
+  // Si l'item n'autorise pas de message custom, pas de live_message
+  // (les emotes "consommables" déclenchent juste l'animation visuelle
+  // côté front via realtime user_purchases, pas via live_messages).
+  if (!params.allowsCustomMessage) return null
+
+  const { error } = await supabase.from('live_messages').insert({
+    user_id: params.userId,
+    display_name: params.displayName.slice(0, 80),
+    amount_cents: params.amountCents,
+    message: params.customMessage ? params.customMessage.slice(0, 300) : null,
+    session_id: params.sessionId,
+    paypal_order_id: params.paymentIntentId, // legacy column name, contient pi_xxx Stripe
+    payment_provider: 'stripe',
+    payer_email: params.payerEmail,
+    card_brand: params.cardBrand,
+    card_last4: params.cardLast4,
+    receipt_url: params.receiptUrl,
+    item_slug: params.itemSlug,
+    user_purchase_id: params.userPurchaseId,
+    is_legacy_donation: false,
+  })
+  if (error?.code === '23505') return { duplicate: true }
+  if (error) throw new Error('live_messages insert failed: ' + error.message)
+  return { duplicate: false }
+}
+
 // ──────────────────────────────────────
 // Traitement partagé d'un PaymentIntent.succeeded.
-// Appelé depuis :
-//   - finalize / finalize-purchase / finalize-order (client-driven)
-//   - webhook payment_intent.succeeded (server-driven, fail-safe)
-// Idempotent grâce aux UNIQUE constraints sur paypal_order_id.
-// L'intent doit être passé "enrichi" (avec latest_charge expandé) pour
-// remplir card_brand/last4/receipt_url. Le webhook le re-fetch si besoin.
+// Appelé depuis finalize-purchase / finalize-order (client-driven) et
+// depuis le webhook (server-driven, fail-safe). Idempotent via UNIQUE
+// constraints sur paypal_order_id.
 // ──────────────────────────────────────
 async function processIntentSucceeded(intent: any, supabase: any) {
   if (intent.status !== 'succeeded') {
@@ -166,42 +207,79 @@ async function processIntentSucceeded(intent: any, supabase: any) {
   const receiptUrl: string | null = charge.receipt_url || null
   const payerEmail: string | null = charge.billing_details?.email || intent.receipt_email || null
 
-  if (md.kind === 'donation') {
-    const { error } = await supabase.from('donations').insert({
-      user_id: md.user_id || null,
-      display_name: String(md.display_name || 'Donateur Anonyme').slice(0, 80),
-      amount_cents: intent.amount,
-      message: md.message ? String(md.message).slice(0, 300) : null,
-      session_id: md.session_id || null,
-      paypal_order_id: intent.id,
-      payment_provider: 'stripe',
-      payer_email: payerEmail,
-      card_brand: cardBrand,
-      card_last4: cardLast4,
-      receipt_url: receiptUrl,
-    })
-    if (error?.code === '23505') return { ok: true, duplicate: true, kind: 'donation' }
-    if (error) return { ok: false, status: 500, error: 'db_insert_failed', detail: error.message }
-    return { ok: true, kind: 'donation', amountCents: intent.amount }
-  }
-
   if (md.kind === 'purchase') {
-    if (!md.user_id || !md.item_slug) {
-      return { ok: false, status: 400, error: 'missing_metadata' }
+    if (!md.item_slug) return { ok: false, status: 400, error: 'missing_item_slug' }
+
+    // Re-lit l'item pour récupérer allows_custom_message (le metadata ne
+    // garde que les bools simples ; on préfère re-checker la DB qui est la
+    // source de vérité — un admin peut avoir basculé l'item entre la
+    // création du PI et l'arrivée du webhook).
+    const { data: item } = await supabase
+      .from('shop_items')
+      .select('allows_custom_message, repeatable, category')
+      .eq('slug', md.item_slug)
+      .maybeSingle()
+    const allowsMsg = !!item?.allows_custom_message
+
+    // user_id peut être vide string ('') pour les achats anonymes (un
+    // visiteur non connecté qui paie une dédicace). NULL en DB.
+    const userId = md.user_id && md.user_id !== '' ? md.user_id : null
+
+    const { data: purchaseRow, error: insertErr } = await supabase
+      .from('user_purchases')
+      .insert({
+        user_id: userId,
+        item_slug: md.item_slug,
+        amount_cents: intent.amount,
+        paypal_order_id: intent.id,
+        payment_provider: 'stripe',
+        card_brand: cardBrand,
+        card_last4: cardLast4,
+        receipt_url: receiptUrl,
+        display_name: md.display_name || null,
+        custom_message: md.message || null,
+        session_id: md.session_id && md.session_id !== '' ? md.session_id : null,
+      })
+      .select('id')
+      .maybeSingle()
+
+    if (insertErr?.code === '23505') {
+      // Retry idempotent : la ligne existe déjà (créée par webhook ou
+      // finalize concurrent). On retrouve son id pour pouvoir éventuellement
+      // attacher un live_message (si pas déjà inséré).
+      const { data: existing } = await supabase
+        .from('user_purchases')
+        .select('id')
+        .eq('paypal_order_id', intent.id)
+        .maybeSingle()
+      return { ok: true, duplicate: true, kind: 'purchase', itemSlug: md.item_slug, userPurchaseId: existing?.id }
     }
-    const { error } = await supabase.from('user_purchases').insert({
-      user_id: md.user_id,
-      item_slug: md.item_slug,
-      amount_cents: intent.amount,
-      paypal_order_id: intent.id,
-      payment_provider: 'stripe',
-      card_brand: cardBrand,
-      card_last4: cardLast4,
-      receipt_url: receiptUrl,
-    })
-    if (error?.code === '23505') return { ok: true, duplicate: true, kind: 'purchase', itemSlug: md.item_slug }
-    if (error) return { ok: false, status: 500, error: 'db_insert_failed', detail: error.message }
-    return { ok: true, kind: 'purchase', itemSlug: md.item_slug }
+    if (insertErr) return { ok: false, status: 500, error: 'db_insert_failed', detail: insertErr.message }
+
+    // Insertion live_messages pour déclencher l'overlay live + lecture TTS
+    if (allowsMsg && purchaseRow?.id) {
+      try {
+        await maybeInsertLiveMessage(supabase, {
+          itemSlug: md.item_slug,
+          userPurchaseId: purchaseRow.id,
+          userId,
+          displayName: md.display_name || 'Anonyme',
+          customMessage: md.message || null,
+          amountCents: intent.amount,
+          sessionId: md.session_id && md.session_id !== '' ? md.session_id : null,
+          paymentIntentId: intent.id,
+          cardBrand, cardLast4, receiptUrl, payerEmail,
+          allowsCustomMessage: true,
+        })
+      } catch (err) {
+        // L'achat est déjà enregistré, on log mais on ne fail pas (le user
+        // a payé, on ne va pas renvoyer une erreur juste parce que le
+        // message live n'a pas pu être inséré).
+        console.error('[processIntent] live_message insert failed:', err)
+      }
+    }
+
+    return { ok: true, kind: 'purchase', itemSlug: md.item_slug, userPurchaseId: purchaseRow?.id }
   }
 
   if (md.kind === 'order') {
@@ -241,10 +319,6 @@ serve(async (req: Request) => {
 
   // ──────────────────────────────────────
   // 0. WEBHOOK STRIPE
-  //    Détection par le header Stripe-Signature. C'est l'anti-perte de
-  //    paiement : Stripe nous rappelle directement après confirm, même si
-  //    le client a fermé sa tab entre temps. Idempotent grâce aux UNIQUE
-  //    constraints sur paypal_order_id (donations, user_purchases, orders).
   // ──────────────────────────────────────
   const stripeSig = req.headers.get('stripe-signature') || req.headers.get('Stripe-Signature')
   if (stripeSig) {
@@ -256,9 +330,6 @@ serve(async (req: Request) => {
     let event: any
     try { event = JSON.parse(rawBody) } catch { return json(400, { error: 'invalid_event_json' }) }
 
-    // On ne traite que payment_intent.succeeded ; les autres events
-    // (failed, refunded, etc.) sont ignorés pour l'instant — on renvoie
-    // 200 pour que Stripe ne les retente pas indéfiniment.
     if (event.type !== 'payment_intent.succeeded') {
       return json(200, { ok: true, ignored: event.type })
     }
@@ -266,24 +337,19 @@ serve(async (req: Request) => {
     let intent = event.data?.object
     if (!intent?.id) return json(400, { error: 'no_intent_in_event' })
 
-    // Le payload webhook n'inclut pas latest_charge en object (juste l'ID).
-    // On re-fetch en GET avec expand pour récupérer card_brand/last4/etc.
-    // Si la latence Stripe est trop forte, on insère quand même sans
-    // ces détails (mieux vaut un row sans card_brand qu'un don perdu).
+    // Re-fetch avec expand pour récupérer card_brand/last4/etc.
     try {
       intent = await stripeRequest(
         `/payment_intents/${encodeURIComponent(intent.id)}?expand[]=latest_charge`,
       )
     } catch {
-      // On garde l'intent du webhook même sans latest_charge expanded
+      // Garde l'intent du webhook même sans latest_charge expanded
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
     const result = await processIntentSucceeded(intent, supabase)
-    // Retour 200 pour Stripe même si l'insert a échoué (sinon Stripe retry
-    // sans fin) — on log côté Edge function logs Supabase.
     if (!result.ok) {
       console.error('[webhook] processIntent failed:', result.error, result.detail)
     }
@@ -299,8 +365,7 @@ serve(async (req: Request) => {
 
   const { action } = body
 
-  // Récupérer l'auth user si dispo (header Authorization) — utilisé par
-  // les 4 actions ci-dessous, on factorise le code en haut.
+  // Auth user (optionnel pour les achats anonymes de dédicace/sponsoring)
   let authUserId: string | null = null
   const authHeader = req.headers.get('Authorization')
   if (authHeader?.startsWith('Bearer ')) {
@@ -312,53 +377,101 @@ serve(async (req: Request) => {
   }
 
   // ──────────────────────────────────────
-  // 1. CREATE-INTENT (don)
-  //    Crée un PaymentIntent Stripe, renvoie le client_secret au front.
-  //    Le montant et les métadonnées sont stockés DANS le PaymentIntent
-  //    pour qu'à la finalisation on puisse re-vérifier ce qu'on devait
-  //    encaisser (anti-tampering : si le front envoie un montant modifié
-  //    à la finalize, Stripe a stocké la vraie valeur).
+  // 1. CREATE-PURCHASE-INTENT
+  //    Achat d'un produit shop_items (emote / dédicace / sponsoring).
+  //    Prix lu en DB côté serveur (anti-tampering client).
+  //
+  //    Auth required uniquement si item.category === 'emote' (déblocage
+  //    permanent attaché à un compte). Pour dédicaces et sponsoring,
+  //    l'achat anonyme est autorisé.
+  //
+  //    `repeatable=false` ET déjà possédé → refuse l'achat.
   // ──────────────────────────────────────
-  if (action === 'create-intent') {
-    const { amountCents, displayName, message, sessionId, payerEmail } = body
-
-    // Validations côté serveur (jamais faire confiance au client)
-    if (!Number.isInteger(amountCents) || amountCents < 100 || amountCents > 10000000) {
-      return json(400, { error: 'invalid_amount', message: 'Montant entre 1€ et 100 000€' })
-    }
-    if (!displayName || typeof displayName !== 'string' || displayName.length > 80) {
-      return json(400, { error: 'invalid_display_name' })
-    }
-    if (message && (typeof message !== 'string' || message.length > 300)) {
-      return json(400, { error: 'invalid_message' })
+  if (action === 'create-purchase-intent') {
+    const { itemSlug, customMessage, displayName, sessionId, payerEmail } = body
+    if (!itemSlug || typeof itemSlug !== 'string') {
+      return json(400, { error: 'missing_item_slug' })
     }
 
-    // ── Anti-impersonation : refuser un pseudo déjà pris par un autre user
-    //    Si le donateur n'est pas connecté ET le pseudo matche le
-    //    display_name d'un user enregistré → bloque. Si le donateur EST
-    //    connecté ET son propre display_name matche → autorisé.
-    {
-      const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-        auth: { autoRefreshToken: false, persistSession: false },
-      })
-      const trimmedName = displayName.trim()
-      if (trimmedName.length > 0) {
-        // ILIKE = match insensible à la casse. Empêche "jctest" de squatter "JCTest".
-        const { data: clash } = await supabase
-          .from('profiles')
-          .select('id, display_name')
-          .ilike('display_name', trimmedName)
-          .limit(1)
-          .maybeSingle()
-        if (clash && clash.id !== authUserId) {
-          return json(400, {
-            error: 'pseudo_taken',
-            message: `Le pseudo "${trimmedName}" est déjà utilisé par un membre. Choisis-en un autre ou connecte-toi.`,
-          })
-        }
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
+
+    const { data: item, error: itemErr } = await supabase
+      .from('shop_items')
+      .select('slug, name, price_cents, is_visible, category, allows_custom_message, repeatable')
+      .eq('slug', itemSlug)
+      .maybeSingle()
+    if (itemErr || !item) return json(400, { error: 'item_not_found' })
+    if (!item.is_visible) return json(400, { error: 'item_not_purchasable' })
+    if (!item.price_cents || item.price_cents < 100) {
+      return json(400, { error: 'invalid_item_price' })
+    }
+
+    // Auth required uniquement pour les emotes (déblocage permanent)
+    if (item.category === 'emote' && !authUserId) {
+      return json(401, { error: 'auth_required_for_emote' })
+    }
+
+    // Si l'item n'est pas repeatable et qu'un user connecté l'a déjà,
+    // on refuse (l'UI front filtre déjà mais double-check serveur).
+    if (!item.repeatable && authUserId) {
+      const { data: existing } = await supabase
+        .from('user_purchases')
+        .select('id')
+        .eq('user_id', authUserId)
+        .eq('item_slug', itemSlug)
+        .maybeSingle()
+      if (existing) return json(400, { error: 'already_owned' })
+    }
+
+    // Validation displayName (obligatoire si achat anonyme OU si l'item
+    // accepte un message custom — le bot TTS doit pouvoir dire un pseudo).
+    let cleanDisplayName: string | null = null
+    if (displayName && typeof displayName === 'string') {
+      const trimmed = displayName.trim()
+      if (trimmed.length === 0 || trimmed.length > 80) {
+        return json(400, { error: 'invalid_display_name' })
+      }
+      cleanDisplayName = trimmed
+    }
+    // Pour les services live (allows_custom_message), pseudo obligatoire
+    // — soit du compte connecté (récupéré en DB), soit fourni par le front.
+    if (item.allows_custom_message && !cleanDisplayName && !authUserId) {
+      return json(400, { error: 'display_name_required' })
+    }
+
+    // Anti-impersonation : si l'acheteur anonyme tape un pseudo déjà pris
+    // par un membre, on refuse (sauf si c'est l'user connecté lui-même).
+    if (cleanDisplayName) {
+      const { data: clash } = await supabase
+        .from('profiles')
+        .select('id, display_name')
+        .ilike('display_name', cleanDisplayName)
+        .limit(1)
+        .maybeSingle()
+      if (clash && clash.id !== authUserId) {
+        return json(400, {
+          error: 'pseudo_taken',
+          message: `Le pseudo "${cleanDisplayName}" est déjà utilisé par un membre.`,
+        })
       }
     }
-    // Email optionnel — si fourni, on valide (basique)
+
+    // Validation customMessage : seulement si allows_custom_message
+    let cleanMessage: string | null = null
+    if (customMessage && typeof customMessage === 'string') {
+      if (!item.allows_custom_message) {
+        // L'item ne supporte pas les messages → on ignore silencieusement
+        cleanMessage = null
+      } else {
+        const trimmed = customMessage.trim()
+        if (trimmed.length > 300) return json(400, { error: 'message_too_long' })
+        cleanMessage = trimmed || null
+      }
+    }
+
+    // Email payeur (optionnel)
     let cleanEmail: string | null = null
     if (payerEmail && typeof payerEmail === 'string') {
       const trimmed = payerEmail.trim()
@@ -370,23 +483,19 @@ serve(async (req: Request) => {
 
     try {
       const intentBody: Record<string, unknown> = {
-        amount: amountCents,
+        amount: item.price_cents, // prix SERVEUR
         currency: 'eur',
-        // Méthodes de paiement automatiques (Stripe choisit ce qui est dispo
-        // pour le pays du donateur : carte, Apple Pay, Google Pay, etc.)
         automatic_payment_methods: { enabled: true },
-        description: `Don Mob Y Dick — ${displayName}`,
-        // Metadata : stockés sur le PaymentIntent côté Stripe → vérifiable
-        // au moment de la finalize sans avoir à se fier au client.
+        description: `${item.name} — Mob Y Dick`,
         metadata: {
-          display_name: displayName,
-          message: message || '',
-          session_id: sessionId || '',
+          kind: 'purchase',
           user_id: authUserId || '',
-          kind: 'donation',
+          item_slug: item.slug,
+          display_name: cleanDisplayName || '',
+          message: cleanMessage || '',
+          session_id: sessionId || '',
         },
       }
-      // Email pour reçu Stripe automatique
       if (cleanEmail) intentBody.receipt_email = cleanEmail
 
       const intent = await stripeRequest('/payment_intents', intentBody)
@@ -400,156 +509,11 @@ serve(async (req: Request) => {
   }
 
   // ──────────────────────────────────────
-  // 2. FINALIZE
-  //    Vérifie le PaymentIntent côté Stripe (status='succeeded') puis
-  //    insère dans donations. Idempotent : si on retente avec le même
-  //    payment_intent_id, on ne crée pas de doublon (UNIQUE constraint).
-  // ──────────────────────────────────────
-  if (action === 'finalize') {
-    const { paymentIntentId } = body
-    if (!paymentIntentId || typeof paymentIntentId !== 'string') {
-      return json(400, { error: 'missing_payment_intent_id' })
-    }
-
-    // On récupère le PaymentIntent + son latest_charge (qui contient la
-    // marque de carte, last4, receipt_url, email du payeur). Le paramètre
-    // expand[]=latest_charge demande à Stripe de nous inclure cet objet
-    // directement (sinon on aurait juste l'ID et il faudrait un 2e appel).
-    let intent: any
-    try {
-      intent = await stripeRequest(
-        `/payment_intents/${encodeURIComponent(paymentIntentId)}?expand[]=latest_charge`
-      )
-    } catch (err) {
-      return json(502, { error: 'stripe_fetch_failed', detail: String(err.message || err) })
-    }
-
-    if (intent.status !== 'succeeded') {
-      return json(400, { error: 'payment_not_succeeded', status: intent.status })
-    }
-    if (intent.currency !== 'eur') {
-      return json(400, { error: 'wrong_currency', currency: intent.currency })
-    }
-
-    // Extraction des infos enrichies depuis le charge
-    const charge = intent.latest_charge || {}
-    const cardDetails = charge.payment_method_details?.card || {}
-    const cardBrand: string | null = cardDetails.brand || null
-    const cardLast4: string | null = cardDetails.last4 || null
-    const receiptUrl: string | null = charge.receipt_url || null
-    // Email : soit billing_details.email (saisi par Stripe via 3DS),
-    // soit receipt_email (qu'on a passé à create-intent), soit null
-    const payerEmail: string | null =
-      charge.billing_details?.email
-      || intent.receipt_email
-      || null
-
-    const md = intent.metadata || {}
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    })
-
-    // On utilise paypal_order_id pour stocker le payment_intent_id Stripe
-    // (la colonne existe déjà et a une UNIQUE constraint via v20 →
-    // idempotence automatique en cas de retry). Le payment_provider
-    // distingue stripe vs paypal pour l'affichage admin.
-    const { error: insertErr } = await supabase.from('donations').insert({
-      user_id: md.user_id || null,
-      display_name: (md.display_name || 'Donateur Anonyme').slice(0, 80),
-      amount_cents: intent.amount,
-      message: md.message ? String(md.message).slice(0, 300) : null,
-      session_id: md.session_id || null,
-      paypal_order_id: paymentIntentId,
-      payment_provider: 'stripe',
-      payer_email: payerEmail,
-      card_brand: cardBrand,
-      card_last4: cardLast4,
-      receipt_url: receiptUrl,
-    })
-
-    if (insertErr) {
-      if (insertErr.code === '23505') {
-        // Duplicate → idempotent retry, on dit OK
-        return json(200, { ok: true, duplicate: true })
-      }
-      return json(500, { error: 'db_insert_failed', detail: insertErr.message })
-    }
-
-    return json(200, { ok: true, amountCents: intent.amount })
-  }
-
-  // ──────────────────────────────────────
-  // 3. CREATE-PURCHASE-INTENT (achat d'une emote premium)
-  //    Le user achète un item dont le prix est fixé en DB (shop_items).
-  //    On NE FAIT PAS CONFIANCE au montant envoyé par le client : on
-  //    relit le prix depuis shop_items et on l'utilise pour le Stripe
-  //    PaymentIntent. Le client_secret est ensuite confirmé par le front,
-  //    puis finalize-purchase débloque l'emote pour le user.
-  // ──────────────────────────────────────
-  if (action === 'create-purchase-intent') {
-    if (!authUserId) return json(401, { error: 'auth_required_for_purchase' })
-
-    const { itemSlug } = body
-    if (!itemSlug || typeof itemSlug !== 'string') {
-      return json(400, { error: 'missing_item_slug' })
-    }
-
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: { autoRefreshToken: false, persistSession: false },
-    })
-
-    // Vérifier que l'item existe, est visible, et récupérer son prix officiel
-    const { data: item, error: itemErr } = await supabase
-      .from('shop_items')
-      .select('slug, name, price_cents, is_visible')
-      .eq('slug', itemSlug)
-      .maybeSingle()
-    if (itemErr || !item) return json(400, { error: 'item_not_found' })
-    if (!item.is_visible) return json(400, { error: 'item_not_purchasable' })
-    if (!item.price_cents || item.price_cents < 100) {
-      return json(400, { error: 'invalid_item_price' })
-    }
-
-    // Vérifier que le user ne possède pas déjà cet item (évite les
-    // débits multiples accidentels — l'UI front filtre déjà mais on
-    // re-vérifie côté serveur).
-    const { data: existing } = await supabase
-      .from('user_purchases')
-      .select('id')
-      .eq('user_id', authUserId)
-      .eq('item_slug', itemSlug)
-      .maybeSingle()
-    if (existing) return json(400, { error: 'already_owned' })
-
-    try {
-      const intent = await stripeRequest('/payment_intents', {
-        amount: item.price_cents, // ← prix SERVEUR, pas celui du client
-        currency: 'eur',
-        automatic_payment_methods: { enabled: true },
-        description: `Achat emote ${item.name} — Mob Y Dick`,
-        metadata: {
-          user_id: authUserId,
-          item_slug: itemSlug,
-          kind: 'purchase',
-        },
-      })
-      return json(200, {
-        clientSecret: intent.client_secret,
-        paymentIntentId: intent.id,
-      })
-    } catch (err) {
-      return json(502, { error: 'stripe_create_failed', detail: String(err.message || err) })
-    }
-  }
-
-  // ──────────────────────────────────────
-  // 4. FINALIZE-PURCHASE (débloque l'emote)
-  //    Vérifie le PaymentIntent côté Stripe puis insère dans user_purchases.
-  //    Idempotent grâce au UNIQUE(user_id, item_slug) de la table.
+  // 2. FINALIZE-PURCHASE
+  //    Vérifie le PaymentIntent côté Stripe puis insère dans user_purchases
+  //    + éventuellement live_messages (si allows_custom_message). Idempotent.
   // ──────────────────────────────────────
   if (action === 'finalize-purchase') {
-    if (!authUserId) return json(401, { error: 'auth_required_for_purchase' })
-
     const { paymentIntentId } = body
     if (!paymentIntentId || typeof paymentIntentId !== 'string') {
       return json(400, { error: 'missing_payment_intent_id' })
@@ -562,62 +526,43 @@ serve(async (req: Request) => {
       )
     } catch (err) {
       return json(502, { error: 'stripe_fetch_failed', detail: String(err.message || err) })
-    }
-
-    if (intent.status !== 'succeeded') {
-      return json(400, { error: 'payment_not_succeeded', status: intent.status })
-    }
-    if (intent.currency !== 'eur') {
-      return json(400, { error: 'wrong_currency', currency: intent.currency })
     }
 
     const md = intent.metadata || {}
     if (md.kind !== 'purchase') {
       return json(400, { error: 'wrong_intent_kind' })
     }
-    if (md.user_id !== authUserId) {
+    // Pour les emotes (auth required), vérifie que l'user qui finalize est
+    // bien celui qui a créé le PI (anti-vol d'item).
+    if (md.user_id && md.user_id !== '' && md.user_id !== authUserId) {
       return json(403, { error: 'user_mismatch' })
     }
-    if (!md.item_slug) {
-      return json(400, { error: 'missing_item_slug_in_intent' })
-    }
-
-    const charge = intent.latest_charge || {}
-    const cardDetails = charge.payment_method_details?.card || {}
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
 
-    const { error: insertErr } = await supabase.from('user_purchases').insert({
-      user_id: authUserId,
-      item_slug: md.item_slug,
-      amount_cents: intent.amount,
-      paypal_order_id: paymentIntentId,
-      payment_provider: 'stripe',
-      card_brand: cardDetails.brand || null,
-      card_last4: cardDetails.last4 || null,
-      receipt_url: charge.receipt_url || null,
-    })
-
-    if (insertErr) {
-      if (insertErr.code === '23505') {
-        return json(200, { ok: true, duplicate: true, itemSlug: md.item_slug })
-      }
-      return json(500, { error: 'db_insert_failed', detail: insertErr.message })
+    const result = await processIntentSucceeded(intent, supabase)
+    if (!result.ok) {
+      return json(result.status || 500, { error: result.error, detail: result.detail })
     }
-
-    return json(200, { ok: true, itemSlug: md.item_slug })
+    return json(200, {
+      ok: true,
+      duplicate: !!result.duplicate,
+      itemSlug: result.itemSlug,
+      userPurchaseId: result.userPurchaseId,
+      amountCents: intent.amount,
+    })
   }
 
   // ──────────────────────────────────────
-  // 5. CREATE-ORDER-INTENT (achat dans la boutique)
+  // 3. CREATE-ORDER-INTENT (boutique merch physique — inchangé)
   // ──────────────────────────────────────
   if (action === 'create-order-intent') {
     if (!authUserId) return json(401, { error: 'auth_required_for_order' })
 
     const { productId, customText, size, customerName, customerEmail, shippingAddress, shippingCity, shippingZip, shippingCountry } = body
-    
+
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
@@ -627,13 +572,12 @@ serve(async (req: Request) => {
       .select('name, price')
       .eq('id', productId)
       .maybeSingle()
-      
+
     if (prodErr || !product) return json(400, { error: 'product_not_found' })
-    
-    // Convert string price like '35€' to cents
+
     const parsedPriceStr = String(product.price).replace(/[^0-9.]/g, '')
     const amountCents = Math.round(parseFloat(parsedPriceStr) * 100)
-    
+
     if (!amountCents || amountCents < 100) return json(400, { error: 'invalid_product_price' })
 
     try {
@@ -667,7 +611,7 @@ serve(async (req: Request) => {
   }
 
   // ──────────────────────────────────────
-  // 6. FINALIZE-ORDER
+  // 4. FINALIZE-ORDER (inchangé)
   // ──────────────────────────────────────
   if (action === 'finalize-order') {
     if (!authUserId) return json(401, { error: 'auth_required_for_order' })
@@ -686,78 +630,42 @@ serve(async (req: Request) => {
       return json(502, { error: 'stripe_fetch_failed', detail: String(err.message || err) })
     }
 
-    if (intent.status !== 'succeeded') {
-      return json(400, { error: 'payment_not_succeeded', status: intent.status })
-    }
-
     const md = intent.metadata || {}
-    if (md.kind !== 'order') {
-      return json(400, { error: 'wrong_intent_kind' })
-    }
-    if (md.user_id !== authUserId) {
-      return json(403, { error: 'user_mismatch' })
-    }
+    if (md.kind !== 'order') return json(400, { error: 'wrong_intent_kind' })
+    if (md.user_id !== authUserId) return json(403, { error: 'user_mismatch' })
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
 
-    const orderPayload = {
-      product_name: md.product_name,
-      price: (intent.amount / 100).toFixed(2) + '€',
-      custom_text: md.custom_text || null,
-      size: md.size || null,
-      customer_name: md.customer_name,
-      customer_email: md.customer_email,
-      shipping_address: md.shipping_address,
-      shipping_city: md.shipping_city,
-      shipping_zip: md.shipping_zip,
-      shipping_country: md.shipping_country,
-      status: 'Paiement Validé',
-      user_id: authUserId,
-      paypal_order_id: paymentIntentId,
+    const result = await processIntentSucceeded(intent, supabase)
+    if (!result.ok) {
+      return json(result.status || 500, { error: result.error, detail: result.detail })
     }
-
-    const { error: insertErr } = await supabase.from('orders').insert([orderPayload])
-    if (insertErr) {
-      if (insertErr.code === '23505') {
-        return json(200, { ok: true, duplicate: true })
-      }
-      return json(500, { error: 'db_insert_failed', detail: insertErr.message })
-    }
-
-    return json(200, { ok: true })
+    return json(200, { ok: true, duplicate: !!result.duplicate })
   }
 
   // ──────────────────────────────────────
-  // 7. ADMIN-SIMULATE-DONATION
-  //    Joue juste l'animation de don sur le live sans rien stocker en DB
-  //    (l'admin veut tester l'overlay, pas polluer l'historique).
-  //
-  //    Sécurité : on broadcast côté serveur via la HTTP Realtime API en
-  //    service_role. Comme c'est l'edge function qui émet (après vérif
-  //    admin), un viewer ne peut PAS falsifier en envoyant lui-même un
-  //    broadcast `donation-simu` depuis sa console (sauf à passer par
-  //    cette même action — laquelle exige `role='admin'`).
-  //
-  //    Le front s'abonne à `donation-simu` sur le channel `live-extras-${sid}`
-  //    et déclenche `triggerDonationAlert` avec un faux row éphémère.
+  // 5. ADMIN-SIMULATE-PURCHASE
+  //    Joue l'animation d'achat sur le live sans débit ni DB write
+  //    (l'admin veut tester l'overlay). Broadcast via realtime, jamais
+  //    falsifiable côté client puisque cette action exige role='admin'
+  //    re-vérifié serveur-side.
   // ──────────────────────────────────────
-  if (action === 'admin-simulate-donation') {
+  if (action === 'admin-simulate-purchase' || action === 'admin-simulate-donation' /* legacy compat */) {
     if (!authUserId) return json(401, { error: 'auth_required' })
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
       auth: { autoRefreshToken: false, persistSession: false },
     })
 
-    // Re-check admin role côté serveur (le check client n'est qu'UI-gating)
     const { data: profile } = await supabase
       .from('profiles').select('role').eq('id', authUserId).maybeSingle()
     if (profile?.role !== 'admin') {
       return json(403, { error: 'admin_required' })
     }
 
-    const { displayName, amountCents, message, sessionId } = body
+    const { displayName, amountCents, message, sessionId, itemSlug } = body
     if (!displayName || typeof displayName !== 'string') {
       return json(400, { error: 'missing_display_name' })
     }
@@ -769,9 +677,6 @@ serve(async (req: Request) => {
       return json(400, { error: 'missing_session_id' })
     }
 
-    // Broadcast direct via l'API HTTP Realtime de Supabase. Ça relaie
-    // à tous les clients abonnés à `live-extras-${sessionId}` sur l'event
-    // `donation-simu` sans jamais toucher la BDD.
     try {
       const resp = await fetch(`${SUPABASE_URL}/realtime/v1/api/broadcast`, {
         method: 'POST',
@@ -783,12 +688,15 @@ serve(async (req: Request) => {
         body: JSON.stringify({
           messages: [{
             topic: `live-extras-${sessionId}`,
-            event: 'donation-simu',
+            // Le front s'abonne sur 'purchase-simu' ET garde 'donation-simu'
+            // pour rétro-compat le temps du déploiement.
+            event: 'purchase-simu',
             payload: {
               id: `simu-${Date.now()}-${authUserId.slice(0, 8)}`,
               display_name: displayName.slice(0, 80),
               amount_cents: amt,
               message: message ? String(message).slice(0, 300) : null,
+              item_slug: itemSlug || null,
             },
           }],
         }),
@@ -801,6 +709,16 @@ serve(async (req: Request) => {
       return json(502, { error: 'broadcast_failed', detail: String(err.message || err) })
     }
     return json(200, { ok: true, simulated: true })
+  }
+
+  // Legacy actions removed (Stripe compliance v26) :
+  //   - create-intent → use create-purchase-intent with itemSlug
+  //   - finalize      → use finalize-purchase
+  if (action === 'create-intent' || action === 'finalize') {
+    return json(410, {
+      error: 'action_removed',
+      message: 'Les dons à montant libre ont été retirés. Utilise create-purchase-intent avec un itemSlug de shop_items.',
+    })
   }
 
   return json(400, { error: 'unknown_action' })

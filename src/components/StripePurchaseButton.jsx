@@ -1,18 +1,23 @@
 /**
- * StripePurchaseButton — Bouton + modal pour acheter une emote premium
+ * StripePurchaseButton — Bouton + modal pour acheter un produit shop_items
  *
- * Affiche un bouton "Acheter Xe" sur une emote premium. Au clic, ouvre
- * une mini-modal avec :
- *  - Le récap de l'achat (nom emote + prix)
- *  - Un <CardElement> Stripe pour saisir la carte
+ * Affiche un bouton "Acheter Xe" sur une carte produit (emote / dédicace /
+ * sponsoring). Au clic, ouvre une modal avec :
+ *  - Récap : nom + emoji + prix
+ *  - Si item.allows_custom_message :
+ *      • champ pseudo (auto-rempli depuis le profil si connecté, sinon saisie)
+ *      • textarea message custom (lu à l'antenne par le bot TTS)
+ *  - <CardElement> Stripe pour saisir la carte
  *  - Bouton de confirmation qui :
  *     1. Appelle l'Edge Function `stripe-donation` action='create-purchase-intent'
- *     2. Confirme le paiement avec Stripe via stripe.confirmCardPayment
- *     3. Appelle l'Edge Function action='finalize-purchase' → débloque
- *        l'emote dans user_purchases côté serveur
+ *        (passe customMessage / displayName / sessionId si pertinent)
+ *     2. Confirme le paiement via stripe.confirmCardPayment
+ *     3. Appelle action='finalize-purchase' → insert user_purchases +
+ *        éventuellement live_messages côté serveur
  *
- * Sur succès, appelle onSuccess() → le parent recharge userPurchases →
- * le badge "Débloqué" apparaît à la place du bouton.
+ * Achats anonymes : si item.category ≠ 'emote', un visiteur non connecté
+ * peut acheter (l'achat n'est pas attaché à un compte permanent — c'est
+ * un service unique, pas un déblocage).
  */
 import { useState, useMemo, useEffect } from 'react'
 import { loadStripe } from '@stripe/stripe-js'
@@ -25,7 +30,7 @@ import {
 import { createPortal } from 'react-dom'
 import { supabase } from '../supabaseClient'
 import { useToast } from './Toast'
-import './StripeDonationForm.css' // ← réutilise les styles du donation form
+import './StripeCheckout.css'
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || ''
 const stripePromise = PUBLISHABLE_KEY ? loadStripe(PUBLISHABLE_KEY) : null
@@ -44,7 +49,7 @@ const CARD_ELEMENT_OPTIONS = {
   hidePostalCode: true,
 }
 
-function PurchaseModalInner({ item, onClose, onSuccess }) {
+function PurchaseModalInner({ item, sessionId, authUser, authUserDisplayName, onClose, onSuccess }) {
   const stripe = useStripe()
   const elements = useElements()
   const toast = useToast()
@@ -52,23 +57,61 @@ function PurchaseModalInner({ item, onClose, onSuccess }) {
   const [cardError, setCardError] = useState(null)
   const [cardComplete, setCardComplete] = useState(false)
 
+  // Pseudo affiché à l'antenne. Si user connecté, on prend son display_name
+  // (read-only) ; sinon, on laisse saisir (max 80 chars).
+  const hasAuthName = !!authUserDisplayName
+  const [pseudo, setPseudo] = useState(authUserDisplayName || '')
+  // Message custom lu par le bot TTS (uniquement si allows_custom_message).
+  const [customMessage, setCustomMessage] = useState('')
+  // Email payeur (pour le reçu) — optionnel si pas connecté.
+  const [payerEmail, setPayerEmail] = useState('')
+  const authEmail = authUser?.email || null
+
   const priceEuros = (item.price_cents / 100).toFixed(2)
+  const allowsMessage = !!item.allows_custom_message
+  const requiresAuth = item.category === 'emote'
+
+  // Si l'item est une emote et que le user n'est pas connecté, on bloque
+  // dès l'affichage (le bouton parent filtre déjà ce cas mais double-check).
+  useEffect(() => {
+    if (requiresAuth && !authUser) {
+      toast.error('Connecte-toi pour acheter cette emote.')
+      onClose()
+    }
+  }, [requiresAuth, authUser, toast, onClose])
 
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!stripe || !elements || !cardComplete) return
 
+    if (allowsMessage && !pseudo.trim()) {
+      setCardError('Renseigne un pseudo pour ton achat')
+      return
+    }
+    if (pseudo.length > 80) {
+      setCardError('Pseudo trop long (80 caractères max)')
+      return
+    }
+    if (customMessage.length > 300) {
+      setCardError('Message trop long (300 caractères max)')
+      return
+    }
+
     setProcessing(true)
     setCardError(null)
 
     try {
-      // 1. Create purchase intent côté serveur (prix vérifié serveur-side)
+      // 1. Créer le purchase intent (prix vérifié serveur-side)
       const { data: intentData, error: intentErr } = await supabase.functions.invoke(
         'stripe-donation',
         {
           body: {
             action: 'create-purchase-intent',
             itemSlug: item.slug,
+            displayName: pseudo.trim() || null,
+            customMessage: allowsMessage ? (customMessage.trim() || null) : null,
+            sessionId: sessionId || null,
+            payerEmail: authEmail || payerEmail.trim() || null,
           },
         }
       )
@@ -79,20 +122,26 @@ function PurchaseModalInner({ item, onClose, onSuccess }) {
           onSuccess?.()
           return
         }
+        if (intentData?.error === 'pseudo_taken') {
+          throw new Error(intentData.message || 'Pseudo déjà pris par un membre.')
+        }
         throw new Error(intentData?.error || 'Pas de client_secret reçu')
       }
 
-      // 2. Confirmer carte avec Stripe
+      // 2. Confirmer la carte avec Stripe
       const cardElement = elements.getElement(CardElement)
       const result = await stripe.confirmCardPayment(intentData.clientSecret, {
-        payment_method: { card: cardElement },
+        payment_method: {
+          card: cardElement,
+          billing_details: pseudo.trim() ? { name: pseudo.trim().slice(0, 80) } : undefined,
+        },
       })
       if (result.error) throw new Error(result.error.message || 'Paiement refusé')
       if (result.paymentIntent?.status !== 'succeeded') {
         throw new Error(`Statut paiement inattendu : ${result.paymentIntent?.status}`)
       }
 
-      // 3. Finaliser côté serveur → insert dans user_purchases
+      // 3. Finaliser côté serveur
       const { data: finalData, error: finalErr } = await supabase.functions.invoke(
         'stripe-donation',
         {
@@ -105,7 +154,16 @@ function PurchaseModalInner({ item, onClose, onSuccess }) {
       if (finalErr) throw new Error(finalErr.message || 'Erreur finalisation')
       if (!finalData?.ok) throw new Error(finalData?.error || 'Validation refusée')
 
-      toast.success(`Débloqué : ${item.name} ! Utilise-la depuis le live.`)
+      console.info('[Stripe finalize] ok', {
+        paymentIntentId: result.paymentIntent.id,
+        itemSlug: item.slug,
+        duplicate: !!finalData.duplicate,
+      })
+
+      const successMsg = allowsMessage
+        ? `Merci pour ton achat (${item.name}) ! Ton message s'affiche en direct.`
+        : `Débloqué : ${item.name} ! Utilise-la depuis le live.`
+      toast.success(successMsg)
       onSuccess?.()
     } catch (err) {
       setCardError(err.message || String(err))
@@ -122,7 +180,7 @@ function PurchaseModalInner({ item, onClose, onSuccess }) {
     >
       <div className="stripe-purchase-modal glass">
         <div className="stripe-purchase-header">
-          <h3>{item.emoji || '🔊'} {item.name}</h3>
+          <h3>{item.emoji || '🛒'} {item.name}</h3>
           <button
             type="button"
             className="stripe-purchase-close"
@@ -140,6 +198,63 @@ function PurchaseModalInner({ item, onClose, onSuccess }) {
         </div>
 
         <form className="stripe-form" onSubmit={handleSubmit}>
+          {/* Pseudo + message custom : uniquement pour les services live */}
+          {allowsMessage && (
+            <>
+              <label className="stripe-form-label">
+                Pseudo (affiché à l'écran)
+                {hasAuthName ? (
+                  <div className="stripe-form-authuser">
+                    <span className="stripe-form-authuser-icon">✓</span>
+                    <span>Membre <strong>{authUserDisplayName}</strong></span>
+                  </div>
+                ) : (
+                  <input
+                    type="text"
+                    placeholder="Ex: Rider44"
+                    value={pseudo}
+                    onChange={(e) => setPseudo(e.target.value)}
+                    disabled={processing}
+                    maxLength={80}
+                    className="stripe-email-input"
+                  />
+                )}
+              </label>
+
+              <label className="stripe-form-label">
+                Message <span style={{ fontWeight: 400, fontSize: '0.78rem', color: 'var(--text-muted)' }}>(lu à l'antenne, 300 caractères max)</span>
+                <textarea
+                  placeholder="Allez Mob Y Dick, on est avec vous !"
+                  value={customMessage}
+                  onChange={(e) => setCustomMessage(e.target.value)}
+                  disabled={processing}
+                  maxLength={300}
+                  rows={3}
+                  className="stripe-email-input"
+                  style={{ resize: 'vertical', fontFamily: 'inherit' }}
+                />
+              </label>
+            </>
+          )}
+
+          {/* Email reçu : seulement si pas connecté */}
+          {!authEmail && (
+            <label className="stripe-form-label">
+              Email <span style={{ fontWeight: 400, fontSize: '0.78rem', color: 'var(--text-muted)' }}>(optionnel — pour recevoir un reçu)</span>
+              <input
+                type="email"
+                inputMode="email"
+                autoComplete="email"
+                placeholder="ton@email.com"
+                value={payerEmail}
+                onChange={(e) => setPayerEmail(e.target.value)}
+                disabled={processing}
+                maxLength={254}
+                className="stripe-email-input"
+              />
+            </label>
+          )}
+
           <label className="stripe-form-label">
             Informations de carte
             <div className="stripe-card-wrap">
@@ -169,13 +284,13 @@ function PurchaseModalInner({ item, onClose, onSuccess }) {
               className="btn btn-primary stripe-form-submit"
               disabled={!stripe || processing || !cardComplete}
             >
-              {processing ? '⏳ Paiement…' : `💳 Débloquer pour ${priceEuros}€`}
+              {processing ? '⏳ Paiement…' : `💳 Acheter pour ${priceEuros}€`}
             </button>
           </div>
 
           <p className="stripe-form-disclaimer">
-            Paiement sécurisé par <strong>Stripe</strong>. L'emote sera
-            disponible immédiatement après confirmation.
+            Paiement sécurisé par <strong>Stripe</strong>. Achat ferme et définitif,
+            sans remboursement ultérieur (service immédiat).
           </p>
         </form>
       </div>
@@ -184,7 +299,7 @@ function PurchaseModalInner({ item, onClose, onSuccess }) {
   )
 }
 
-export default function StripePurchaseButton({ item, onPurchased }) {
+export default function StripePurchaseButton({ item, sessionId, authUser, authUserDisplayName, onPurchased }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [keyMissing] = useState(!PUBLISHABLE_KEY)
 
@@ -213,6 +328,8 @@ export default function StripePurchaseButton({ item, onPurchased }) {
     )
   }
 
+  const priceEuros = (item.price_cents / 100).toFixed(2)
+
   return (
     <>
       <button
@@ -221,12 +338,15 @@ export default function StripePurchaseButton({ item, onPurchased }) {
         style={{ width: '100%', minWidth: '120px', fontWeight: 700 }}
         onClick={() => setModalOpen(true)}
       >
-        💳 {(item.price_cents / 100).toFixed(2)}€
+        💳 {priceEuros}€
       </button>
       {modalOpen && (
         <Elements stripe={stripePromise} options={options}>
           <PurchaseModalInner
             item={item}
+            sessionId={sessionId}
+            authUser={authUser}
+            authUserDisplayName={authUserDisplayName}
             onClose={() => setModalOpen(false)}
             onSuccess={() => {
               setModalOpen(false)

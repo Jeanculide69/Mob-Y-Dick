@@ -8,7 +8,7 @@ import {
 } from '@stripe/react-stripe-js'
 import { supabase } from '../supabaseClient'
 import { useToast } from './Toast'
-import './StripeDonationForm.css'
+import './StripeCheckout.css'
 
 const PUBLISHABLE_KEY = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY || ''
 const stripePromise = PUBLISHABLE_KEY ? loadStripe(PUBLISHABLE_KEY) : null
