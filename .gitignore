@@ -1,3 +1,7 @@
 node_modules
 dist
 .DS_Store
+
+# Scripts de test ad-hoc + backups locaux non versionnés
+test_*.mjs
+public/*_backup.*
