@@ -15,6 +15,10 @@
 --   4. Ouvre INSERT + UPDATE aux modérateurs. DELETE reste admin.
 -- ============================================
 
+-- ─── 0. Extension pgcrypto (pour gen_random_uuid) ───
+-- Habituellement déjà activée sur Supabase, mais on s'assure.
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- ─── 1. Schéma de la table ─────────────────────
 CREATE TABLE IF NOT EXISTS public.bikes (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
@@ -27,6 +31,11 @@ CREATE TABLE IF NOT EXISTS public.bikes (
   created_at timestamptz DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- ─── 1.bis Si la table existait déjà sans DEFAULT sur id ───
+-- (cas réel détecté : table créée manuellement via Studio sans préciser
+-- de default → INSERT sans id → null violates not-null constraint).
+ALTER TABLE public.bikes ALTER COLUMN id SET DEFAULT gen_random_uuid();
+
 -- ─── 2. UNIQUE sort_order ──────────────────────
 -- Permet aux UPSERT côté front d'utiliser sort_order comme clé stable
 -- (l'UUID change à chaque réinsertion, sort_order non).
@@ -38,8 +47,12 @@ ALTER TABLE public.bikes
 -- ─── 3. Seed initial (rouge / orange / noir) ───
 -- Insère uniquement si le sort_order correspondant n'existe pas déjà.
 -- Si l'admin a déjà customisé une moto, on ne touche à rien.
-INSERT INTO public.bikes (title, plate, description, images, specs, sort_order)
+-- On force gen_random_uuid() explicitement (belt & suspenders) au cas où
+-- le ALTER ci-dessus n'aurait pas le temps d'être visible dans la même
+-- transaction sur certaines configs.
+INSERT INTO public.bikes (id, title, plate, description, images, specs, sort_order)
 SELECT
+  gen_random_uuid(),
   'La Bête Rouge – Beast R-1',
   'N° 1',
   'Conçue pour dompter la poussière et les terrains les plus extrêmes, la Bête Rouge est une véritable icône de puissance.',
@@ -48,8 +61,9 @@ SELECT
   0
 WHERE NOT EXISTS (SELECT 1 FROM public.bikes WHERE sort_order = 0);
 
-INSERT INTO public.bikes (title, plate, description, images, specs, sort_order)
+INSERT INTO public.bikes (id, title, plate, description, images, specs, sort_order)
 SELECT
+  gen_random_uuid(),
   'L''Étincelle Orange – Storm O-4',
   'N° 4',
   'L''Étincelle Orange ne passe jamais inaperçue. Conçue spécialement pour le stunt et le motocross freestyle.',
@@ -58,8 +72,9 @@ SELECT
   1
 WHERE NOT EXISTS (SELECT 1 FROM public.bikes WHERE sort_order = 1);
 
-INSERT INTO public.bikes (title, plate, description, images, specs, sort_order)
+INSERT INTO public.bikes (id, title, plate, description, images, specs, sort_order)
 SELECT
+  gen_random_uuid(),
   'L''Ombre Noire – Stealth N-67',
   'N° 67',
   'Sombre, furtive et d''une élégance redoutable, l''Ombre Noire est bâtie pour la performance en toute discrétion.',
