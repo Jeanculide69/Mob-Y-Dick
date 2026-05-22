@@ -721,10 +721,12 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
         if (!appId) return;
         const channelName = `live-stream-${session.id}`
 
-        // Identifiant viewer : auth.uid pour les users connectés, sinon
-        // un UUID aléatoire stable pour la session (anonyme).
+        // Identifiant viewer : TOUJOURS préfixé "viewer-" même pour un user
+        // authentifié, sinon collision avec l'UID du broadcaster (= session.user.id
+        // côté RaceSetup) → Agora éjecte le broadcaster et le viewer reste seul
+        // dans le channel ("en attente du signal" alors que le live tourne).
         const { data: { user: authUser } } = await supabase.auth.getUser()
-        const viewerUid = authUser?.id || `viewer-${crypto.randomUUID()}`
+        const viewerUid = `viewer-${authUser?.id || crypto.randomUUID()}`
 
         // Récupère un token Agora (audience) — nécessaire en Secured Mode.
         // Fallback silencieux sur null si l'Edge Function n'est pas dispo
