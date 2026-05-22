@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import './App.css'
+import './Admin.css'
 import { supabase } from './supabaseClient'
 import AuthModal from './components/AuthModal'
 import LiveChat from './components/LiveChat'
