@@ -852,6 +852,7 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
                       >
                         <option value="M">♂ Homme</option>
                         <option value="F">♀ Femme</option>
+                        <option value="J">🧒 Junior</option>
                       </select>
                     </div>
                   </div>
@@ -888,9 +889,9 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
                       <div className="race-team-info">
                         <span className="race-team-category">{t.category}</span>
                         <div className="race-team-pilots">
-                          <span>{t.pilot_1_sex === 'F' ? '♀' : '♂'} {t.pilot_1_name}</span>
-                          {t.pilot_2_name && <span>{t.pilot_2_sex === 'F' ? '♀' : '♂'} {t.pilot_2_name}</span>}
-                          {t.pilot_3_name && <span>{t.pilot_3_sex === 'F' ? '♀' : '♂'} {t.pilot_3_name}</span>}
+                          <span>{t.pilot_1_sex === 'F' ? '♀' : t.pilot_1_sex === 'J' ? '🧒' : '♂'} {t.pilot_1_name}</span>
+                          {t.pilot_2_name && <span>{t.pilot_2_sex === 'F' ? '♀' : t.pilot_2_sex === 'J' ? '🧒' : '♂'} {t.pilot_2_name}</span>}
+                          {t.pilot_3_name && <span>{t.pilot_3_sex === 'F' ? '♀' : t.pilot_3_sex === 'J' ? '🧒' : '♂'} {t.pilot_3_name}</span>}
                         </div>
                       </div>
                       {canModify && (
@@ -1051,6 +1052,7 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
                   >
                     <option value="M">♂ Homme</option>
                     <option value="F">♀ Femme</option>
+                    <option value="J">🧒 Junior</option>
                   </select>
                 </div>
               </div>
@@ -1098,9 +1100,9 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
                     <div className="race-team-info">
                       <span className="race-team-category">{t.category}</span>
                       <div className="race-team-pilots">
-                        <span>{t.pilot_1_sex === 'F' ? '♀' : '♂'} {t.pilot_1_name}</span>
-                        {t.pilot_2_name && <span>{t.pilot_2_sex === 'F' ? '♀' : '♂'} {t.pilot_2_name}</span>}
-                        {t.pilot_3_name && <span>{t.pilot_3_sex === 'F' ? '♀' : '♂'} {t.pilot_3_name}</span>}
+                        <span>{t.pilot_1_sex === 'F' ? '♀' : t.pilot_1_sex === 'J' ? '🧒' : '♂'} {t.pilot_1_name}</span>
+                        {t.pilot_2_name && <span>{t.pilot_2_sex === 'F' ? '♀' : t.pilot_2_sex === 'J' ? '🧒' : '♂'} {t.pilot_2_name}</span>}
+                        {t.pilot_3_name && <span>{t.pilot_3_sex === 'F' ? '♀' : t.pilot_3_sex === 'J' ? '🧒' : '♂'} {t.pilot_3_name}</span>}
                       </div>
                     </div>
                     <div className="race-team-actions">
