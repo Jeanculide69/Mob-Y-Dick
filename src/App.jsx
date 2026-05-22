@@ -20,6 +20,7 @@ const StripeOrderCheckout = lazy(() => import('./components/StripeOrderCheckout'
 const UserManagement = lazy(() => import('./components/UserManagement'))
 const EmoteAdmin     = lazy(() => import('./components/EmoteAdmin'))
 const LiveMessagesAdmin = lazy(() => import('./components/LiveMessagesAdmin'))
+const ContactMessagesAdmin = lazy(() => import('./components/ContactMessagesAdmin'))
 const RaceSetup      = lazy(() => import('./components/RaceSetup'))
 const RaceChrono     = lazy(() => import('./components/RaceChrono'))
 const Championnat    = lazy(() => import('./components/Championnat'))
@@ -441,6 +442,15 @@ function App() {
     }
   })
   const [showLegalModal, setShowLegalModal] = useState(false)
+
+  // ── Contact form state (footer → modal) ──
+  const [showContactModal, setShowContactModal] = useState(false)
+  const [contactEmail, setContactEmail] = useState('')
+  const [contactCategory, setContactCategory] = useState('autre')
+  const [contactMessage, setContactMessage] = useState('')
+  const [contactSubmitting, setContactSubmitting] = useState(false)
+  const [contactSuccess, setContactSuccess] = useState(false)
+  const [contactError, setContactError] = useState(null)
 
   // Database Data States
   const [dbEvents, setDbEvents] = useState(null)
@@ -1160,6 +1170,46 @@ function App() {
     }
   }
 
+  // ─── Contact Form Submission ───
+  const handleContactSubmit = async (e) => {
+    e.preventDefault()
+    setContactError(null)
+
+    const email = contactEmail.trim()
+    const message = contactMessage.trim()
+    if (!email || !email.includes('@')) {
+      setContactError('Renseigne une adresse email valide.')
+      return
+    }
+    if (message.length < 5) {
+      setContactError('Ton message est trop court (5 caractères minimum).')
+      return
+    }
+    if (message.length > 2000) {
+      setContactError('Ton message est trop long (2000 caractères maximum).')
+      return
+    }
+
+    setContactSubmitting(true)
+    try {
+      const { error } = await supabase.from('contact_messages').insert([{
+        email,
+        category: contactCategory,
+        message,
+      }])
+      if (error) throw error
+      setContactSuccess(true)
+      setContactEmail('')
+      setContactCategory('autre')
+      setContactMessage('')
+    } catch (err) {
+      console.error('[contact_messages] insert failed', err)
+      setContactError("Échec d'envoi : " + (err.message || 'erreur inconnue'))
+    } finally {
+      setContactSubmitting(false)
+    }
+  }
+
   // ─── Sponsor Questionnaire Submission Handlers ───
   const handleSponsorSubmit = async (e) => {
     e.preventDefault()
@@ -1331,6 +1381,8 @@ function App() {
                   onClick: () => { closeMenu(); handleOpenForm('emotes_admin') } },
                 { id: 'donations', icon: '💬', label: 'Messages live',
                   onClick: () => { closeMenu(); handleOpenForm('donations_admin') } },
+                { id: 'contact', icon: '📩', label: 'Messages contact',
+                  onClick: () => { closeMenu(); handleOpenForm('contact_admin') } },
                 { id: 'users', icon: '👥', label: 'Utilisateurs',
                   onClick: () => { closeMenu(); handleOpenForm('users_admin') } },
               ]
@@ -2310,6 +2362,7 @@ function App() {
         <div className="footer-bottom container">
           <p>&copy; 2026 Mob Y Dick. Tous droits réservés. <span className="site-version">{SITE_VERSION}</span></p>
           <div className="footer-bottom-actions">
+            <button className="footer-legal-btn" onClick={() => { setContactSuccess(false); setContactError(null); setShowContactModal(true) }}>📩 Contact</button>
             <button className="footer-legal-btn" onClick={() => setShowLegalModal(true)}>⚖️ Mentions Légales & CGV</button>
             <button className="admin-trigger" onClick={() => {
               if (isAdmin) {
@@ -2431,6 +2484,102 @@ function App() {
 
               <button className="btn btn-primary" style={{width:'100%', marginTop:'24px'}} onClick={() => setShowLegalModal(false)}>J'ai compris et j'accepte</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── Contact Modal ─── */}
+      {showContactModal && (
+        <div className="admin-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowContactModal(false) }}>
+          <div className="admin-panel glass admin-visual-modal legal-modal-scrollbar" style={{maxWidth:'520px', maxHeight:'85vh', overflowY:'auto'}}>
+            <div className="admin-header">
+              <h2>📩 Nous contacter</h2>
+              <button className="admin-close" onClick={() => setShowContactModal(false)}>✕</button>
+            </div>
+
+            {contactSuccess ? (
+              <div style={{textAlign:'center', padding:'30px 10px'}}>
+                <div style={{fontSize:'2.5rem', marginBottom:'12px'}}>✅</div>
+                <h3 style={{margin:'0 0 8px 0', color:'#fff'}}>Message bien reçu !</h3>
+                <p style={{fontSize:'0.9rem', color:'var(--text-secondary)', lineHeight:'1.5', margin:'0 0 20px 0'}}>
+                  Merci, on revient vers toi par email dans les meilleurs délais.
+                </p>
+                <button className="btn btn-outline btn-sm" onClick={() => setContactSuccess(false)}>
+                  Envoyer un autre message
+                </button>
+              </div>
+            ) : (
+              <form onSubmit={handleContactSubmit} style={{display:'flex', flexDirection:'column', gap:'14px', padding:'4px 0'}}>
+                <p style={{fontSize:'0.82rem', color:'var(--text-muted)', margin:0, lineHeight:'1.5'}}>
+                  Une question, un bug, une demande RGPD ? Remplis ce formulaire,
+                  on te répond par email dès qu'on peut.
+                </p>
+
+                <div>
+                  <label className="admin-label" style={{fontSize:'0.8rem', color:'var(--text-secondary)'}}>✉️ Ton email :</label>
+                  <input
+                    type="email"
+                    inputMode="email"
+                    autoComplete="email"
+                    placeholder="ton@email.com"
+                    value={contactEmail}
+                    onChange={(e) => setContactEmail(e.target.value)}
+                    required
+                    maxLength={254}
+                    disabled={contactSubmitting}
+                    style={{width:'100%', padding:'10px 14px', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'8px', color:'#fff'}}
+                  />
+                </div>
+
+                <div>
+                  <label className="admin-label" style={{fontSize:'0.8rem', color:'var(--text-secondary)'}}>🏷️ Catégorie :</label>
+                  <select
+                    value={contactCategory}
+                    onChange={(e) => setContactCategory(e.target.value)}
+                    disabled={contactSubmitting}
+                    style={{width:'100%', padding:'10px 14px', background:'#111', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'8px', color:'#fff', cursor:'pointer'}}
+                  >
+                    <option value="bug">🐞 Bug technique</option>
+                    <option value="achat">🛒 Question sur un achat</option>
+                    <option value="rgpd">🔒 Données personnelles (RGPD)</option>
+                    <option value="reclamation">⚠️ Réclamation</option>
+                    <option value="autre">💬 Autre</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="admin-label" style={{fontSize:'0.8rem', color:'var(--text-secondary)'}}>💬 Ton message :</label>
+                  <textarea
+                    placeholder="Décris-nous ton problème ou ta demande en quelques lignes..."
+                    value={contactMessage}
+                    onChange={(e) => setContactMessage(e.target.value)}
+                    required
+                    rows={5}
+                    maxLength={2000}
+                    disabled={contactSubmitting}
+                    style={{width:'100%', padding:'10px 14px', background:'rgba(255,255,255,0.03)', border:'1px solid rgba(255,255,255,0.1)', borderRadius:'8px', color:'#fff', resize:'vertical', fontFamily:'inherit'}}
+                  />
+                  <div style={{fontSize:'0.7rem', color:'var(--text-muted)', textAlign:'right', marginTop:'2px'}}>
+                    {contactMessage.length} / 2000
+                  </div>
+                </div>
+
+                {contactError && (
+                  <div style={{padding:'10px 12px', borderRadius:'8px', background:'rgba(255,60,60,0.1)', border:'1px solid rgba(255,60,60,0.3)', color:'#ff7575', fontSize:'0.85rem'}}>
+                    {contactError}
+                  </div>
+                )}
+
+                <button type="submit" className="btn btn-primary" style={{width:'100%', marginTop:'4px'}} disabled={contactSubmitting}>
+                  {contactSubmitting ? '⏳ Envoi…' : '📨 Envoyer mon message'}
+                </button>
+
+                <p style={{fontSize:'0.7rem', color:'var(--text-muted)', textAlign:'center', margin:0, lineHeight:'1.4'}}>
+                  Ton email n'est utilisé que pour te répondre. Voir notre
+                  politique de confidentialité dans les mentions légales.
+                </p>
+              </form>
+            )}
           </div>
         </div>
       )}
@@ -2604,7 +2753,7 @@ function App() {
       {/* ─── Sleek Dynamic Forms and Lists Modal (Admin) ─── */}
       {activeForm && (
         <div className="admin-overlay">
-          <div className={`admin-panel glass admin-visual-modal ${['orders','sponsors_admin','users_admin','bikes_admin','affiliations_admin','emotes_admin','donations_admin'].includes(activeForm) ? 'wide' : ''}`}>
+          <div className={`admin-panel glass admin-visual-modal ${['orders','sponsors_admin','users_admin','bikes_admin','affiliations_admin','emotes_admin','donations_admin','contact_admin'].includes(activeForm) ? 'wide' : ''}`}>
             <div className="admin-header">
               <h2>
                 {activeForm === 'event' && '📅 Gérer Événement'}
@@ -2619,6 +2768,7 @@ function App() {
                 {activeForm === 'affiliations_admin' && '🏍️ Demandes d\'affiliation'}
                 {activeForm === 'emotes_admin' && '🎉 Emotes & Sons Premium'}
                 {activeForm === 'donations_admin' && '💬 Messages Live & Emotes'}
+                {activeForm === 'contact_admin' && '📩 Messages de Contact'}
                 {activeForm === 'users_admin' && '👥 Gestion des Utilisateurs'}
               </h2>
               <button className="admin-close" onClick={() => { setActiveForm(null); setEditingItem(null) }}>✕</button>
@@ -2889,6 +3039,10 @@ function App() {
             ) : activeForm === 'donations_admin' ? (
               <Suspense fallback={<LazyLoader />}>
                 <LiveMessagesAdmin onClose={() => setActiveForm(null)} />
+              </Suspense>
+            ) : activeForm === 'contact_admin' ? (
+              <Suspense fallback={<LazyLoader />}>
+                <ContactMessagesAdmin />
               </Suspense>
             ) : activeForm === 'bikes_admin' ? (
               <div className="admin-orders-container" style={{ maxHeight: '75vh', overflowY: 'auto' }}>
