@@ -1,4 +1,4 @@
-import { useState, useEffect, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import './App.css'
 import { supabase } from './supabaseClient'
 import AuthModal from './components/AuthModal'
@@ -488,6 +488,7 @@ function App() {
   const [sponsorSuccess, setSponsorSuccess] = useState(false)
   const [dbSponsors, setDbSponsors] = useState([])
   const [dbAffiliations, setDbAffiliations] = useState([])
+  const [dbContactMessages, setDbContactMessages] = useState([])
 
   // Moto affiliation system
   const [viewingMotoNumber, setViewingMotoNumber] = useState(null)
@@ -570,6 +571,10 @@ function App() {
             .then(({ data }) => { if (data) setDbOrders(data) })
           supabase.from('sponsors').select('*').order('created_at', { ascending: false })
             .then(({ data, error }) => { if (data && !error) setDbSponsors(data) })
+          // RLS contact_messages_select_admin restreint la lecture aux admins ;
+          // un user normal reçoit un tableau vide (pas d'erreur) → safe à appeler.
+          supabase.from('contact_messages').select('id, status').order('created_at', { ascending: false })
+            .then(({ data, error }) => { if (data && !error) setDbContactMessages(data) })
           // PostgREST émet une 400 si la FK moto_affiliations.user_id → profiles
           // n'est pas déclarée. On fait le join en 2 temps côté client.
           supabase.from('moto_affiliations').select('*').order('requested_at', { ascending: false })
@@ -585,6 +590,32 @@ function App() {
       })
     }
   }
+
+  // ── Refresh des compteurs admin après fermeture d'un panel admin ──
+  // Quand l'admin ferme un modal (orders, sponsors, affiliations, contact),
+  // ses actions (marquer "lu", "payé", "approuvé"…) ont modifié les statuts
+  // en DB mais le state local n'a pas suivi → les badges du dropdown 🛠️ Admin
+  // affichent un compte obsolète. On refetch dès que activeForm repasse à null.
+  const previousActiveFormRef = useRef(null)
+  useEffect(() => {
+    const wasAdminForm = ['orders', 'sponsors_admin', 'affiliations_admin', 'contact_admin']
+      .includes(previousActiveFormRef.current)
+    previousActiveFormRef.current = activeForm
+
+    if (!activeForm && wasAdminForm && supabase && isAdmin) {
+      supabase.from('orders').select('id, status')
+        .then(({ data }) => { if (data) setDbOrders(data) })
+      supabase.from('sponsors').select('id, status')
+        .then(({ data, error }) => { if (data && !error) setDbSponsors(data) })
+      supabase.from('moto_affiliations').select('id, status, user_id, requested_at')
+        .then(({ data, error }) => { if (data && !error) setDbAffiliations(prev =>
+          // Conserve les profiles joints précédemment, recharge juste les statuts
+          data.map(a => ({ ...a, profiles: prev.find(p => p.id === a.id)?.profiles || null }))
+        )})
+      supabase.from('contact_messages').select('id, status')
+        .then(({ data, error }) => { if (data && !error) setDbContactMessages(data) })
+    }
+  }, [activeForm, isAdmin])
 
   // ── Realtime sync de la session live courante ──
   // Quand l'orga termine la course (UPDATE status='finished'), le bouton
@@ -916,6 +947,9 @@ function App() {
   const handleLogout = async () => {
     if (supabase) await supabase.auth.signOut()
     setDbOrders([])
+    setDbSponsors([])
+    setDbAffiliations([])
+    setDbContactMessages([])
   }
 
   const handleInitializeDatabase = async () => {
@@ -1370,7 +1404,8 @@ function App() {
               const pendingOrders = dbOrders.filter(o => o.status === 'En attente de paiement').length
               const pendingSponsors = dbSponsors.filter(s => s.status === 'En attente').length
               const pendingAffiliations = dbAffiliations.filter(a => a.status === 'pending').length
-              const totalNotifs = pendingOrders + pendingSponsors + pendingAffiliations
+              const pendingContact = dbContactMessages.filter(m => m.status === 'nouveau').length
+              const totalNotifs = pendingOrders + pendingSponsors + pendingAffiliations + pendingContact
               const closeMenu = () => { setAdminMenuOpen(false); setMobileMenuOpen(false); }
               const adminMenuItems = [
                 ...((!dbProducts || dbProducts.length === 0) ? [{
@@ -1392,7 +1427,7 @@ function App() {
                   onClick: () => { closeMenu(); handleOpenForm('emotes_admin') } },
                 { id: 'donations', icon: '💬', label: 'Messages live',
                   onClick: () => { closeMenu(); handleOpenForm('donations_admin') } },
-                { id: 'contact', icon: '📩', label: 'Messages contact',
+                { id: 'contact', icon: '📩', label: 'Messages contact', badge: pendingContact,
                   onClick: () => { closeMenu(); handleOpenForm('contact_admin') } },
                 { id: 'users', icon: '👥', label: 'Utilisateurs',
                   onClick: () => { closeMenu(); handleOpenForm('users_admin') } },
