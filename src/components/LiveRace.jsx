@@ -1577,6 +1577,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                                   sessionId={session?.id || null}
                                   authUser={authUser}
                                   authUserDisplayName={userProfile?.display_name || null}
+                                  isAdmin={userProfile?.role === 'admin'}
                                   onPurchased={() => { if (authUser) fetchUserPurchases(authUser.id) }}
                                 />
                               </Suspense>

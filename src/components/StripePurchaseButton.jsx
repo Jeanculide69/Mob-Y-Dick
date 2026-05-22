@@ -49,11 +49,12 @@ const CARD_ELEMENT_OPTIONS = {
   hidePostalCode: true,
 }
 
-function PurchaseModalInner({ item, sessionId, authUser, authUserDisplayName, onClose, onSuccess }) {
+function PurchaseModalInner({ item, sessionId, authUser, authUserDisplayName, isAdmin, onClose, onSuccess }) {
   const stripe = useStripe()
   const elements = useElements()
   const toast = useToast()
   const [processing, setProcessing] = useState(false)
+  const [simulating, setSimulating] = useState(false)
   const [cardError, setCardError] = useState(null)
   const [cardComplete, setCardComplete] = useState(false)
 
@@ -173,6 +174,42 @@ function PurchaseModalInner({ item, sessionId, authUser, authUserDisplayName, on
     }
   }
 
+  // Simulation admin : broadcast l'overlay live avec le pseudo + message
+  // saisis SANS débit ni Stripe ni insert DB. Réservé aux admins (re-vérifié
+  // côté serveur dans l'Edge Function, donc impossible à spoofer depuis la
+  // console). Utile pour tester un nouveau message ou montrer le rendu live.
+  const handleAdminSimulate = async () => {
+    if (!isAdmin) return
+    if (allowsMessage && !pseudo.trim()) {
+      setCardError('Renseigne un pseudo pour simuler')
+      return
+    }
+    setSimulating(true)
+    setCardError(null)
+    try {
+      const { data, error } = await supabase.functions.invoke('stripe-donation', {
+        body: {
+          action: 'admin-simulate-purchase',
+          displayName: pseudo.trim() || 'Admin Simu',
+          amountCents: item.price_cents,
+          message: customMessage.trim() || null,
+          sessionId: sessionId || null,
+          itemSlug: item.slug,
+        },
+      })
+      if (error || !data?.ok) {
+        throw new Error(error?.message || data?.error || 'Simulation échouée')
+      }
+      toast.success(`🧪 Simulation envoyée — overlay live déclenché pour ${item.name}.`)
+      onSuccess?.()
+    } catch (err) {
+      setCardError(err.message || String(err))
+      toast.error('Simulation échouée : ' + (err.message || err))
+    } finally {
+      setSimulating(false)
+    }
+  }
+
   return createPortal(
     <div
       className="stripe-purchase-overlay"
@@ -275,18 +312,32 @@ function PurchaseModalInner({ item, sessionId, authUser, authUserDisplayName, on
               type="button"
               className="btn btn-ghost"
               onClick={onClose}
-              disabled={processing}
+              disabled={processing || simulating}
             >
               Annuler
             </button>
             <button
               type="submit"
               className="btn btn-primary stripe-form-submit"
-              disabled={!stripe || processing || !cardComplete}
+              disabled={!stripe || processing || simulating || !cardComplete}
             >
               {processing ? '⏳ Paiement…' : `💳 Acheter pour ${priceEuros}€`}
             </button>
           </div>
+
+          {/* Bouton admin : déclenche l'overlay live sans payer (broadcast
+              uniquement, re-vérifié côté serveur via le role='admin'). */}
+          {isAdmin && (
+            <button
+              type="button"
+              className="btn btn-outline"
+              style={{ width: '100%', marginTop: '8px', borderColor: '#ff5555', color: '#ff5555' }}
+              onClick={handleAdminSimulate}
+              disabled={processing || simulating}
+            >
+              {simulating ? '⏳ Simulation…' : '🧪 Simuler sur le Live (Admin)'}
+            </button>
+          )}
 
           <p className="stripe-form-disclaimer">
             Paiement sécurisé par <strong>Stripe</strong>. Achat ferme et définitif,
@@ -299,7 +350,7 @@ function PurchaseModalInner({ item, sessionId, authUser, authUserDisplayName, on
   )
 }
 
-export default function StripePurchaseButton({ item, sessionId, authUser, authUserDisplayName, onPurchased }) {
+export default function StripePurchaseButton({ item, sessionId, authUser, authUserDisplayName, isAdmin, onPurchased }) {
   const [modalOpen, setModalOpen] = useState(false)
   const [keyMissing] = useState(!PUBLISHABLE_KEY)
 
@@ -347,6 +398,7 @@ export default function StripePurchaseButton({ item, sessionId, authUser, authUs
             sessionId={sessionId}
             authUser={authUser}
             authUserDisplayName={authUserDisplayName}
+            isAdmin={isAdmin}
             onClose={() => setModalOpen(false)}
             onSuccess={() => {
               setModalOpen(false)
