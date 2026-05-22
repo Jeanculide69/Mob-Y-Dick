@@ -1739,6 +1739,21 @@ video.live-premium-emote-img {
   animation: none;
 }
 
+/* Mais on garde un fade-out sur le BADGE "X envoie Y" — sinon il restait
+   visible après que l'image avait disparu (l'emotePopIn du wrapper qui
+   gérait son opacité a été désactivé juste au-dessus). Durée 6s = la
+   plus longue des slug animations (klaxon), ça couvre tous les cas. */
+.live-premium-emote-alert:has(.live-premium-emote-img[class*="pemote-anim-"])
+  .live-premium-emote-user {
+  animation: emoteUserFade 6s ease-out forwards;
+}
+@keyframes emoteUserFade {
+  0%   { opacity: 0; transform: translateY(20px); }
+  8%   { opacity: 1; transform: translateY(0); }
+  80%  { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-10px); }
+}
+
 /* Screen shake (déclenché via JS qui pose la classe sur document.body) */
 @keyframes pemoteCameraShake {
   0%   { transform: translate(10px, 10px) rotate(1deg); filter: blur(2px); }

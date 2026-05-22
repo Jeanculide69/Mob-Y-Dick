@@ -1557,8 +1557,14 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
         )
       })()}
 
-      {/* ── Boutique & SuperChat Modal ── */}
-      {shopOpen && (
+      {/* ── Boutique & SuperChat Modal ──
+         Rendue via Portal sur document.body : sinon le `transform` de la
+         section parente (animation pageEnter qui se fige en translateY(0))
+         crée un containing block et casse le `position: fixed` du overlay
+         → la modal apparaît au milieu/bas de la section au lieu d'être
+         centrée sur le viewport, surtout visible sur mobile où la section
+         est plus haute que l'écran. */}
+      {shopOpen && createPortal(
         <div className="premium-modal-overlay" onClick={() => setShopOpen(false)}>
           <div className="premium-modal glass" onClick={(e) => e.stopPropagation()}>
             <div className="premium-modal-header">
@@ -1775,7 +1781,8 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
       {/* ── Floating Action Button (FAB) pour Emotes & Dons ──
