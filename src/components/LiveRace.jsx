@@ -1596,9 +1596,11 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                   className="btn btn-outline"
                   style={{ marginTop: '15px', width: '100%', borderColor: '#ff5555', color: '#ff5555' }}
                   onClick={async () => {
+                    // Legacy name 'admin-simulate-donation' compatible avec
+                    // l'Edge Function actuelle ET avec la nouvelle (v26+).
                     const { data, error } = await supabase.functions.invoke('stripe-donation', {
                       body: {
-                        action: 'admin-simulate-purchase',
+                        action: 'admin-simulate-donation',
                         displayName: userProfile?.display_name || 'Admin Simu',
                         amountCents: 500,
                         message: 'Simulation d\'achat (Admin) — test d\'overlay live',
@@ -1607,7 +1609,14 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                       },
                     });
                     if (error || !data?.ok) {
-                      toast.error('Simulation échouée : ' + (error?.message || data?.error || 'inconnu'));
+                      let detail = error?.message || data?.error || 'inconnu';
+                      if (error?.context) {
+                        try {
+                          const body = await error.context.json();
+                          detail = body?.error || body?.detail || detail;
+                        } catch { /* non-JSON */ }
+                      }
+                      toast.error('Simulation échouée : ' + detail);
                       return;
                     }
                     setShopOpen(false);

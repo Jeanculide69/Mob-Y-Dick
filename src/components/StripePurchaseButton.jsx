@@ -187,9 +187,14 @@ function PurchaseModalInner({ item, sessionId, authUser, authUserDisplayName, is
     setSimulating(true)
     setCardError(null)
     try {
+      // Action 'admin-simulate-donation' (legacy name) plutôt que la nouvelle
+      // 'admin-simulate-purchase' : le backend supporte les DEUX, mais si
+      // l'Edge Function n'a pas encore été redéployée après le pivot v26,
+      // seul l'ancien nom est reconnu. Tant que l'ancien nom reste compat
+      // serveur-side, on l'utilise pour éviter les unknown_action.
       const { data, error } = await supabase.functions.invoke('stripe-donation', {
         body: {
-          action: 'admin-simulate-purchase',
+          action: 'admin-simulate-donation',
           displayName: pseudo.trim() || 'Admin Simu',
           amountCents: item.price_cents,
           message: customMessage.trim() || null,
@@ -208,7 +213,7 @@ function PurchaseModalInner({ item, sessionId, authUser, authUserDisplayName, is
           const body = await error.context.json()
           detail = body?.error || body?.detail || detail
         } catch { /* body non-JSON, on garde le message générique */ }
-        console.error('[admin-simulate-purchase] error:', detail, error)
+        console.error('[admin-simulate-donation] error:', detail, error)
         throw new Error(detail)
       }
       if (!data?.ok) throw new Error(data?.error || 'Simulation échouée')
