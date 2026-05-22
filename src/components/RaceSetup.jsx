@@ -39,7 +39,9 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
 
   const [laps, setLaps] = useState([])
   const [activeReviewTab, setActiveReviewTab] = useState('results')
-  const [newLapForm, setNewLapForm] = useState({ moto_number: '', minutes: '', seconds: '', milliseconds: '' })
+  const [newLapForm, setNewLapForm] = useState({ moto_number: '', hours: '', minutes: '', seconds: '', milliseconds: '' })
+  const [anomalies, setAnomalies] = useState([])
+  const [hasCheckedAnomalies, setHasCheckedAnomalies] = useState(false)
 
   // Team form
   const [teamForm, setTeamForm] = useState({
@@ -363,6 +365,34 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
     return rankedFemale[0] || null
   }
 
+  const checkAnomalies = () => {
+    const foundAnomalies = []
+    
+    // Check for double scans < 30 seconds
+    const teamsLapsMap = {}
+    laps.forEach(lap => {
+      if (!teamsLapsMap[lap.team_id]) teamsLapsMap[lap.team_id] = []
+      teamsLapsMap[lap.team_id].push(lap)
+    })
+
+    Object.keys(teamsLapsMap).forEach(teamId => {
+      const teamLaps = teamsLapsMap[teamId].sort((a, b) => a.lap_time_ms - b.lap_time_ms)
+      const team = teams.find(t => t.id === teamId)
+      for (let i = 1; i < teamLaps.length; i++) {
+        const diff = teamLaps[i].lap_time_ms - teamLaps[i - 1].lap_time_ms
+        if (diff < 30000) {
+          foundAnomalies.push({
+            id: `dup-${teamLaps[i].id}`,
+            message: `Moto #${team?.moto_number} : 2 passages très proches (${(diff/1000).toFixed(1)}s) au Tour ${teamLaps[i].lap_number}.`
+          })
+        }
+      }
+    })
+
+    setAnomalies(foundAnomalies)
+    setHasCheckedAnomalies(true)
+  }
+
   const handleDeleteLap = async (lapId) => {
     if (!confirm('Supprimer ce passage ?')) return
     const { error } = await supabase.from('race_laps').delete().eq('id', lapId)
@@ -384,10 +414,11 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
       return
     }
 
+    const hrs = parseInt(newLapForm.hours || 0)
     const min = parseInt(newLapForm.minutes || 0)
     const sec = parseInt(newLapForm.seconds || 0)
     const ms = parseInt(newLapForm.milliseconds || 0)
-    const totalMs = (min * 60 + sec) * 1000 + ms
+    const totalMs = (hrs * 3600 + min * 60 + sec) * 1000 + ms
     if (totalMs <= 0) {
       alert("Le temps du tour doit être supérieur à 0 !")
       return
@@ -410,7 +441,7 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
       return
     }
 
-    setNewLapForm({ moto_number: '', minutes: '', seconds: '', milliseconds: '' })
+    setNewLapForm({ moto_number: '', hours: '', minutes: '', seconds: '', milliseconds: '' })
     loadSession()
   }
 
@@ -624,7 +655,7 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
             {/* Add Lap manually if allowed */}
             {canModify ? (
               <form onSubmit={handleAddManualLap} className="manual-lap-form glass" style={{ marginBottom: '20px', padding: '20px' }}>
-                <h4 style={{ margin: '0 0 15px 0' }}>➕ Ajouter un passage manuellement</h4>
+                <h4 style={{ margin: '0 0 15px 0' }}>➕ Ajouter un passage manuellement (Temps Cumulé)</h4>
                 <div className="race-form-row">
                   <div className="race-form-group" style={{ flex: 1 }}>
                     <label>Moto #</label>
@@ -634,6 +665,16 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
                       onChange={e => setNewLapForm({ ...newLapForm, moto_number: e.target.value })}
                       placeholder="N°"
                       required
+                    />
+                  </div>
+                  <div className="race-form-group" style={{ flex: 1 }}>
+                    <label>Heures</label>
+                    <input 
+                      type="number"
+                      value={newLapForm.hours}
+                      onChange={e => setNewLapForm({ ...newLapForm, hours: e.target.value })}
+                      placeholder="H"
+                      min="0"
                     />
                   </div>
                   <div className="race-form-group" style={{ flex: 1 }}>
@@ -708,7 +749,6 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
                             <td>
                               <button 
                                 type="button"
-                                className="chrono-recent-delete" 
                                 onClick={() => handleDeleteLap(l.id)}
                                 style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', fontSize: '1.1rem' }}
                               >
@@ -728,6 +768,33 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
                 </table>
               </div>
             </div>
+
+            {/* Anomalies Checker */}
+            <div className="anomalies-checker glass" style={{ padding: '20px', marginTop: '20px' }}>
+              <h4 style={{ margin: '0 0 15px 0' }}>🕵️‍♂️ Assistant de Vérification</h4>
+              <button type="button" onClick={checkAnomalies} className="btn btn-outline" style={{ marginBottom: '15px' }}>
+                🔍 Lancer l'analyse des passages
+              </button>
+              
+              {hasCheckedAnomalies && anomalies.length === 0 && (
+                <div style={{ padding: '15px', background: 'rgba(0, 204, 102, 0.1)', color: '#00cc66', borderRadius: '8px', border: '1px solid rgba(0, 204, 102, 0.2)' }}>
+                  ✅ Tout est OK ! Aucune anomalie détectée (aucun passage anormalement proche).
+                </div>
+              )}
+              
+              {hasCheckedAnomalies && anomalies.length > 0 && (
+                <div style={{ padding: '15px', background: 'rgba(255, 170, 0, 0.1)', color: '#ffaa00', borderRadius: '8px', border: '1px solid rgba(255, 170, 0, 0.2)' }}>
+                  <h5 style={{ margin: '0 0 10px 0' }}>⚠️ {anomalies.length} anomalie(s) potentielle(s) détectée(s) :</h5>
+                  <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                    {anomalies.map(a => (
+                      <li key={a.id} style={{ marginBottom: '5px' }}>{a.message}</li>
+                    ))}
+                  </ul>
+                  <p style={{ margin: '10px 0 0 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Veuillez vérifier ces passages dans l'historique ci-dessus avant de publier les résultats.</p>
+                </div>
+              )}
+            </div>
+
           </div>
         )}
 
