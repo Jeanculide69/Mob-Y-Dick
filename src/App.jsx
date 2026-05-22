@@ -2362,32 +2362,71 @@ function App() {
               <button className="admin-close" onClick={() => setShowLegalModal(false)}>✕</button>
             </div>
             <div className="legal-content-container" style={{fontSize:'0.85rem', lineHeight:'1.5', color:'var(--text-secondary)'}}>
-              
-              <h3 className="text-accent" style={{fontSize:'1rem', marginTop:0}}>1. Mentions Légales</h3>
+
+              <p style={{fontSize:'0.75rem', color:'var(--text-muted)', marginTop:0}}>
+                Dernière mise à jour : 22 mai 2026
+              </p>
+
+              <h3 className="text-accent" style={{fontSize:'1rem', marginTop:'8px'}}>1. Mentions Légales</h3>
               <p>
                 <strong>Éditeur du site :</strong> Mob Y Dick Brand, représenté par Corentin Cartier.<br />
                 <strong>Contact :</strong> via nos liens de réseaux sociaux officiels ou par e-mail.<br />
                 <strong>Hébergeur :</strong> Vercel Inc., 650 2nd St, San Francisco, CA 94107, USA (https://vercel.com).<br />
-                <strong>Propriété intellectuelle :</strong> L'intégralité des visuels, logos, marques et designs de lettrages graffiti présentés sur ce site sont la propriété exclusive de l'équipe Mob Y Dick. Toute reproduction est interdite sans accord écrit.
+                <strong>Base de données & paiements :</strong> Supabase Inc. (infrastructure backend) et Stripe Payments Europe Ltd. (traitement des paiements).<br />
+                <strong>Propriété intellectuelle :</strong> L'intégralité des visuels, logos, marques et designs de lettrages graffiti présentés sur ce site sont la propriété exclusive de l'équipe Mob Y Dick. Toute reproduction est interdite sans accord écrit.<br />
+                <strong>Public concerné :</strong> ce site et sa boutique sont accessibles à toute personne majeure. Les mineurs doivent obtenir l'autorisation d'un représentant légal avant tout achat.
               </p>
 
               <h3 className="text-accent" style={{fontSize:'1rem', marginTop:'20px'}}>2. Politique de Confidentialité (RGPD)</h3>
               <p>
-                Nous prenons la protection de vos données personnelles très au sérieux. Les informations que vous saisissez lors d'une commande (nom, adresse de livraison, adresse e-mail) sont **uniquement** collectées et transmises à notre prestataire de fabrication à la demande (Printful) dans le but exclusif de fabriquer et d'expédier vos articles. <br />
-                * Aucune donnée n'est revendue à des tiers ou utilisée à des fins de ciblage publicitaire.<br />
-                * Vous disposez d'un droit d'accès, de rectification et de suppression de vos données personnelles sur simple demande par mail.
+                Nous prenons la protection de vos données personnelles très au sérieux. Les informations collectées dépendent du service utilisé :
+                <br />• <strong>Achat d'un bien physique :</strong> nom, adresse de livraison, e-mail — transmis exclusivement à notre prestataire de fabrication et de logistique afin de produire et d'expédier votre article.
+                <br />• <strong>Achat d'un service live (sponsoring, emote, dédicace) :</strong> pseudo affiché à l'écran, message éventuel, e-mail (optionnel, pour le reçu).
+                <br />• <strong>Paiement :</strong> les coordonnées bancaires sont saisies et traitées <strong>directement par Stripe</strong>. Nous n'avons jamais accès à votre numéro de carte ni à votre cryptogramme.
+                <br />• Aucune donnée n'est revendue à des tiers ni utilisée à des fins de ciblage publicitaire externe.
+                <br />• Vous disposez d'un droit d'accès, de rectification, de portabilité et de suppression de vos données personnelles sur simple demande par e-mail. Vous pouvez également déposer une réclamation auprès de la CNIL (www.cnil.fr).
+                <br />• Durée de conservation : 3 ans après le dernier contact pour les comptes clients, 10 ans pour les pièces comptables (obligation légale).
               </p>
 
-              <h3 className="text-accent" style={{fontSize:'1rem', marginTop:'20px'}}>3. CGV : Commande de Produits Personnalisés</h3>
+              <h3 className="text-accent" style={{fontSize:'1rem', marginTop:'20px'}}>3. Cookies & Traceurs</h3>
               <p>
-                <strong>Nature des Produits :</strong> Nos produits (T-shirts, hoodies, mugs, etc.) sont entièrement personnalisés et fabriqués à l'unité selon le pseudo graffiti fourni par le client. <br />
-                <strong>Droit de Rétractation Spécifique :</strong> Conformément à l'article **L221-28 du Code de la Consommation français**, le droit de rétractation de 14 jours **ne s'applique pas** aux biens confectionnés nettement personnalisés selon les spécifications du consommateur. Ainsi, une fois la commande validée et payée, aucun retour, remboursement ou échange n'est possible (sauf en cas d'erreur avérée de fabrication ou produit défectueux).<br />
-                <strong>Livraison & Délais :</strong> Nos produits étant fabriqués à la demande par Printful, les délais de livraison varient généralement entre 5 et 10 jours ouvrés selon le pays de destination.
+                Le site utilise uniquement les cookies strictement nécessaires à son fonctionnement (session de connexion, panier d'achat, préférences d'affichage). Aucun cookie publicitaire ni de profilage n'est déposé sans votre consentement préalable. Les régies publicitaires éventuellement intégrées (Google AdSense) suivent leurs propres politiques accessibles depuis leurs sites respectifs.
               </p>
 
-              <h3 className="text-accent" style={{fontSize:'1rem', marginTop:'20px'}}>4. Règlement des Litiges & Paiements</h3>
+              <h3 className="text-accent" style={{fontSize:'1rem', marginTop:'20px'}}>4. CGV — Biens Physiques Personnalisés</h3>
               <p>
-                Les transactions financières s'effectuent de manière externe et sécurisée via la plateforme Stripe. Mob Y Dick n'enregistre aucune information bancaire sur ses propres serveurs. En cas de litige, nous vous invitons à contacter notre équipe via nos réseaux sociaux afin de trouver une solution amiable.
+                <strong>Nature des produits :</strong> nos produits (T-shirts, hoodies, mugs, autocollants, etc.) sont entièrement personnalisés et fabriqués à l'unité selon les spécifications du client (pseudo graffiti, taille, coloris).<br />
+                <strong>Prix :</strong> les prix sont indiqués en euros TTC, hors frais de port (calculés au moment du paiement). En tant que micro-entreprise française, la TVA n'est pas applicable conformément à l'article 293 B du CGI lorsque le seuil de franchise est respecté.<br />
+                <strong>Droit de rétractation :</strong> conformément à l'article <strong>L221-28 1° du Code de la consommation</strong>, le droit de rétractation de 14 jours <strong>ne s'applique pas</strong> aux biens confectionnés selon les spécifications du consommateur ou nettement personnalisés. Une fois la commande validée et payée, aucun retour, remboursement ou échange n'est possible — sauf en cas d'erreur avérée de fabrication, de produit défectueux ou de non-conformité à la commande, à signaler dans les 7 jours suivant la réception.<br />
+                <strong>Livraison &amp; délais :</strong> nos produits étant fabriqués à la demande, les délais de livraison varient généralement entre <strong>5 et 10 jours ouvrés</strong> selon le pays de destination. Tout retard exceptionnel sera communiqué par e-mail.
+              </p>
+
+              <h3 className="text-accent" style={{fontSize:'1rem', marginTop:'20px'}}>5. CGV — Services Numériques Live</h3>
+              <p>
+                <strong>Nature des services :</strong> la boutique live propose des services de divertissement immatériels à prix fixe (sponsoring symbolique avec message diffusé à l'antenne, animations emote, accès premium). Chaque achat correspond à un produit identifié dans la boutique à un tarif clair affiché avant le paiement.<br />
+                <strong>Aucun don, aucune cagnotte :</strong> les achats ne constituent ni un don, ni un appel à la générosité, ni un financement participatif. Il s'agit d'achats fermes de services de divertissement consommés en direct.<br />
+                <strong>Exécution immédiate &amp; renoncement au droit de rétractation :</strong> conformément à l'article <strong>L221-28 13° du Code de la consommation</strong>, le client reconnaît expressément qu'en validant son achat il demande l'exécution immédiate du service (diffusion à l'antenne, déblocage instantané de l'animation, lecture vocale du message) et qu'il <strong>renonce à son droit de rétractation</strong>. Le service étant pleinement exécuté dès la confirmation du paiement, aucun remboursement n'est possible.<br />
+                <strong>Modération :</strong> nous nous réservons le droit de refuser ou de masquer tout message à caractère diffamatoire, haineux, raciste, sexiste, illégal ou contraire aux bonnes mœurs, sans que cela n'ouvre droit à remboursement.
+              </p>
+
+              <h3 className="text-accent" style={{fontSize:'1rem', marginTop:'20px'}}>6. Politique de Remboursement</h3>
+              <p>
+                Compte tenu de la nature des produits (biens personnalisés) et services (divertissement immatériel à exécution immédiate), <strong>aucun remboursement n'est possible</strong> hors des cas légaux suivants :<br />
+                • Erreur de fabrication, produit défectueux ou non-conformité avérée d'un bien physique.<br />
+                • Défaillance technique imputable au site empêchant totalement la diffusion du service live commandé.<br />
+                Dans ces cas, le remboursement est effectué via Stripe sous 14 jours après instruction de la demande.
+              </p>
+
+              <h3 className="text-accent" style={{fontSize:'1rem', marginTop:'20px'}}>7. Paiement &amp; Sécurité</h3>
+              <p>
+                Les paiements sont traités exclusivement par <strong>Stripe Payments Europe Ltd.</strong> (PSP agréé). Les données bancaires transitent directement entre votre navigateur et Stripe (TLS, conformité PCI-DSS niveau 1). Aucune information de carte n'est stockée sur nos serveurs. Un reçu de paiement peut être envoyé par e-mail sur demande.
+              </p>
+
+              <h3 className="text-accent" style={{fontSize:'1rem', marginTop:'20px'}}>8. Règlement des Litiges &amp; Médiation</h3>
+              <p>
+                En cas de litige, nous vous invitons à nous contacter en premier lieu par e-mail ou via nos réseaux sociaux afin de trouver une solution amiable.<br />
+                Conformément à l'article L612-1 du Code de la consommation, le consommateur peut recourir gratuitement à un médiateur de la consommation en cas de désaccord persistant. La plateforme européenne de règlement en ligne des litiges est également accessible à l'adresse <em>ec.europa.eu/consumers/odr</em>.<br />
+                À défaut d'accord amiable, les tribunaux français sont compétents. Le droit applicable est le droit français.
               </p>
 
               <button className="btn btn-primary" style={{width:'100%', marginTop:'24px'}} onClick={() => setShowLegalModal(false)}>J'ai compris et j'accepte</button>
