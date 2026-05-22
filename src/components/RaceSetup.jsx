@@ -1115,6 +1115,13 @@ function LiveVideoBroadcaster({ session, raceSession }) {
     }
   }, [])
 
+  // Start playing the local video once the container is rendered
+  useEffect(() => {
+    if (isStreaming && videoRef.current && trackRef.current) {
+      trackRef.current.play(videoRef.current)
+    }
+  }, [isStreaming])
+
   const startStreaming = async () => {
     setLoading(true)
     setErrorMsg(null)
@@ -1142,17 +1149,14 @@ function LiveVideoBroadcaster({ session, raceSession }) {
       const channelName = `live-stream-${raceSession.id}`;
       await client.join(appId, channelName, null, session.user.id)
 
-      // 3. Create local video track (480p is a good balance for mobile streaming)
+      // 3. Create local video track (720p at 30fps for high quality race streaming)
       const videoTrack = await AgoraRTC.createCameraVideoTrack({
-        encoderConfig: "480p_1",
+        encoderConfig: "720p_2",
         facingMode: "environment" // Try to use rear camera by default
       })
       trackRef.current = videoTrack
 
-      // 4. Play local track in video container
-      if (videoRef.current) {
-        videoTrack.play(videoRef.current)
-      }
+      // 4. (Video preview is handled by the useEffect above once isStreaming=true renders the div)
 
       // 5. Publish to Agora
       await client.publish(videoTrack)
