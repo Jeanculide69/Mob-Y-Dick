@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from './supabaseClient'
+import TeamsAdmin from './components/TeamsAdmin'
 import './Admin.css'
 
 const SITE_VERSION = 'v2.0.0'
@@ -222,6 +223,7 @@ export default function AdminPanel({ onClose }) {
     { key: 'gallery', icon: '📸', label: 'Galerie' },
     { key: 'products', icon: '🛍️', label: 'Boutique' },
     { key: 'team', icon: '👥', label: 'Équipe' },
+    { key: 'user_teams', icon: '🫂', label: 'Teams Privées' },
     { key: 'socials', icon: '🔗', label: 'Réseaux' },
     { key: 'affiliations', icon: '🏍️', label: `Affiliations${pendingCount > 0 ? ` (${pendingCount})` : ''}` },
     { key: 'settings', icon: '⚙️', label: 'Paramètres' },
@@ -370,6 +372,11 @@ export default function AdminPanel({ onClose }) {
                 ))}
               </div>
             </>
+          )}
+
+          {/* ─── USER TEAMS (spectateurs) ─── */}
+          {activeSection === 'user_teams' && (
+            <TeamsAdmin />
           )}
 
           {/* ─── SOCIALS ─── */}
