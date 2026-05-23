@@ -69,6 +69,13 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   const [channelGen, setChannelGen] = useState(0)
   const [floatingEmojis, setFloatingEmojis] = useState([])
   const [announcement, setAnnouncement]     = useState(null)
+  // Team features
+  const [myTeams, setMyTeams]               = useState([])  // teams dont je suis membre
+  const [teamAnnouncement, setTeamAnnouncement] = useState(null)  // { team_name, message }
+  const [showTeamAnnounceModal, setShowTeamAnnounceModal] = useState(false)
+  const [teamAnnounceTarget, setTeamAnnounceTarget] = useState(null)  // team_id selected in modal
+  const [teamAnnounceText, setTeamAnnounceText] = useState('')
+  const [teamAnnounceSending, setTeamAnnounceSending] = useState(false)
   const [positionDeltas, setPositionDeltas] = useState({}) // teamId → signed int
   const [expandedRider, setExpandedRider]   = useState(null)
   const [selectedTeamId, setSelectedTeamId] = useState(null) // drawer latéral
@@ -484,6 +491,42 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   }, [])
   /* eslint-enable react-hooks/set-state-in-effect */
 
+  // ── Charge la liste des teams de l'utilisateur (pour les annonces team) ──
+  // RLS filtre : seules les teams dont je suis membre remontent.
+  useEffect(() => {
+    if (!authUser?.id) {
+      setMyTeams([])
+      return
+    }
+    supabase.from('teams')
+      .select('id, name')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => setMyTeams(data || []))
+  }, [authUser?.id])
+
+  // ── Realtime — annonces team ──
+  // Subscribe à TOUS les inserts team_announcements ; le RLS côté Supabase
+  // garantit qu'on ne reçoit QUE les events pour les teams dont on est
+  // membre. Si l'utilisateur n'a pas de teams, on s'abonne quand même au
+  // channel mais aucun event n'arrivera (RLS filtre tout).
+  useEffect(() => {
+    if (!authUser?.id) return
+    const ch = supabase.channel(`team-announcements-${authUser.id}`)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'team_announcements' }, async ({ new: row }) => {
+        // Évite de relire chez l'expéditeur (déjà annoncé localement par le handler)
+        if (row.created_by === authUser.id) return
+        // Récupère le nom de la team pour l'affichage
+        const teamLocal = myTeams.find(t => t.id === row.team_id)
+        const teamName = teamLocal?.name || 'Ma Team'
+        setTeamAnnouncement({ team_name: teamName, message: row.message })
+        playAnnouncementSound()
+        setTimeout(() => speakAnnouncement(`Annonce ${teamName} : ${row.message}`), 1500)
+        setTimeout(() => setTeamAnnouncement(null), 12000)
+      })
+      .subscribe()
+    return () => { supabase.removeChannel(ch) }
+  }, [authUser?.id, myTeams])
+
   // ── Helpers ──
   const addFloatingEmoji = (emoji) => {
     // eslint-disable-next-line react-hooks/purity
@@ -497,6 +540,35 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
   const sendReaction = (emoji) => {
     addFloatingEmoji(emoji)
     extrasChannelRef.current?.send({ type: 'broadcast', event: 'reaction', payload: { emoji } })
+  }
+
+  // ── Envoi annonce team ──
+  // Insert dans team_announcements ; le RLS WITH CHECK garantit qu'on ne
+  // peut insérer QUE dans une team dont on est membre. Le realtime diffuse
+  // ensuite à tous les membres (et seulement à eux).
+  const handleSendTeamAnnouncement = async () => {
+    const msg = teamAnnounceText.trim()
+    if (!msg || !teamAnnounceTarget || !authUser?.id) return
+    setTeamAnnounceSending(true)
+    const { error } = await supabase.from('team_announcements').insert([{
+      team_id: teamAnnounceTarget,
+      created_by: authUser.id,
+      message: msg
+    }])
+    setTeamAnnounceSending(false)
+    if (error) {
+      alert("Erreur lors de l'envoi de l'annonce : " + error.message)
+      return
+    }
+    // Affichage immédiat chez l'expéditeur (le listener realtime ignore ses propres events)
+    const teamName = myTeams.find(t => t.id === teamAnnounceTarget)?.name || 'Ma Team'
+    setTeamAnnouncement({ team_name: teamName, message: msg })
+    playAnnouncementSound()
+    setTimeout(() => speakAnnouncement(`Annonce ${teamName} : ${msg}`), 1500)
+    setTimeout(() => setTeamAnnouncement(null), 12000)
+    // Reset modal
+    setTeamAnnounceText('')
+    setShowTeamAnnounceModal(false)
   }
 
   // ── Realtime laps & session ──
@@ -1291,6 +1363,17 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
               <span className="live-announcement-text">{announcement}</span>
             </div>
           )}
+
+          {/* ── Team announcement banner (visible uniquement par les membres
+              de la team grâce au RLS sur team_announcements) ── */}
+          {teamAnnouncement && (
+            <div className="live-announcement-banner live-announcement-team glass">
+              <span className="live-announcement-icon">👥</span>
+              <span className="live-announcement-text">
+                <strong>{teamAnnouncement.team_name}</strong> — {teamAnnouncement.message}
+              </span>
+            </div>
+          )}
         </>,
         document.body
       )}
@@ -1732,12 +1815,74 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                     );
                   })}
                 </div>
+
+                {/* Team Announcement — visible si user est dans au moins une team */}
+                {myTeams.length > 0 && (
+                  <div className="live-reactions-premium-header" style={{ marginTop: '16px' }}>
+                    <span className="live-reactions-premium-title">📣 Annonce Team</span>
+                    <button
+                      className="live-premium-support-btn"
+                      onClick={() => {
+                        setTeamAnnounceTarget(myTeams[0].id)
+                        setShowTeamAnnounceModal(true)
+                      }}
+                    >
+                      📣 Envoyer
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             </div>
           )}
         </div>
       </div>
+
+      {/* ── Modale envoi annonce team ── */}
+      {showTeamAnnounceModal && myTeams.length > 0 && createPortal(
+        <div className="premium-modal-overlay" onClick={() => setShowTeamAnnounceModal(false)}>
+          <div className="premium-modal glass" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '480px' }}>
+            <div className="premium-modal-header">
+              <div className="premium-modal-title-area">
+                <h2>📣 Annonce Team</h2>
+                <p className="premium-modal-subtitle">
+                  Ton message sera lu à voix haute par le bot, mais uniquement chez les membres de ta team.
+                </p>
+              </div>
+              <button className="btn btn-ghost" onClick={() => setShowTeamAnnounceModal(false)} style={{ padding: '4px 8px', fontSize: '1.2rem', color: 'var(--text-muted)' }}>✕</button>
+            </div>
+            <div style={{ padding: '0 24px 24px' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                Envoi vers : <strong style={{ color: 'var(--accent)' }}>{myTeams[0]?.name}</strong>
+              </p>
+              <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: '6px', fontWeight: 600 }}>
+                Message ({teamAnnounceText.length}/200)
+              </label>
+              <textarea
+                value={teamAnnounceText}
+                onChange={(e) => setTeamAnnounceText(e.target.value.slice(0, 200))}
+                placeholder="Allez les gars, on tient le rythme !"
+                rows={3}
+                style={{ width: '100%', padding: '10px 12px', background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', color: 'var(--text-primary)', fontSize: '0.9rem', resize: 'vertical', fontFamily: 'inherit' }}
+                maxLength={200}
+              />
+              <div style={{ display: 'flex', gap: '10px', marginTop: '16px', justifyContent: 'flex-end' }}>
+                <button className="btn btn-ghost" onClick={() => setShowTeamAnnounceModal(false)}>
+                  Annuler
+                </button>
+                <button
+                  className="btn btn-primary"
+                  onClick={handleSendTeamAnnouncement}
+                  disabled={teamAnnounceSending || teamAnnounceText.trim().length < 1 || !teamAnnounceTarget}
+                >
+                  {teamAnnounceSending ? 'Envoi...' : '📣 Envoyer à la team'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
       {/* ── Drawer équipe sélectionnée ── */}
       {selectedTeamId && (() => {

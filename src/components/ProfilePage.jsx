@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { supabase } from '../supabaseClient'
 import AvatarPicker from './AvatarPicker'
+import TeamsManager from './TeamsManager'
 import './ProfilePage.css'
 
 const PERMISSION_LABELS = {
@@ -24,6 +25,7 @@ const ROLE_CONFIG = {
 
 const TABS = [
   { id: 'profile', icon: '👤', label: 'Profil' },
+  { id: 'teams', icon: '👥', label: 'Ma Team' },
   { id: 'security', icon: '🔒', label: 'Sécurité' },
   { id: 'address', icon: '🏠', label: 'Adresse' },
   { id: 'orders', icon: '📦', label: 'Commandes' },
@@ -245,6 +247,16 @@ export default function ProfilePage({ session, profile, onLogout, orders = [], o
                     Si tu penses qu'il y a une erreur, contacte un administrateur.
                   </p>
                 )}
+              </div>
+            )}
+
+            {activeTab === 'teams' && (
+              <div className="profile-split-card glass">
+                <h3 className="profile-section-title">👥 Ma Team</h3>
+                <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginBottom: '20px', lineHeight: '1.5' }}>
+                  Crée une team privée pour suivre les courses avec tes potes : chat dédié pendant le live + annonces vocales lues à voix haute pour ta team seulement.
+                </p>
+                <TeamsManager session={session} />
               </div>
             )}
 

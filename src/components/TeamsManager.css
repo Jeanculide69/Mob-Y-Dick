@@ -1,0 +1,127 @@
+.teams-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.teams-actions-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+@media (max-width: 640px) {
+  .teams-actions-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+.teams-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.teams-form-label {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+.teams-form-row {
+  display: flex;
+  gap: 8px;
+}
+.teams-form-row input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+.teams-form-row input:focus {
+  outline: none;
+  border-color: rgba(255, 85, 0, 0.4);
+}
+
+.teams-msg {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+.teams-msg-error {
+  background: rgba(255, 68, 68, 0.1);
+  border: 1px solid rgba(255, 68, 68, 0.3);
+  color: #ff8888;
+}
+.teams-msg-info {
+  background: rgba(0, 204, 102, 0.1);
+  border: 1px solid rgba(0, 204, 102, 0.3);
+  color: #66ff99;
+}
+
+.teams-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.teams-empty {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  padding: 20px;
+  font-style: italic;
+}
+
+.teams-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+.teams-card-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.teams-card-name {
+  font-weight: 600;
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.teams-card-code {
+  background: rgba(255, 85, 0, 0.1);
+  border: 1px dashed rgba(255, 85, 0, 0.4);
+  color: var(--accent);
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-family: monospace;
+  font-size: 0.85rem;
+  letter-spacing: 2px;
+  cursor: pointer;
+  align-self: flex-start;
+  font-weight: 700;
+}
+.teams-card-code:hover {
+  background: rgba(255, 85, 0, 0.2);
+}
+.teams-card-leave {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-muted);
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.teams-card-leave:hover {
+  background: rgba(255, 68, 68, 0.1);
+  border-color: rgba(255, 68, 68, 0.3);
+  color: #ff8888;
+}

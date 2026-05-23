@@ -2,11 +2,23 @@ import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabaseClient';
 import './LiveChat.css';
 
+/**
+ * LiveChat — Chat global + chat team(s) avec onglets
+ *
+ * Contexte = 'global' (table chat_messages, lecture publique) OU un team_id
+ * (table team_chat_messages, RLS team-only).
+ *
+ * Sécurité team : tout est filtré par RLS Supabase. Si l'utilisateur perd
+ * l'accès à une team, la subscription échoue silencieusement et SELECT
+ * retourne 0 lignes — pas de fuite côté client.
+ */
 export default function LiveChat({ session, canModerate }) {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [teams, setTeams] = useState([]);
+  const [activeContext, setActiveContext] = useState('global'); // 'global' | team_id
   const isOpenRef = useRef(false);
   const messagesEndRef = useRef(null);
 
@@ -16,37 +28,63 @@ export default function LiveChat({ session, canModerate }) {
     if (isOpen) setUnreadCount(0);
   }, [isOpen]);
 
+  // ── Charge la liste des teams de l'utilisateur (pour les onglets) ──
   useEffect(() => {
+    if (!session) {
+      setTeams([]);
+      return;
+    }
+    supabase.from('teams')
+      .select('id, name')
+      .order('created_at', { ascending: false })
+      .then(({ data }) => setTeams(data || []));
+  }, [session?.user?.id]);
+
+  // ── Fetch + subscribe selon le contexte actif ──
+  useEffect(() => {
+    let cancelled = false;
+    const isGlobal = activeContext === 'global';
+    const tableName = isGlobal ? 'chat_messages' : 'team_chat_messages';
+
     const fetchMessages = async () => {
-      const { data } = await supabase
-        .from('chat_messages')
-        .select(`id, message, created_at, user_id, profiles ( display_name, avatar_url, role )`)
+      let query = supabase
+        .from(tableName)
+        .select(`id, message, created_at, user_id, profiles ( display_name, avatar_url, role )${isGlobal ? '' : ', team_id'}`)
         .order('created_at', { ascending: false })
         .limit(50);
-      if (data) setMessages(data.reverse());
+      if (!isGlobal) query = query.eq('team_id', activeContext);
+      const { data } = await query;
+      if (!cancelled && data) setMessages(data.reverse());
     };
     fetchMessages();
 
-    const channel = supabase.channel('public:chat_messages')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, async (payload) => {
+    // Channel unique par contexte
+    const channelName = isGlobal ? 'public:chat_messages' : `team:${activeContext}:chat`;
+    const filter = isGlobal ? undefined : `team_id=eq.${activeContext}`;
+
+    const channel = supabase.channel(channelName)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: tableName, ...(filter ? { filter } : {}) }, async (payload) => {
         const { data: profileData } = await supabase
           .from('profiles')
           .select('display_name, avatar_url, role')
           .eq('id', payload.new.user_id)
-          .single();
+          .maybeSingle();
         const newMsg = { ...payload.new, profiles: profileData };
+        if (cancelled) return;
         setMessages(prev => [...prev, newMsg]);
-        if (!isOpenRef.current) {
-          setUnreadCount(c => c + 1);
-        }
+        if (!isOpenRef.current) setUnreadCount(c => c + 1);
       })
-      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'chat_messages' }, (payload) => {
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: tableName, ...(filter ? { filter } : {}) }, (payload) => {
+        if (cancelled) return;
         setMessages(prev => prev.filter(msg => msg.id !== payload.old.id));
       })
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
-  }, []);
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+    };
+  }, [activeContext]);
 
   useEffect(() => {
     if (isOpen) {
@@ -61,31 +99,67 @@ export default function LiveChat({ session, canModerate }) {
     if (!newMessage.trim() || !session) return;
     const msg = newMessage.trim();
     setNewMessage('');
-    await supabase.from('chat_messages').insert([{ user_id: session.user.id, message: msg }]);
-  };
-
-  const handleDeleteMessage = async (msgId) => {
-    if (window.confirm('Supprimer ce message ?')) {
-      await supabase.from('chat_messages').delete().eq('id', msgId);
+    if (activeContext === 'global') {
+      await supabase.from('chat_messages').insert([{ user_id: session.user.id, message: msg }]);
+    } else {
+      await supabase.from('team_chat_messages').insert([{
+        user_id: session.user.id,
+        message: msg,
+        team_id: activeContext
+      }]);
     }
   };
 
-  const hasModRights = canModerate;
+  const handleDeleteMessage = async (msgId) => {
+    if (!window.confirm('Supprimer ce message ?')) return;
+    const table = activeContext === 'global' ? 'chat_messages' : 'team_chat_messages';
+    await supabase.from(table).delete().eq('id', msgId);
+  };
+
+  const hasModRights = canModerate && activeContext === 'global'; // les mods ne modèrent QUE le chat global
+
+  const activeTeamName = activeContext === 'global'
+    ? null
+    : teams.find(t => t.id === activeContext)?.name;
 
   return (
     <div className={`live-chat-container${isOpen ? ' is-open' : ''}`}>
       {isOpen && (
         <div className="chat-window glass">
           <div className="chat-header">
-            <h3>💬 Chat en direct</h3>
+            <h3>💬 Chat {activeContext === 'global' ? 'global' : `— ${activeTeamName || 'Team'}`}</h3>
             <button className="chat-close" onClick={() => setIsOpen(false)} aria-label="Réduire le chat">
               —
             </button>
           </div>
 
+          {teams.length > 0 && (
+            <div className="chat-tabs">
+              <button
+                type="button"
+                className={`chat-tab ${activeContext === 'global' ? 'active' : ''}`}
+                onClick={() => setActiveContext('global')}
+              >
+                🌐 Global
+              </button>
+              <button
+                type="button"
+                className={`chat-tab ${activeContext === teams[0].id ? 'active' : ''}`}
+                onClick={() => setActiveContext(teams[0].id)}
+                title={teams[0].name}
+              >
+                👥 {teams[0].name}
+              </button>
+            </div>
+          )}
+
           <div className="chat-messages">
             {messages.length === 0 ? (
-              <p className="no-messages">Aucun message pour l'instant. Soyez le premier !</p>
+              <p className="no-messages">
+                {activeContext === 'global'
+                  ? "Aucun message pour l'instant. Soyez le premier !"
+                  : "Aucun message dans cette team. Lance la conversation !"}
+              </p>
             ) : (
               messages.map((msg) => {
                 const isMe = session?.user?.id === msg.user_id;
@@ -130,10 +204,10 @@ export default function LiveChat({ session, canModerate }) {
             <form onSubmit={handleSendMessage} className="chat-input-form">
               <input
                 type="text"
-                placeholder="Votre message..."
+                placeholder={activeContext === 'global' ? 'Votre message...' : `Message à ${activeTeamName || 'la team'}...`}
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                maxLength={200}
+                maxLength={activeContext === 'global' ? 200 : 500}
               />
               <button type="submit" disabled={!newMessage.trim()}>Envoyer</button>
             </form>

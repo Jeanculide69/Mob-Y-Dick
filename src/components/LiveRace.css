@@ -1258,6 +1258,18 @@
   flex-shrink: 0;
 }
 
+/* Variante "annonce team" — accent bleu pour distinguer des annonces orga */
+.live-announcement-banner.live-announcement-team {
+  top: 130px; /* sous l'annonce orga si les deux sont visibles en même temps */
+  border-color: rgba(85, 153, 255, 0.45);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(85, 153, 255, 0.15);
+}
+@media (max-width: 768px) {
+  .live-announcement-banner.live-announcement-team {
+    top: 116px;
+  }
+}
+
 .live-announcement-text {
   font-size: 1rem;
   color: #fff;
