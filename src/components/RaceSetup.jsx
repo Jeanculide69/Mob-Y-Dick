@@ -266,6 +266,23 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
     if (onStartRace) onStartRace({ ...raceSession, status: 'live', started_at: null }, teams)
   }
 
+  const handleCancelRace = async () => {
+    const hasStarted = !!raceSession.started_at
+    const warn = hasStarted
+      ? '↩️ Annuler la course en cours et revenir à la configuration ?\n\n⚠️ Le chrono a déjà démarré. Les passages enregistrés ne sont PAS supprimés (ils restent rattachés à la session si tu relances).'
+      : '↩️ Annuler le lancement et revenir à la configuration ?\n\nLe bouton LIVE disparaîtra côté spectateurs.'
+    if (!confirm(warn)) return
+    const { error } = await supabase.from('race_sessions').update({
+      status: 'setup',
+      started_at: null
+    }).eq('id', raceSession.id)
+    if (error) {
+      alert('Erreur : ' + error.message)
+      return
+    }
+    setRaceSession(prev => ({ ...prev, status: 'setup', started_at: null }))
+  }
+
   const handleDeleteSession = async () => {
     if (!confirm('⚠️ Supprimer TOUTE la session (équipes + chronos) ? Cette action est irréversible !')) return
     await supabase.from('race_sessions').delete().eq('id', raceSession.id)
@@ -999,6 +1016,14 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
                   onClick={() => onStartRace(raceSession, teams)}
                 >
                   ⏱️ ACCÉDER AU CHRONOMÉTRAGE
+                </button>
+                <button
+                  className="btn btn-ghost"
+                  onClick={handleCancelRace}
+                  style={{ marginLeft: '12px' }}
+                  title="Repasse la session en configuration et fait disparaître le bouton LIVE côté spectateurs"
+                >
+                  ↩️ Annuler le lancement
                 </button>
               </div>
 
