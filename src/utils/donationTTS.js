@@ -189,6 +189,36 @@ export const speakAnnouncement = (text) => {
 }
 
 /**
+ * Lit à voix haute une annonce de team — bien différencié de l'annonce
+ * organisateur (préfixe + voix légèrement plus dynamique).
+ * @param {string} teamName - Nom de la team émettrice
+ * @param {string} text - Le texte de l'annonce
+ */
+export const speakTeamAnnouncement = (teamName, text) => {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return
+  if (!text) return
+
+  const cleaned = cleanForTTS(text)
+  if (!cleaned) return
+
+  try { window.speechSynthesis.cancel() } catch { /* ignore */ }
+
+  const safeTeam = (teamName || 'ta team').replace(/[<>]/g, '').slice(0, 60)
+  const utterance = new SpeechSynthesisUtterance(`Annonce de la team ${safeTeam} : ${cleaned}`)
+  utterance.lang = 'fr-FR'
+  utterance.rate = 1.0
+  utterance.pitch = 1.1 // Plus aigu et vif que l'annonce orga → différence audible
+  utterance.volume = 1.0
+
+  // Voix féminine pour distinguer encore plus de l'annonce orga (voix masculine)
+  const femaleVoice = pickFrenchFemaleVoice()
+  if (femaleVoice) utterance.voice = femaleVoice
+
+  try { window.speechSynthesis.speak(utterance) }
+  catch (e) { console.warn('[TTS] team announce speak failed', e) }
+}
+
+/**
  * Préchargement des voix (Chrome charge async la première fois).
  * À appeler une fois au mount de LiveRace pour que la 1re TTS soit nickel.
  */

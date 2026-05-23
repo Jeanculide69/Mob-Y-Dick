@@ -11,7 +11,7 @@ const StripePurchaseButton = lazy(() => import('./StripePurchaseButton'))
 import RaceFlagOverlay from './RaceFlagOverlay'
 import { playPremiumSound, playDonationSound, playRaceSignalSound, playAnnouncementSound } from '../utils/soundEffects'
 import { playPremiumEffects, playDonationSparks, SLUG_ANIM_CLASS, MEDIA_OVERRIDES } from '../utils/premiumEmoteEffects'
-import { speakDonation, warmUpTTS, isDonationTTSEnabled, setDonationTTSEnabled, speakAnnouncement } from '../utils/donationTTS'
+import { speakDonation, warmUpTTS, isDonationTTSEnabled, setDonationTTSEnabled, speakAnnouncement, speakTeamAnnouncement } from '../utils/donationTTS'
 import { formatCategoryShort } from '../utils/formatCategory'
 import { useToast } from './Toast'
 import './LiveRace.css'
@@ -520,7 +520,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
         const teamName = teamLocal?.name || 'Ma Team'
         setTeamAnnouncement({ team_name: teamName, message: row.message })
         playAnnouncementSound()
-        setTimeout(() => speakAnnouncement(`Annonce ${teamName} : ${row.message}`), 1500)
+        setTimeout(() => speakTeamAnnouncement(teamName, row.message), 1500)
         setTimeout(() => setTeamAnnouncement(null), 12000)
       })
       .subscribe()
@@ -564,7 +564,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
     const teamName = myTeams.find(t => t.id === teamAnnounceTarget)?.name || 'Ma Team'
     setTeamAnnouncement({ team_name: teamName, message: msg })
     playAnnouncementSound()
-    setTimeout(() => speakAnnouncement(`Annonce ${teamName} : ${msg}`), 1500)
+    setTimeout(() => speakTeamAnnouncement(teamName, msg), 1500)
     setTimeout(() => setTeamAnnouncement(null), 12000)
     // Reset modal
     setTeamAnnounceText('')
