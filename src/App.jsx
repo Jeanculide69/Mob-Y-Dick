@@ -22,6 +22,7 @@ const UserManagement = lazy(() => import('./components/UserManagement'))
 const EmoteAdmin     = lazy(() => import('./components/EmoteAdmin'))
 const LiveMessagesAdmin = lazy(() => import('./components/LiveMessagesAdmin'))
 const ContactMessagesAdmin = lazy(() => import('./components/ContactMessagesAdmin'))
+const TeamsAdmin     = lazy(() => import('./components/TeamsAdmin'))
 const AdminDashboard = lazy(() => import('./components/AdminDashboard'))
 const RaceSetup      = lazy(() => import('./components/RaceSetup'))
 const RaceChrono     = lazy(() => import('./components/RaceChrono'))
@@ -2819,7 +2820,7 @@ function App() {
       {/* ─── Sleek Dynamic Forms and Lists Modal (Admin) ─── */}
       {activeForm && (
         <div className="admin-overlay">
-          <div className={`admin-panel glass admin-visual-modal ${['orders','sponsors_admin','users_admin','bikes_admin','affiliations_admin','emotes_admin','donations_admin','contact_admin'].includes(activeForm) ? 'wide' : ''}`}>
+          <div className={`admin-panel glass admin-visual-modal ${['orders','sponsors_admin','users_admin','bikes_admin','affiliations_admin','emotes_admin','donations_admin','contact_admin','user_teams_admin'].includes(activeForm) ? 'wide' : ''}`}>
             <div className="admin-header">
               <h2>
                 {activeForm === 'event' && '📅 Gérer Événement'}
@@ -2834,6 +2835,7 @@ function App() {
                 {activeForm === 'affiliations_admin' && '🏍️ Demandes d\'affiliation'}
                 {activeForm === 'emotes_admin' && '🎉 Emotes & Sons Premium'}
                 {activeForm === 'donations_admin' && '💬 Messages Live & Emotes'}
+                {activeForm === 'user_teams_admin' && '🫂 Teams Privées (spectateurs)'}
                 {activeForm === 'contact_admin' && '📩 Messages de Contact'}
                 {activeForm === 'users_admin' && '👥 Gestion des Utilisateurs'}
               </h2>
@@ -3109,6 +3111,10 @@ function App() {
             ) : activeForm === 'contact_admin' ? (
               <Suspense fallback={<LazyLoader />}>
                 <ContactMessagesAdmin />
+              </Suspense>
+            ) : activeForm === 'user_teams_admin' ? (
+              <Suspense fallback={<LazyLoader />}>
+                <TeamsAdmin />
               </Suspense>
             ) : activeForm === 'bikes_admin' ? (
               <div className="admin-orders-container" style={{ maxHeight: '75vh', overflowY: 'auto' }}>

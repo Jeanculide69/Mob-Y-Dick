@@ -257,6 +257,7 @@ export default function AdminDashboard({
           <ToolCard icon="🎉" label="Emotes & Sons" onClick={() => onOpenForm('emotes_admin')} />
           <ToolCard icon="💬" label="Messages live" onClick={() => onOpenForm('donations_admin')} />
           <ToolCard icon="🧑‍🚀" label="Utilisateurs" count={dbUsers?.length || 0} onClick={() => onOpenForm('users_admin')} />
+          <ToolCard icon="🫂" label="Teams Privées" onClick={() => onOpenForm('user_teams_admin')} />
         </div>
       </div>
     </section>
