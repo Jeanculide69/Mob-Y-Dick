@@ -399,12 +399,22 @@
   color: var(--text-muted);
 }
 
+.live-cat-cell {
+  max-width: 140px;
+}
 .live-cat-cell .live-cat-badge {
   padding: 3px 10px;
   background: rgba(255, 255, 255, 0.06);
   border-radius: 10px;
   font-size: 0.75rem;
   color: var(--text-secondary);
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  cursor: help;
 }
 
 .live-time {
@@ -856,10 +866,12 @@
     align-items: center;
     gap: 8px;
     flex-wrap: wrap;
+    max-width: none; /* override desktop cap — on mobile le badge a sa propre ligne */
   }
   .live-table .live-cat-badge {
     font-size: 0.7rem;
     padding: 2px 8px;
+    max-width: 100%; /* tronque si vraiment énorme, sinon prend la place dispo */
   }
   .live-table .live-cat-cell::after {
     content: '';

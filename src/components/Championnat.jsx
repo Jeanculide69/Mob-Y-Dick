@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../supabaseClient'
+import { formatCategoryShort } from '../utils/formatCategory'
 import './Championnat.css'
 
 // F1-style points system
@@ -210,8 +211,9 @@ export default function Championnat() {
                 key={c}
                 className={`champ-cat-tab ${selectedCat === c ? 'active' : ''}`}
                 onClick={() => setSelectedCat(c)}
+                title={c}
               >
-                {c}
+                {formatCategoryShort(c)}
               </button>
             ))}
           </div>
@@ -235,7 +237,7 @@ export default function Championnat() {
           return (
             <div key={cat} className="champ-cat-block">
               <div className="champ-cat-header">
-                <h2 className="champ-cat-title">{cat}</h2>
+                <h2 className="champ-cat-title" title={cat}>{formatCategoryShort(cat)}</h2>
                 {leader && (
                   <div className="champ-cat-leader">
                     <span className="champ-leader-crown">👑</span>

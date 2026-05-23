@@ -3,6 +3,7 @@
  * Desktop : panneau lateral 520px | Mobile : bottom sheet 88dvh
  */
 import { useMemo, useEffect } from 'react'
+import { formatCategoryShort } from '../utils/formatCategory'
 import { createPortal } from 'react-dom'
 import './LiveTeamDrawer.css'
 
@@ -138,7 +139,7 @@ export default function LiveTeamDrawer({ team, allLaps, position, onClose }) {
             </div>
           </div>
           <div className="ltd-header-right">
-            {team.category && <span className="ltd-cat">{team.category}</span>}
+            {team.category && <span className="ltd-cat" title={team.category}>{formatCategoryShort(team.category)}</span>}
             <button className="ltd-close" onClick={onClose} aria-label="Fermer">✕</button>
           </div>
         </div>

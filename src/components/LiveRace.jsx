@@ -12,6 +12,7 @@ import RaceFlagOverlay from './RaceFlagOverlay'
 import { playPremiumSound, playDonationSound, playRaceSignalSound, playAnnouncementSound } from '../utils/soundEffects'
 import { playPremiumEffects, playDonationSparks, SLUG_ANIM_CLASS, MEDIA_OVERRIDES } from '../utils/premiumEmoteEffects'
 import { speakDonation, warmUpTTS, isDonationTTSEnabled, setDonationTTSEnabled, speakAnnouncement } from '../utils/donationTTS'
+import { formatCategoryShort } from '../utils/formatCategory'
 import { useToast } from './Toast'
 import './LiveRace.css'
 
@@ -1432,7 +1433,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
               <span className="live-best-moto">#{bestTeam.moto_number}</span>
               <span className="live-best-pilot">{bestTeam.pilot_1_name}</span>
               <span className="live-best-time">{formatTime(bestOverall)}</span>
-              <span className="live-best-cat">{bestTeam.category}</span>
+              <span className="live-best-cat" title={bestTeam.category}>{formatCategoryShort(bestTeam.category)}</span>
             </div>
           </div>
         )}
@@ -1462,8 +1463,8 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
         {(activeViewTab === 'classement' || activeViewTab === 'podiums') && (
           <div className="live-cat-tabs">
             {['all', ...categories].map(c => (
-              <button key={c} className={`live-cat-tab ${selectedCategory === c ? 'active' : ''}`} onClick={() => setSelectedCategory(c)}>
-                {c === 'all' ? 'Toutes' : c}
+              <button key={c} className={`live-cat-tab ${selectedCategory === c ? 'active' : ''}`} onClick={() => setSelectedCategory(c)} title={c === 'all' ? 'Toutes les catégories' : c}>
+                {c === 'all' ? 'Toutes' : formatCategoryShort(c)}
               </button>
             ))}
           </div>
@@ -1534,7 +1535,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                                 {teamStatuses[r.id] === 'DNS' && <span className="live-status-dns">DNS</span>}
                               </div>
                             </td>
-                            <td className="live-cat-cell"><span className="live-cat-badge">{r.category}</span></td>
+                            <td className="live-cat-cell"><span className="live-cat-badge" title={r.category}>{formatCategoryShort(r.category)}</span></td>
                             <td className="live-time live-time-best">{formatTime(r.bestLap)}</td>
                             <td className="live-time" style={{ color: i === 0 ? 'var(--accent)' : 'var(--text-secondary)', fontWeight: i === 0 ? 'bold' : 'normal' }}>{r.gapToLeader}</td>
                             <td className="live-time" style={{ color: 'var(--text-muted)' }}>{r.interval}</td>
@@ -1588,7 +1589,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                     if (!catR.length) return null
                     return (
                       <div key={cat} className="live-podium-card glass">
-                        <h3 className="live-podium-cat">{cat}</h3>
+                        <h3 className="live-podium-cat" title={cat}>{formatCategoryShort(cat)}</h3>
                         <div className="live-podium-visual">
                           {catR[1] && (
                             <div className="live-podium-step step-2 podium-anim-2">
@@ -1661,7 +1662,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                       <div className="live-feed-moto">#{l.moto_number}</div>
                       <div className="live-feed-details">
                         <span className="live-feed-name">{team?.pilot_1_name || '?'}</span>
-                        <span className="live-feed-cat">{team?.category}</span>
+                        <span className="live-feed-cat" title={team?.category}>{formatCategoryShort(team?.category)}</span>
                       </div>
                       <div className="live-feed-time">{formatTime(l.lap_time_ms)}</div>
                     </div>
