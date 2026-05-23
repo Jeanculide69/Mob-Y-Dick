@@ -773,8 +773,15 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
       const { data } = await supabase.from('race_sessions').select('*').eq('id', customSessionId).limit(1)
       sessions = data || []
     } else {
+      // Sans customSessionId, on entre dans LiveRace via navigate('live') —
+      // la navbar/bannière n'expose ce chemin QUE quand une session
+      // status='live' existe (cf. App.jsx). On doit charger exactement la
+      // même session que celle qui a déclenché l'affichage du bouton, sinon
+      // on peut atterrir sur une session finished/published plus récente
+      // (cas : ESSAI SAMEDI MATIN published après une session du matin live).
+      // Les résultats des courses passées passent toujours par customSessionId.
       const { data } = await supabase.from('race_sessions').select('*')
-        .in('status', ['live', 'finished', 'published'])
+        .eq('status', 'live')
         .order('created_at', { ascending: false }).limit(1)
       sessions = data || []
     }
