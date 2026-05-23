@@ -57,6 +57,11 @@ export default function LiveChat({ session, canModerate }) {
           .limit(50);
         if (!cancelled && data) setMessages(data.reverse().map(m => ({ ...m, kind: 'message' })));
       } else {
+        // 2 requêtes parallèles : chat + annonces. La jointure profiles
+        // implicite ne marche QUE sur team_chat_messages.user_id (FK explicite
+        // sur auth.users → relation transitive vers profiles via le schéma
+        // public). Pour team_announcements.created_by, Supabase ne sait pas
+        // résoudre — on fetch les profils dans un 2e round séparé.
         const [chatRes, annRes] = await Promise.all([
           supabase
             .from('team_chat_messages')
@@ -66,13 +71,33 @@ export default function LiveChat({ session, canModerate }) {
             .limit(50),
           supabase
             .from('team_announcements')
-            .select('id, message, created_at, created_by, team_id, profiles:created_by ( display_name, avatar_url, role )')
+            .select('id, message, created_at, created_by, team_id')
             .eq('team_id', activeContext)
             .order('created_at', { ascending: false })
             .limit(50),
         ]);
+        if (chatRes.error) console.warn('[LiveChat] team_chat_messages fetch error:', chatRes.error);
+        if (annRes.error)  console.warn('[LiveChat] team_announcements fetch error:', annRes.error);
+
+        const annsRaw = annRes.data || [];
+        // Round 2 : fetch profils des annonces en batch
+        const annAuthorIds = [...new Set(annsRaw.map(a => a.created_by).filter(Boolean))];
+        let annProfiles = {};
+        if (annAuthorIds.length > 0) {
+          const { data: profs } = await supabase
+            .from('profiles')
+            .select('id, display_name, avatar_url, role')
+            .in('id', annAuthorIds);
+          (profs || []).forEach(p => { annProfiles[p.id] = p; });
+        }
+
         const chats = (chatRes.data || []).map(m => ({ ...m, kind: 'message' }));
-        const anns  = (annRes.data || []).map(a => ({ ...a, kind: 'announcement', user_id: a.created_by }));
+        const anns  = annsRaw.map(a => ({
+          ...a,
+          kind: 'announcement',
+          user_id: a.created_by,
+          profiles: annProfiles[a.created_by] || null,
+        }));
         const merged = [...chats, ...anns].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         if (!cancelled) setMessages(merged);
       }
