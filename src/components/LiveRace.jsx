@@ -2093,6 +2093,19 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                 <button className="live-fab-action-btn donation" onClick={() => { setShopCategoryFilter('sponsoring'); setShopOpen(true); setFabOpen(false); }}>
                   🏍️ Sponsoriser
                 </button>
+                {myTeams.length > 0 && (
+                  <button
+                    className="live-fab-action-btn"
+                    onClick={() => {
+                      setTeamAnnounceTarget(myTeams[0].id)
+                      setShowTeamAnnounceModal(true)
+                      setFabOpen(false)
+                    }}
+                    title={`Envoyer une annonce vocale à ${myTeams[0].name}`}
+                  >
+                    📣 Annonce Team
+                  </button>
+                )}
               </div>
 
               {/* ── Toggle TTS (lecture vocale des dons) ── */}
