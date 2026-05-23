@@ -78,6 +78,7 @@ export default function LiveChat({ session, canModerate }) {
         ]);
         if (chatRes.error) console.warn('[LiveChat] team_chat_messages fetch error:', chatRes.error);
         if (annRes.error)  console.warn('[LiveChat] team_announcements fetch error:', annRes.error);
+        console.log('[LiveChat] team=' + activeContext, 'msgs=' + (chatRes.data?.length || 0), 'anns=' + (annRes.data?.length || 0));
 
         const annsRaw = annRes.data || [];
         // Round 2 : fetch profils des annonces en batch
