@@ -57,15 +57,15 @@ export default function LiveChat({ session, canModerate }) {
           .limit(50);
         if (!cancelled && data) setMessages(data.reverse().map(m => ({ ...m, kind: 'message' })));
       } else {
-        // 2 requêtes parallèles : chat + annonces. La jointure profiles
-        // implicite ne marche QUE sur team_chat_messages.user_id (FK explicite
-        // sur auth.users → relation transitive vers profiles via le schéma
-        // public). Pour team_announcements.created_by, Supabase ne sait pas
-        // résoudre — on fetch les profils dans un 2e round séparé.
+        // 2 requêtes parallèles : chat + annonces, SANS jointure implicite
+        // sur profiles. Supabase ne sait pas résoudre la relation transitive
+        // (team_chat_messages.user_id et team_announcements.created_by
+        // référencent auth.users, pas profiles directement) → 400 silencieux.
+        // On fetch les profils en round 2 batch.
         const [chatRes, annRes] = await Promise.all([
           supabase
             .from('team_chat_messages')
-            .select('id, message, created_at, user_id, team_id, profiles ( display_name, avatar_url, role )')
+            .select('id, message, created_at, user_id, team_id')
             .eq('team_id', activeContext)
             .order('created_at', { ascending: false })
             .limit(50),
@@ -78,26 +78,36 @@ export default function LiveChat({ session, canModerate }) {
         ]);
         if (chatRes.error) console.warn('[LiveChat] team_chat_messages fetch error:', chatRes.error);
         if (annRes.error)  console.warn('[LiveChat] team_announcements fetch error:', annRes.error);
-        console.log('[LiveChat] team=' + activeContext, 'msgs=' + (chatRes.data?.length || 0), 'anns=' + (annRes.data?.length || 0));
 
-        const annsRaw = annRes.data || [];
-        // Round 2 : fetch profils des annonces en batch
-        const annAuthorIds = [...new Set(annsRaw.map(a => a.created_by).filter(Boolean))];
-        let annProfiles = {};
-        if (annAuthorIds.length > 0) {
+        const chatsRaw = chatRes.data || [];
+        const annsRaw  = annRes.data || [];
+
+        // Round 2 : fetch profils des auteurs (chat + annonces) en un seul batch
+        const allAuthorIds = [...new Set([
+          ...chatsRaw.map(m => m.user_id).filter(Boolean),
+          ...annsRaw.map(a => a.created_by).filter(Boolean),
+        ])];
+        let profilesMap = {};
+        if (allAuthorIds.length > 0) {
           const { data: profs } = await supabase
             .from('profiles')
             .select('id, display_name, avatar_url, role')
-            .in('id', annAuthorIds);
-          (profs || []).forEach(p => { annProfiles[p.id] = p; });
+            .in('id', allAuthorIds);
+          (profs || []).forEach(p => { profilesMap[p.id] = p; });
         }
 
-        const chats = (chatRes.data || []).map(m => ({ ...m, kind: 'message' }));
+        console.log('[LiveChat] team=' + activeContext, 'msgs=' + chatsRaw.length, 'anns=' + annsRaw.length);
+
+        const chats = chatsRaw.map(m => ({
+          ...m,
+          kind: 'message',
+          profiles: profilesMap[m.user_id] || null,
+        }));
         const anns  = annsRaw.map(a => ({
           ...a,
           kind: 'announcement',
           user_id: a.created_by,
-          profiles: annProfiles[a.created_by] || null,
+          profiles: profilesMap[a.created_by] || null,
         }));
         const merged = [...chats, ...anns].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
         if (!cancelled) setMessages(merged);
