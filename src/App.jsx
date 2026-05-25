@@ -2366,6 +2366,17 @@ function App() {
             setLiveSession(null)
             setActiveTab('home')
           }}
+          isAdmin={hasPermission('manage_races')}
+          onManage={(eventId) => {
+            const ev = dbEvents?.find(e => e.id === eventId)
+            if (ev) {
+              setSelectedRaceEvent(ev)
+              setActiveRaceView('setup')
+              setActiveTab('race')
+              setViewingSessionId(null)
+              window.scrollTo({ top: 0, behavior: 'smooth' })
+            }
+          }}
         />
       )}
 

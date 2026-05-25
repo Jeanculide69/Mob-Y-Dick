@@ -45,7 +45,7 @@ const formatElapsed = (ms) => {
   return `${h}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`
 }
 
-export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
+export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin, onManage }) {
   const toast = useToast()
   const [session, setSession]               = useState(null)
   const [teams, setTeams]                   = useState([])
@@ -1404,6 +1404,11 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                 {isFinished && (
                   <button className="btn btn-ghost live-share-btn" onClick={() => generateCard(allRankings)} style={{ borderColor: 'rgba(168,85,247,0.4)', color: '#a855f7' }}>
                     🖼️ Carte PNG
+                  </button>
+                )}
+                {isAdmin && onManage && session?.event_id && (
+                  <button className="btn btn-ghost live-share-btn" onClick={() => onManage(session.event_id)} style={{ borderColor: 'var(--accent)', color: 'var(--accent)', fontWeight: 'bold' }}>
+                    ⚙️ Gérer la course
                   </button>
                 )}
               </div>
