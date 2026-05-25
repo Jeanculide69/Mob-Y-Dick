@@ -1677,7 +1677,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                           {catR[1] && (
                             <div className="live-podium-step step-2 podium-anim-2">
                               <div className="live-podium-avatar">🥈</div>
-                              <span className="live-podium-name">{catR[1].pilot_1_name}</span>
+                              <span className="live-podium-name">Moto #{catR[1].moto_number}</span>
                               <span className="live-podium-chrono">{catR[1].totalLaps} Tours</span>
                               <span className="live-podium-best">Min: {formatTime(catR[1].bestLap)}</span>
                               <div className="live-podium-block silver">2</div>
@@ -1686,7 +1686,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                           {catR[0] && (
                             <div className="live-podium-step step-1 podium-anim-1">
                               <div className="live-podium-avatar">🥇</div>
-                              <span className="live-podium-name">{catR[0].pilot_1_name}</span>
+                              <span className="live-podium-name">Moto #{catR[0].moto_number}</span>
                               <span className="live-podium-chrono">{catR[0].totalLaps} Tours</span>
                               <span className="live-podium-best">Min: {formatTime(catR[0].bestLap)}</span>
                               <div className="live-podium-block gold">1</div>
@@ -1695,7 +1695,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit }) {
                           {catR[2] && (
                             <div className="live-podium-step step-3 podium-anim-3">
                               <div className="live-podium-avatar">🥉</div>
-                              <span className="live-podium-name">{catR[2].pilot_1_name}</span>
+                              <span className="live-podium-name">Moto #{catR[2].moto_number}</span>
                               <span className="live-podium-chrono">{catR[2].totalLaps} Tours</span>
                               <span className="live-podium-best">Min: {formatTime(catR[2].bestLap)}</span>
                               <div className="live-podium-block bronze">3</div>

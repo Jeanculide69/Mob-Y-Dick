@@ -621,7 +621,7 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
                       {catRankings[1] && (
                         <div className="review-podium-step step-2">
                           <div className="review-podium-avatar">🥈</div>
-                          <span className="review-podium-name">{catRankings[1].pilot_1_name}</span>
+                          <span className="review-podium-name">Moto #{catRankings[1].moto_number}</span>
                           <span className="review-podium-chrono">{catRankings[1].totalLaps} Tours</span>
                           <span className="review-podium-best">Min: {formatTime(catRankings[1].bestLap)}</span>
                           <div className="review-podium-block silver">2</div>
@@ -631,7 +631,7 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
                       {catRankings[0] && (
                         <div className="review-podium-step step-1">
                           <div className="review-podium-avatar">🥇</div>
-                          <span className="review-podium-name">{catRankings[0].pilot_1_name}</span>
+                          <span className="review-podium-name">Moto #{catRankings[0].moto_number}</span>
                           <span className="review-podium-chrono">{catRankings[0].totalLaps} Tours</span>
                           <span className="review-podium-best">Min: {formatTime(catRankings[0].bestLap)}</span>
                           <div className="review-podium-block gold">1</div>
@@ -641,7 +641,7 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
                       {catRankings[2] && (
                         <div className="review-podium-step step-3">
                           <div className="review-podium-avatar">🥉</div>
-                          <span className="review-podium-name">{catRankings[2].pilot_1_name}</span>
+                          <span className="review-podium-name">Moto #{catRankings[2].moto_number}</span>
                           <span className="review-podium-chrono">{catRankings[2].totalLaps} Tours</span>
                           <span className="review-podium-best">Min: {formatTime(catRankings[2].bestLap)}</span>
                           <div className="review-podium-block bronze">3</div>
