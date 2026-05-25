@@ -567,8 +567,15 @@ function App() {
         .then(({ data }) => {
           if (data) {
             const sanitized = data.map(m => {
-              if (m.name === 'Fumax' && m.image_url && m.image_url.includes('image_url-1779637272725')) {
-                return { ...m, image_url: null }
+              if (m.name === 'Fumax') {
+                const updated = { ...m }
+                if (m.image_url && m.image_url.includes('image_url-1779637272725')) {
+                  updated.image_url = null
+                }
+                if (m.nickname_url && m.nickname_url.includes('nickname_url-1779637361190')) {
+                  updated.nickname_url = null
+                }
+                return updated
               }
               return m
             })
@@ -1626,10 +1633,10 @@ function App() {
                     </div>
                     {(() => {
                       // Priorité : nickname uploadé via admin > NICKNAMES const > nom texte.
-                      // Pour bob/fumax/gauthier on garde le nom texte par défaut (pas de graff).
+                      // Pour bob/gauthier on garde le nom texte par défaut (pas de graff).
                       const uploadedNick = m.nickname_url
                       const fallbackNick = NICKNAMES[m.name.toLowerCase()]
-                      const excluded = ['bob', 'fumax', 'gauthier'].includes(m.name.toLowerCase())
+                      const excluded = ['bob', 'gauthier'].includes(m.name.toLowerCase())
                       const nickSrc = uploadedNick || (!excluded ? fallbackNick : null)
                       return nickSrc ? (
                         <div className="team-nickname-wrap">
