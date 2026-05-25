@@ -44,6 +44,18 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
   const [anomalies, setAnomalies] = useState([])
   const [hasCheckedAnomalies, setHasCheckedAnomalies] = useState(false)
 
+  // Lap editing and smoothing states
+  const [editingLapId, setEditingLapId] = useState(null)
+  const [editingLapForm, setEditingLapForm] = useState({ hours: 0, minutes: 0, seconds: 0, milliseconds: 0 })
+  const [smoothingTeamId, setSmoothingTeamId] = useState('')
+  const [geminiApiKey, setGeminiApiKey] = useState(import.meta.env.VITE_GEMINI_API_KEY || localStorage.getItem('myd_gemini_api_key') || '')
+  const [aiModelActive, setAiModelActive] = useState(false)
+  const [aiResponse, setAiResponse] = useState(null)
+  const [aiError, setAiError] = useState('')
+  const [customSmoothRange, setCustomSmoothRange] = useState({ start: '', end: '' })
+
+
+
   // Team form
   const [teamForm, setTeamForm] = useState({
     moto_number: '',
@@ -411,22 +423,46 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
   const checkAnomalies = () => {
     const foundAnomalies = []
     
-    // Check for double scans < 30 seconds
+    // Check for double scans < 30 seconds and abnormally short laps
     const teamsLapsMap = {}
     laps.forEach(lap => {
       if (!teamsLapsMap[lap.team_id]) teamsLapsMap[lap.team_id] = []
       teamsLapsMap[lap.team_id].push(lap)
     })
 
+    const getMedianVal = (values) => {
+      if (values.length === 0) return 0
+      const sorted = [...values].sort((a, b) => a - b)
+      const half = Math.floor(sorted.length / 2)
+      return sorted.length % 2 !== 0 ? sorted[half] : (sorted[half - 1] + sorted[half]) / 2
+    }
+
     Object.keys(teamsLapsMap).forEach(teamId => {
       const teamLaps = teamsLapsMap[teamId].sort((a, b) => a.lap_time_ms - b.lap_time_ms)
       const team = teams.find(t => t.id === teamId)
+      if (!team) return
+
+      const durations = teamLaps.map((lap, idx) => {
+        if (idx === 0) return lap.lap_time_ms
+        return lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms
+      })
+
+      const median = getMedianVal(durations)
+      const shortThreshold = Math.max(30000, median * 0.65) // 65% of median or 30s minimum
+
       for (let i = 1; i < teamLaps.length; i++) {
         const diff = teamLaps[i].lap_time_ms - teamLaps[i - 1].lap_time_ms
         if (diff < 30000) {
           foundAnomalies.push({
             id: `dup-${teamLaps[i].id}`,
-            message: `Moto #${team?.moto_number} : 2 passages très proches (${(diff/1000).toFixed(1)}s) au Tour ${teamLaps[i].lap_number}.`
+            teamId,
+            message: `Moto #${team.moto_number} : 2 passages très proches (${(diff/1000).toFixed(1)}s) au Tour ${teamLaps[i].lap_number}.`
+          })
+        } else if (diff < shortThreshold && teamLaps.length >= 3) {
+          foundAnomalies.push({
+            id: `short-${teamLaps[i].id}`,
+            teamId,
+            message: `Moto #${team.moto_number} : Tour ${teamLaps[i].lap_number} anormalement court (${formatTime(diff)} vs médiane ${formatTime(median)}).`
           })
         }
       }
@@ -436,15 +472,405 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
     setHasCheckedAnomalies(true)
   }
 
+  const resequenceLapNumbers = async (teamId) => {
+    const { data: teamLaps, error } = await supabase
+      .from('race_laps')
+      .select('id, lap_number, lap_time_ms')
+      .eq('team_id', teamId)
+      .order('lap_time_ms', { ascending: true })
+
+    if (error || !teamLaps) return
+
+    const updates = []
+    for (let i = 0; i < teamLaps.length; i++) {
+      const expectedNum = i + 1
+      if (teamLaps[i].lap_number !== expectedNum) {
+        updates.push(
+          supabase
+            .from('race_laps')
+            .update({ lap_number: expectedNum })
+            .eq('id', teamLaps[i].id)
+        )
+      }
+    }
+
+    if (updates.length > 0) {
+      await Promise.all(updates)
+    }
+  }
+
   const handleDeleteLap = async (lapId) => {
     if (!confirm('Supprimer ce passage ?')) return
+    const lapToDelete = laps.find(l => l.id === lapId)
+    if (!lapToDelete) return
+    const teamId = lapToDelete.team_id
+
     const { error } = await supabase.from('race_laps').delete().eq('id', lapId)
     if (error) {
       alert("Erreur lors de la suppression : " + error.message)
       return
     }
+    await resequenceLapNumbers(teamId)
     loadSession()
   }
+
+  const startEditingLap = (lap) => {
+    setEditingLapId(lap.id)
+    const ms = lap.lap_time_ms
+    const hours = Math.floor(ms / 3600000)
+    const minutes = Math.floor((ms % 3600000) / 60000)
+    const seconds = Math.floor((ms % 60000) / 1000)
+    const milliseconds = ms % 1000
+    setEditingLapForm({ hours, minutes, seconds, milliseconds })
+  }
+
+  const saveEditingLap = async (lapId) => {
+    const lapToUpdate = laps.find(l => l.id === lapId)
+    if (!lapToUpdate) return
+    const teamId = lapToUpdate.team_id
+
+    const { hours, minutes, seconds, milliseconds } = editingLapForm
+    const newTimeMs = (parseInt(hours || 0) * 3600 + parseInt(minutes || 0) * 60 + parseInt(seconds || 0)) * 1000 + parseInt(milliseconds || 0)
+    
+    if (newTimeMs <= 0) {
+      alert("Le temps du tour doit être supérieur à 0 !")
+      return
+    }
+
+    const { error } = await supabase
+      .from('race_laps')
+      .update({ lap_time_ms: newTimeMs })
+      .eq('id', lapId)
+
+    if (error) {
+      alert("Erreur lors de la modification : " + error.message)
+      return
+    }
+
+    setEditingLapId(null)
+    await resequenceLapNumbers(teamId)
+    loadSession()
+  }
+
+  const getMedian = (values) => {
+    if (values.length === 0) return 0
+    const sorted = [...values].sort((a, b) => a - b)
+    const half = Math.floor(sorted.length / 2)
+    return sorted.length % 2 !== 0 ? sorted[half] : (sorted[half - 1] + sorted[half]) / 2
+  }
+
+  const getTeamAnomaliesAndGroups = (teamId) => {
+    const teamLaps = laps.filter(l => l.team_id === teamId).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
+    if (teamLaps.length === 0) return { anomalies: [], groups: [], median: 0 }
+
+    const durations = teamLaps.map((lap, idx) => {
+      if (idx === 0) return lap.lap_time_ms
+      return lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms
+    })
+
+    const median = getMedian(durations)
+    const threshold = Math.max(30000, median * 0.65)
+
+    const teamAnomalies = []
+    const anomalousIndices = new Set()
+
+    durations.forEach((d, idx) => {
+      if (idx > 0 && d < 30000) {
+        teamAnomalies.push({
+          index: idx,
+          lap: teamLaps[idx],
+          type: 'double_scan',
+          message: `Passage double (${(d/1000).toFixed(1)}s)`
+        })
+        anomalousIndices.add(idx)
+      } else if (d < threshold) {
+        teamAnomalies.push({
+          index: idx,
+          lap: teamLaps[idx],
+          type: 'too_short',
+          message: `Tour trop court (${formatTime(d)})`
+        })
+        anomalousIndices.add(idx)
+      }
+    })
+
+    const groups = []
+    let currentGroup = null
+
+    teamLaps.forEach((lap, idx) => {
+      if (anomalousIndices.has(idx)) {
+        if (!currentGroup) {
+          const startIndex = Math.max(0, idx - 1)
+          currentGroup = {
+            startIndex,
+            endIndex: idx,
+            anomalousIndices: [idx]
+          }
+        } else {
+          currentGroup.endIndex = idx
+          currentGroup.anomalousIndices.push(idx)
+        }
+      } else {
+        if (currentGroup) {
+          currentGroup.endIndex = idx
+          groups.push(currentGroup)
+          currentGroup = null
+        }
+      }
+    })
+    if (currentGroup) {
+      currentGroup.endIndex = teamLaps.length - 1
+      groups.push(currentGroup)
+    }
+
+    const formattedGroups = groups.map(g => {
+      const startLap = teamLaps[g.startIndex]
+      const endLap = teamLaps[g.endIndex]
+      const baseTime = g.startIndex === 0 ? 0 : teamLaps[g.startIndex - 1].lap_time_ms
+      const totalTime = endLap.lap_time_ms - baseTime
+      const numLaps = g.endIndex - g.startIndex + (g.startIndex === 0 ? 1 : 0)
+      const expectedLaps = Math.round(totalTime / median)
+
+      return {
+        startIndex: g.startIndex,
+        endIndex: g.endIndex,
+        anomalousIndices: g.anomalousIndices,
+        totalTime,
+        numLaps,
+        expectedLaps,
+        startLapNumber: startLap.lap_number,
+        endLapNumber: endLap.lap_number,
+        lapsInvolved: teamLaps.slice(g.startIndex === 0 ? 0 : g.startIndex - 1, g.endIndex + 1)
+      }
+    })
+
+    return { anomalies: teamAnomalies, groups: formattedGroups, median }
+  }
+
+  const handleSmoothContiguousLapsLocally = async (teamId, group) => {
+    const team = teams.find(t => t.id === teamId)
+    if (!confirm(`Confirmer le lissage automatique du bloc pour la Moto #${team?.moto_number} du Tour ${group.startLapNumber} au Tour ${group.endLapNumber} ?`)) return
+
+    const teamLaps = laps.filter(l => l.team_id === teamId).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
+    const baseTime = group.startIndex === 0 ? 0 : teamLaps[group.startIndex - 1].lap_time_ms
+    const K = group.numLaps
+    const T = group.totalTime
+    
+    const updates = []
+    for (let i = 0; i < K; i++) {
+      const idx = group.startIndex + i
+      const lap = teamLaps[idx]
+      const newTimeMs = Math.round(baseTime + (i + 1) * (T / K))
+      updates.push(
+        supabase
+          .from('race_laps')
+          .update({ lap_time_ms: newTimeMs })
+          .eq('id', lap.id)
+      )
+    }
+
+    const results = await Promise.all(updates)
+    const err = results.find(r => r.error)
+    if (err) {
+      alert("Erreur lors du lissage : " + err.error.message)
+      return
+    }
+
+    await resequenceLapNumbers(teamId)
+    loadSession()
+    alert("Passages lissés avec succès !")
+  }
+
+  const handleSmoothCustomRange = async () => {
+    const startNum = parseInt(customSmoothRange.start)
+    const endNum = parseInt(customSmoothRange.end)
+    if (!startNum || !endNum || startNum >= endNum) {
+      alert("Veuillez saisir un numéro de tour de début et de fin valides (début < fin).")
+      return
+    }
+
+    const teamLaps = laps.filter(l => l.team_id === smoothingTeamId).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
+    const startLapIdx = teamLaps.findIndex(l => l.lap_number === startNum)
+    const endLapIdx = teamLaps.findIndex(l => l.lap_number === endNum)
+
+    if (startLapIdx === -1 || endLapIdx === -1) {
+      alert("Certains tours de la plage saisie sont introuvables.")
+      return
+    }
+
+    const team = teams.find(t => t.id === smoothingTeamId)
+    if (!confirm(`Confirmer le lissage de la Moto #${team?.moto_number} du Tour ${startNum} au Tour ${endNum} ?`)) return
+
+    const baseTime = startLapIdx === 0 ? 0 : teamLaps[startLapIdx - 1].lap_time_ms
+    const totalTime = teamLaps[endLapIdx].lap_time_ms - baseTime
+    const K = endLapIdx - startLapIdx + 1
+
+    const updates = []
+    for (let i = 0; i < K; i++) {
+      const idx = startLapIdx + i
+      const lap = teamLaps[idx]
+      const newTimeMs = Math.round(baseTime + (i + 1) * (totalTime / K))
+      updates.push(
+        supabase
+          .from('race_laps')
+          .update({ lap_time_ms: newTimeMs })
+          .eq('id', lap.id)
+      )
+    }
+
+    const results = await Promise.all(updates)
+    const err = results.find(r => r.error)
+    if (err) {
+      alert("Erreur lors du lissage : " + err.error.message)
+      return
+    }
+
+    await resequenceLapNumbers(smoothingTeamId)
+    loadSession()
+    alert("Passages de la plage lissés avec succès !")
+    setCustomSmoothRange({ start: '', end: '' })
+  }
+
+  const handleAskGemini = async (teamId) => {
+    if (!geminiApiKey.trim()) {
+      alert("Veuillez saisir votre clé API Gemini d'abord.")
+      return
+    }
+
+    setAiModelActive(true)
+    setAiError('')
+    setAiResponse(null)
+
+    const team = teams.find(t => t.id === teamId)
+    if (!team) {
+      setAiError("Équipe introuvable.")
+      setAiModelActive(false)
+      return
+    }
+
+    const { median } = getTeamAnomaliesAndGroups(teamId)
+    const teamLaps = laps.filter(l => l.team_id === teamId).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
+
+    const promptText = `
+      Tu es un expert en chronométrage pour une course d'endurance moto tout-terrain (Moto #${team.moto_number}).
+      Analyse la liste des passages cumulés ci-dessous pour détecter les anomalies (laps trop courts, doublons, sauts, etc.) et propose un plan d'action (lissage, corrections de temps, ou suppressions).
+      
+      Spécifications :
+      - Temps médian typique d'un tour pour cette moto : ${formatTime(median)} (${median} ms).
+      - Seuils physiques : un tour ne peut pas être plus rapide que 1m50s (110 000 ms) dans des conditions normales.
+      - **ATTENTION (RATTRAPAGE MANUEL) :** Si tu vois des tours anormalement courts (ex: 1m30s ou 1m27s) consécutifs ou proches, cela provient très probablement d'un rattrapage manuel des organisateurs. Ils ont rajouté les passages oubliés à la main mais n'ont pas bien calculé les temps cumulés (les plaçant trop proches les uns des autres).
+      - **DANS CE CAS, LE NOMBRE TOTAL DE TOURS EST CORRECT.** Ne supprime aucun tour dans ton plan d'action (laisse 'deletions' vide ou vide). À la place, propose de lisser les chronos de ces tours et des tours adjacents (ceux situés juste avant ou après le problème, comme des tours très longs de 3 ou 5 minutes qui contenaient le passage manqué) en répartissant la durée cumulée de manière homogène sur toute la plage pour qu'ils se rapprochent tous de la médiane de ${formatTime(median)}.
+      - Ne propose de suppression ('deletions') que s'il s'agit d'un doublon absolu et indiscutable (ex: deux scans enregistrés à moins de 30 secondes l'un de l'autre de manière accidentelle).
+
+      Voici la liste complète des passages pour cette moto (les temps 'lap_time_ms' sont cumulés depuis le début de la course) :
+      ${JSON.stringify(teamLaps.map((l, idx) => {
+        const duration = idx === 0 ? l.lap_time_ms : l.lap_time_ms - teamLaps[idx - 1].lap_time_ms
+        return {
+          id: l.id,
+          lap_number: l.lap_number,
+          lap_time_ms: l.lap_time_ms,
+          duration_ms: duration,
+          duration_formatted: formatTime(duration),
+          recorded_at: l.recorded_at
+        }
+      }))}
+
+      Réponds uniquement sous la forme d'un objet JSON contenant exactement cette structure :
+      {
+        "explanation": "Une explication détaillée en français de ton analyse du problème et de la solution que tu proposes. Explique clairement si tu as choisi de lisser une plage de tours pour préserver le nombre total de tours (cas du rattrapage manuel).",
+        "corrections": [
+          { "lap_id": "L'identifiant UUID du passage à corriger", "new_lap_time_ms": le nouveau temps cumulé en ms }
+        ],
+        "deletions": [
+          "L'identifiant UUID du passage à supprimer (à n'utiliser que pour les doublons de scan évidents)"
+        ]
+      }
+      
+      Assure-toi que les temps cumulés dans 'corrections' restent strictement croissants et cohérents par rapport aux passages précédents et suivants non modifiés.
+      Ne mets aucun texte en dehors du bloc JSON.
+    `
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey.trim()}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  text: promptText
+                }
+              ]
+            }
+          ],
+          generationConfig: {
+            responseMimeType: "application/json"
+          }
+        })
+      })
+
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}))
+        throw new Error(errJson.error?.message || `Erreur API Gemini (${response.status})`)
+      }
+
+      const data = await response.json()
+      const textResult = data.candidates?.[0]?.content?.parts?.[0]?.text
+      if (!textResult) {
+        throw new Error("L'IA n'a pas renvoyé de réponse exploitable.")
+      }
+
+      const parsedResponse = JSON.parse(textResult.trim())
+      setAiResponse(parsedResponse)
+    } catch (err) {
+      console.error("Gemini API Error:", err)
+      setAiError(err.message || "Une erreur est survenue lors de l'appel à Gemini.")
+    } finally {
+      setAiModelActive(false)
+    }
+  }
+
+  const handleApplyAICorrections = async (teamId) => {
+    if (!aiResponse) return
+    const team = teams.find(t => t.id === teamId)
+    const label = team ? `Moto #${team.moto_number}` : ''
+    if (!confirm(`Appliquer le plan de correction de l'IA pour la ${label} ?`)) return
+
+    try {
+      if (aiResponse.deletions && aiResponse.deletions.length > 0) {
+        for (const lapId of aiResponse.deletions) {
+          const { error } = await supabase
+            .from('race_laps')
+            .delete()
+            .eq('id', lapId)
+          if (error) throw error
+        }
+      }
+
+      if (aiResponse.corrections && aiResponse.corrections.length > 0) {
+        for (const correction of aiResponse.corrections) {
+          const { error } = await supabase
+            .from('race_laps')
+            .update({ lap_time_ms: correction.new_lap_time_ms })
+            .eq('id', correction.lap_id)
+          if (error) throw error
+        }
+      }
+
+      await resequenceLapNumbers(teamId)
+      
+      alert("Corrections de l'IA appliquées avec succès !")
+      setAiResponse(null)
+      loadSession()
+    } catch (err) {
+      alert("Erreur lors de l'application des corrections : " + err.message)
+    }
+  }
+
+
 
   const handleAddManualLap = async (e) => {
     e.preventDefault()
@@ -783,22 +1209,101 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
                   <tbody>
                     {laps.map(l => {
                       const team = teams.find(t => t.id === l.team_id)
+                      const isEditing = editingLapId === l.id
                       return (
                         <tr key={l.id}>
                           <td>{new Date(l.recorded_at).toLocaleTimeString('fr-FR')}</td>
                           <td>#{l.moto_number}</td>
                           <td>{team?.pilot_1_name || '?'}</td>
                           <td>Tour {l.lap_number}</td>
-                          <td>{formatTime(l.lap_time_ms)}</td>
+                          <td>
+                            {isEditing ? (
+                              <div className="inline-lap-editor" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  value={editingLapForm.hours}
+                                  onChange={e => setEditingLapForm({ ...editingLapForm, hours: e.target.value })}
+                                  placeholder="H"
+                                  className="inline-editor-input"
+                                />
+                                <span>h</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="59"
+                                  value={editingLapForm.minutes}
+                                  onChange={e => setEditingLapForm({ ...editingLapForm, minutes: e.target.value })}
+                                  placeholder="Min"
+                                  className="inline-editor-input"
+                                />
+                                <span>m</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="59"
+                                  value={editingLapForm.seconds}
+                                  onChange={e => setEditingLapForm({ ...editingLapForm, seconds: e.target.value })}
+                                  placeholder="Sec"
+                                  className="inline-editor-input"
+                                />
+                                <span>s</span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="999"
+                                  value={editingLapForm.milliseconds}
+                                  onChange={e => setEditingLapForm({ ...editingLapForm, milliseconds: e.target.value })}
+                                  placeholder="Ms"
+                                  className="inline-editor-input inline-editor-input-ms"
+                                />
+                                <span>ms</span>
+                              </div>
+                            ) : (
+                              formatTime(l.lap_time_ms)
+                            )}
+                          </td>
                           {canModify && (
                             <td>
-                              <button 
-                                type="button"
-                                onClick={() => handleDeleteLap(l.id)}
-                                style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', fontSize: '1.1rem' }}
-                              >
-                                ✕
-                              </button>
+                              {isEditing ? (
+                                <div style={{ display: 'flex', gap: '8px' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => saveEditingLap(l.id)}
+                                    style={{ background: 'none', border: 'none', color: '#00cc66', cursor: 'pointer', fontSize: '1.2rem' }}
+                                    title="Enregistrer"
+                                  >
+                                    💾
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingLapId(null)}
+                                    style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', fontSize: '1.2rem' }}
+                                    title="Annuler"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => startEditingLap(l)}
+                                    style={{ background: 'none', border: 'none', color: 'var(--accent)', cursor: 'pointer', fontSize: '1.1rem' }}
+                                    title="Modifier le passage"
+                                  >
+                                    ✏️
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDeleteLap(l.id)}
+                                    style={{ background: 'none', border: 'none', color: '#ff4444', cursor: 'pointer', fontSize: '1.1rem' }}
+                                    title="Supprimer le passage"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           )}
                         </tr>
@@ -814,30 +1319,310 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
               </div>
             </div>
 
-            {/* Anomalies Checker */}
-            <div className="anomalies-checker glass" style={{ padding: '20px', marginTop: '20px' }}>
-              <h4 style={{ margin: '0 0 15px 0' }}>🕵️‍♂️ Assistant de Vérification</h4>
-              <button type="button" onClick={checkAnomalies} className="btn btn-outline" style={{ marginBottom: '15px' }}>
-                🔍 Lancer l'analyse des passages
-              </button>
-              
+            {/* Anomalies Checker & Intelligent Smoothing Assistant */}
+            <div className="anomalies-checker glass" style={{ padding: '24px', marginTop: '20px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                <h4 style={{ margin: 0 }}>🕵️‍♂️ Assistant de Vérification & Lissage</h4>
+                <button type="button" onClick={checkAnomalies} className="btn btn-outline btn-sm">
+                  🔍 Lancer l'analyse générale
+                </button>
+              </div>
+
               {hasCheckedAnomalies && anomalies.length === 0 && (
-                <div style={{ padding: '15px', background: 'rgba(0, 204, 102, 0.1)', color: '#00cc66', borderRadius: '8px', border: '1px solid rgba(0, 204, 102, 0.2)' }}>
-                  ✅ Tout est OK ! Aucune anomalie détectée (aucun passage anormalement proche).
+                <div style={{ padding: '15px', background: 'rgba(0, 204, 102, 0.1)', color: '#00cc66', borderRadius: '8px', border: '1px solid rgba(0, 204, 102, 0.2)', marginBottom: '20px' }}>
+                  ✅ Tout est OK ! Aucune anomalie détectée (aucun passage anormalement proche ou trop court).
                 </div>
               )}
               
               {hasCheckedAnomalies && anomalies.length > 0 && (
-                <div style={{ padding: '15px', background: 'rgba(255, 170, 0, 0.1)', color: '#ffaa00', borderRadius: '8px', border: '1px solid rgba(255, 170, 0, 0.2)' }}>
-                  <h5 style={{ margin: '0 0 10px 0' }}>⚠️ {anomalies.length} anomalie(s) potentielle(s) détectée(s) :</h5>
-                  <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                <div style={{ padding: '15px', background: 'rgba(255, 170, 0, 0.1)', color: '#ffaa00', borderRadius: '8px', border: '1px solid rgba(255, 170, 0, 0.2)', marginBottom: '20px' }}>
+                  <h5 style={{ margin: '0 0 10px 0' }}>⚠️ {anomalies.length} anomalie(s) détectée(s) :</h5>
+                  <ul style={{ margin: 0, paddingLeft: '20px', fontSize: '0.9rem' }}>
                     {anomalies.map(a => (
-                      <li key={a.id} style={{ marginBottom: '5px' }}>{a.message}</li>
+                      <li key={a.id} style={{ marginBottom: '5px', cursor: 'pointer', textDecoration: 'underline' }} onClick={() => { setSmoothingTeamId(a.teamId); setAiResponse(null); setAiError(''); }}>
+                        {a.message} (cliquez pour inspecter)
+                      </li>
                     ))}
                   </ul>
-                  <p style={{ margin: '10px 0 0 0', fontSize: '0.9rem', color: 'var(--text-secondary)' }}>Veuillez vérifier ces passages dans l'historique ci-dessus avant de publier les résultats.</p>
                 </div>
               )}
+
+              {/* Team specific inspector */}
+              <div className="smoothing-team-selector" style={{ marginTop: '20px', borderTop: '1px solid var(--border-subtle)', paddingTop: '20px' }}>
+                <div className="race-form-group" style={{ marginBottom: '15px' }}>
+                  <label style={{ fontWeight: 'bold', marginBottom: '6px', fontSize: '0.95rem' }}>🔧 Inspecter et lisser les passages d'une équipe :</label>
+                  <select 
+                    value={smoothingTeamId} 
+                    onChange={e => { setSmoothingTeamId(e.target.value); setAiResponse(null); setAiError(''); }}
+                    style={{ background: 'rgba(0,0,0,0.3)', border: '1px solid var(--border-subtle)', color: '#fff', padding: '10px', borderRadius: '8px', width: '100%' }}
+                  >
+                    <option value="">-- Sélectionner une équipe à corriger --</option>
+                    {teams.map(t => (
+                      <option key={t.id} value={t.id}>
+                        Moto #{t.moto_number} - {t.pilot_1_name} {t.pilot_2_name ? `& ${t.pilot_2_name}` : ''} ({t.category})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {smoothingTeamId && (() => {
+                  const { groups, median } = getTeamAnomaliesAndGroups(smoothingTeamId)
+                  const teamLaps = laps.filter(l => l.team_id === smoothingTeamId).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
+                  const selectedTeam = teams.find(t => t.id === smoothingTeamId)
+
+                  if (teamLaps.length === 0) {
+                    return <p style={{ color: 'var(--text-muted)', fontStyle: 'italic' }}>Aucun passage enregistré pour cette équipe.</p>
+                  }
+
+                  return (
+                    <div className="smoothing-dashboard fade-in" style={{ background: 'rgba(255,255,255,0.02)', padding: '16px', borderRadius: '10px', border: '1px solid var(--border-subtle)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '15px' }}>
+                        <h5 style={{ margin: 0, color: 'var(--accent)', fontSize: '1rem' }}>📈 Tableau de bord de correction - Moto #{selectedTeam?.moto_number}</h5>
+                        <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Temps Médian : <strong>{formatTime(median)}</strong></span>
+                      </div>
+
+                      {/* Interactive Timeline Visualizer */}
+                      <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Frise chronologique des tours (cliquez sur un tour pour le modifier) :</label>
+                      <div className="smoothing-timeline-container" style={{ overflowX: 'auto', paddingBottom: '10px' }}>
+                        <div className="smoothing-timeline" style={{ display: 'flex', gap: '6px', minWidth: 'max-content', padding: '2px' }}>
+                          {teamLaps.map((lap, idx) => {
+                            const dur = idx === 0 ? lap.lap_time_ms : lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms
+                            const isShort = dur < Math.max(30000, median * 0.65)
+                            const isDouble = idx > 0 && dur < 30000
+                            const isLong = dur > median * 2.3
+                            
+                            let blockClass = 'timeline-block normal'
+                            let title = `Tour ${lap.lap_number} : ${formatTime(dur)}`
+                            if (isDouble) {
+                              blockClass = 'timeline-block double'
+                              title += ' (Double passage)'
+                            } else if (isShort) {
+                              blockClass = 'timeline-block short'
+                              title += ' (Trop court / anomalie)'
+                            } else if (isLong) {
+                              blockClass = 'timeline-block long'
+                              title += ' (Arrêt stand / long)'
+                            }
+
+                            return (
+                              <div
+                                key={lap.id}
+                                className={blockClass}
+                                title={title}
+                                onClick={() => startEditingLap(lap)}
+                              >
+                                <span className="block-lap-num">T{lap.lap_number}</span>
+                                <span className="block-lap-dur">{(dur / 1000).toFixed(0)}s</span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Timeline Legend */}
+                      <div className="timeline-legend" style={{ display: 'flex', gap: '15px', fontSize: '0.75rem', color: 'var(--text-secondary)', marginTop: '8px', marginBottom: '20px', flexWrap: 'wrap' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '10px', height: '10px', background: '#00cc66', borderRadius: '2px' }}></span> Normal</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '10px', height: '10px', background: '#ffaa00', borderRadius: '2px' }}></span> Long / Stand</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '10px', height: '10px', background: '#ff3333', borderRadius: '2px' }}></span> Anormalement court</span>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}><span style={{ width: '10px', height: '10px', background: '#e600e6', borderRadius: '2px' }}></span> Double passage (&lt;30s)</span>
+                      </div>
+
+                      {/* Recommendations and Local Solutions */}
+                      <div className="smoothing-solutions" style={{ marginTop: '15px' }}>
+                        <h6 style={{ margin: '0 0 10px 0', fontSize: '0.9rem' }}>🛠️ Actions de lissage disponibles :</h6>
+                        
+                        {groups.length === 0 ? (
+                          <p style={{ color: '#00cc66', fontSize: '0.85rem', margin: 0, padding: '10px', background: 'rgba(0, 204, 102, 0.05)', borderRadius: '6px' }}>
+                            ✅ Aucune anomalie de temps court détectée pour cette moto. Les temps sont stables.
+                          </p>
+                        ) : (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                            {groups.map((group, gIdx) => (
+                              <div key={gIdx} className="anomaly-group-card" style={{ border: '1px solid var(--border-subtle)', background: 'rgba(0,0,0,0.2)', padding: '12px', borderRadius: '8px' }}>
+                                <div style={{ fontWeight: 'bold', fontSize: '0.85rem', color: '#ffaa00', marginBottom: '8px' }}>
+                                  ⚠️ Segment de tours {group.startLapNumber} à {group.endLapNumber}
+                                </div>
+                                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginBottom: '10px' }}>
+                                  Temps cumulé sur la zone : <strong>{formatTime(group.totalTime)}</strong> pour <strong>{group.numLaps} passages</strong> enregistrés.<br/>
+                                  Moyenne par tour : <strong>{formatTime(group.totalTime / group.numLaps)}</strong>.<br/>
+                                  Nombre théorique de tours estimé : <strong>{group.expectedLaps} tour(s)</strong> (médiane : {formatTime(median)}).
+                                </div>
+
+                                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSmoothContiguousLapsLocally(smoothingTeamId, group)}
+                                    className="btn btn-outline btn-xs"
+                                    style={{ padding: '6px 12px', fontSize: '0.75rem', borderColor: 'var(--accent)', color: 'var(--accent)' }}
+                                  >
+                                    ⚖️ Répartir le temps uniformément ({formatTime(group.totalTime / group.numLaps)} par tour)
+                                  </button>
+
+                                  {group.expectedLaps < group.numLaps && (
+                                    <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '6px' }}>
+                                      <p style={{ margin: 0, fontSize: '0.75rem', color: '#ff3333', display: 'flex', alignItems: 'center' }}>
+                                        💡 Il y a probablement {group.numLaps - group.expectedLaps} doublon(s). Supprimez le tour anormal avant de lisser :
+                                      </p>
+                                      {group.lapsInvolved.slice(1).map((lap, lIdx) => {
+                                        const d = lap.lap_time_ms - group.lapsInvolved[lIdx].lap_time_ms
+                                        const isSuspect = d < Math.max(30000, median * 0.65)
+                                        if (isSuspect) {
+                                          return (
+                                            <button
+                                              key={lap.id}
+                                              type="button"
+                                              onClick={() => handleDeleteLap(lap.id)}
+                                              className="btn btn-outline btn-xs"
+                                              style={{ padding: '4px 8px', fontSize: '0.7rem', borderColor: '#ff4444', color: '#ff4444' }}
+                                            >
+                                              🗑️ Supprimer Tour {lap.lap_number} ({formatTime(d)})
+                                            </button>
+                                          )
+                                        }
+                                        return null
+                                      })}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Custom Range Lissage Form */}
+                      <div className="custom-range-smoothing" style={{ marginTop: '20px', borderTop: '1px dashed var(--border-subtle)', paddingTop: '15px' }}>
+                        <h6 style={{ margin: '0 0 10px 0', fontSize: '0.85rem', color: 'var(--accent)' }}>⚖️ Lisser une plage de tours personnalisée (Rattrapage Manuel) :</h6>
+                        <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>Lisser du Tour</span>
+                          <input
+                            type="number"
+                            min="1"
+                            placeholder="Début"
+                            value={customSmoothRange.start}
+                            onChange={e => setCustomSmoothRange({ ...customSmoothRange, start: e.target.value })}
+                            style={{ width: '70px', padding: '6px', background: 'rgba(0,0,0,0.4)', border: '1px solid var(--border-subtle)', borderRadius: '6px', color: '#fff', textAlign: 'center' }}
+                          />
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>au Tour</span>
+                          <input
+                            type="number"
+                            min="1"
+                            placeholder="Fin"
+                            value={customSmoothRange.end}
+                            onChange={e => setCustomSmoothRange({ ...customSmoothRange, end: e.target.value })}
+                            style={{ width: '70px', padding: '6px', background: 'rgba(0,0,0,0.4)', border: '1px solid var(--border-subtle)', borderRadius: '6px', color: '#fff', textAlign: 'center' }}
+                          />
+                          <button
+                            type="button"
+                            onClick={handleSmoothCustomRange}
+                            className="btn btn-outline btn-sm"
+                            style={{ padding: '6px 12px', fontSize: '0.8rem', minHeight: 'auto' }}
+                          >
+                            Lisser la plage
+                          </button>
+                        </div>
+                        <p style={{ margin: '8px 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          Cette action va répartir uniformément le temps cumulé total écoulé entre le tour précédant le début et le tour de fin sur toute la plage sélectionnée (conservation du nombre de tours).
+                        </p>
+                      </div>
+
+                      {/* Gemini AI Assistant section */}
+                      <div className="gemini-ai-assistant" style={{ marginTop: '24px', borderTop: '1px solid var(--border-subtle)', paddingTop: '20px' }}>
+                        <h6 style={{ margin: '0 0 10px 0', fontSize: '0.9rem', color: '#ff3399', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          🤖 Assistant Chrono IA (Gemini)
+                        </h6>
+                        <p style={{ margin: '0 0 12px 0', fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
+                          L'IA analyse toute la course de la moto, comprend les arrêts aux stands, et génère un plan de correction sur-mesure (suppression de doublons + lissage).
+                        </p>
+
+                        <div className="gemini-key-input-row" style={{ display: 'flex', gap: '8px', marginBottom: '15px', alignItems: 'center' }}>
+                          <input
+                            type="password"
+                            placeholder={import.meta.env.VITE_GEMINI_API_KEY ? "Clé API configurée (via variables d'env) 🔒" : "Entrez votre clé API Gemini (gratuite)..."}
+                            value={geminiApiKey}
+                            onChange={e => {
+                              setGeminiApiKey(e.target.value);
+                              localStorage.setItem('myd_gemini_api_key', e.target.value);
+                            }}
+                            style={{ flex: 1, padding: '8px 12px', background: 'rgba(0,0,0,0.5)', border: '1px solid var(--border-subtle)', borderRadius: '6px', color: '#fff', fontSize: '0.85rem' }}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleAskGemini(smoothingTeamId)}
+                            className="btn btn-primary"
+                            disabled={!geminiApiKey.trim() || aiModelActive}
+                            style={{ padding: '8px 16px', fontSize: '0.85rem', background: 'linear-gradient(135deg, #ff007f 0%, #7f00ff 100%)', border: 'none', minHeight: 'auto' }}
+                          >
+                            {aiModelActive ? 'Analyse...' : 'Demander à l\'IA'}
+                          </button>
+                        </div>
+
+                        {aiError && (
+                          <div style={{ color: '#ff4444', fontSize: '0.8rem', padding: '10px', background: 'rgba(255, 68, 68, 0.1)', borderRadius: '6px', border: '1px solid rgba(255, 68, 68, 0.2)', marginBottom: '15px' }}>
+                            ❌ {aiError}
+                          </div>
+                        )}
+
+                        {aiModelActive && (
+                          <div className="ai-loading" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', padding: '20px 0' }}>
+                            <div className="ai-spinner"></div>
+                            <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>L'IA examine les passages et élabore une correction...</span>
+                          </div>
+                        )}
+
+                        {aiResponse && (
+                          <div className="ai-response-plan fade-in" style={{ background: 'rgba(255, 0, 127, 0.03)', border: '1px dashed rgba(255, 0, 127, 0.3)', padding: '15px', borderRadius: '8px', marginTop: '10px' }}>
+                            <h6 style={{ margin: '0 0 8px 0', fontSize: '0.85rem', color: '#ff3399' }}>📋 Diagnostic et Plan proposé par Gemini :</h6>
+                            <p style={{ margin: '0 0 12px 0', fontSize: '0.82rem', color: '#fff', fontStyle: 'italic', lineHeight: '1.4' }}>
+                              "{aiResponse.explanation}"
+                            </p>
+                            
+                            <div style={{ fontSize: '0.8rem', marginBottom: '15px' }}>
+                              {aiResponse.deletions && aiResponse.deletions.length > 0 && (
+                                <div style={{ color: '#ff4444', marginBottom: '6px' }}>
+                                  🔴 <strong>Passage(s) à supprimer :</strong>
+                                  <ul style={{ margin: '4px 0 0 0', paddingLeft: '15px' }}>
+                                    {aiResponse.deletions.map((dId, idx) => {
+                                      const lap = teamLaps.find(x => x.id === dId)
+                                      return <li key={idx}>Tour {lap?.lap_number || '?'} ({lap ? formatTime(lap.lap_time_ms) : dId})</li>
+                                    })}
+                                  </ul>
+                                </div>
+                              )}
+
+                              {aiResponse.corrections && aiResponse.corrections.length > 0 && (
+                                <div style={{ color: '#00cc66' }}>
+                                  🟢 <strong>Temps à recalculer :</strong>
+                                  <ul style={{ margin: '4px 0 0 0', paddingLeft: '15px' }}>
+                                    {aiResponse.corrections.map((c, idx) => {
+                                      const lap = teamLaps.find(x => x.id === c.lap_id)
+                                      return (
+                                        <li key={idx}>
+                                          Tour {lap?.lap_number || '?'} : {lap ? formatTime(lap.lap_time_ms) : ''} ➔ <strong>{formatTime(c.new_lap_time_ms)}</strong>
+                                        </li>
+                                      )
+                                    })}
+                                  </ul>
+                                </div>
+                              )}
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleApplyAICorrections(smoothingTeamId)}
+                              className="btn btn-outline"
+                              style={{ width: '100%', fontSize: '0.85rem', borderColor: '#ff3399', color: '#ff3399' }}
+                            >
+                              🚀 Appliquer le plan de l'IA dans la base de données
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                    </div>
+                  )
+                })()}
+              </div>
             </div>
 
           </div>

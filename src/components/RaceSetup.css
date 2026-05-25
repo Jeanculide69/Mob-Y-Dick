@@ -803,3 +803,131 @@
   border-radius: 14px;
   border: 1px solid var(--border-subtle);
 }
+
+/* Inline Lap Editor */
+.inline-lap-editor {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.inline-editor-input {
+  width: 42px;
+  padding: 4px 6px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  color: #fff;
+  text-align: center;
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+
+.inline-editor-input-ms {
+  width: 50px;
+}
+
+.inline-editor-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+/* Timeline Visualizer */
+.smoothing-timeline-container {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.1) transparent;
+}
+
+.smoothing-timeline-container::-webkit-scrollbar {
+  height: 6px;
+}
+
+.smoothing-timeline-container::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.smoothing-timeline {
+  display: flex;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.timeline-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  border-radius: 8px;
+  color: #000;
+  font-weight: bold;
+  font-family: monospace;
+  min-width: 52px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.timeline-block:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+.timeline-block.normal {
+  background: linear-gradient(135deg, #00e676 0%, #00b0ff 100%);
+  color: #000;
+}
+
+.timeline-block.long {
+  background: linear-gradient(135deg, #ff9100 0%, #ff6d00 100%);
+  color: #fff;
+}
+
+.timeline-block.short {
+  background: linear-gradient(135deg, #ff1744 0%, #ff5252 100%);
+  color: #fff;
+}
+
+.timeline-block.double {
+  background: linear-gradient(135deg, #d500f9 0%, #f50057 100%);
+  color: #fff;
+}
+
+.block-lap-num {
+  font-size: 0.8rem;
+  letter-spacing: 0.5px;
+}
+
+.block-lap-dur {
+  font-size: 0.65rem;
+  opacity: 0.85;
+  margin-top: 2px;
+}
+
+/* Anomaly Group Card */
+.anomaly-group-card {
+  transition: border-color 0.2s;
+}
+.anomaly-group-card:hover {
+  border-color: rgba(255, 170, 0, 0.4);
+}
+
+/* AI Loading Spinner */
+.ai-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid rgba(255, 0, 127, 0.1);
+  border-top-color: #ff3399;
+  border-radius: 50%;
+  animation: aiSpin 1s linear infinite;
+}
+
+@keyframes aiSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+.ai-loading {
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
