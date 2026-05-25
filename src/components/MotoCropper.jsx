@@ -109,6 +109,7 @@ export default function MotoCropper({ imageSrc, onCancel, onConfirm }) {
             image={imageSrc}
             crop={crop}
             zoom={zoom}
+            minZoom={0.5}
             aspect={ASPECT}
             cropShape="rect"
             showGrid={true}
@@ -133,7 +134,7 @@ export default function MotoCropper({ imageSrc, onCancel, onConfirm }) {
             <span>🔍 Zoom</span>
             <input
               type="range"
-              min={1}
+              min={0.5}
               max={4}
               step={0.05}
               value={zoom}

@@ -138,6 +138,7 @@ export default function AvatarCropper({
             image={imageSrc}
             crop={crop}
             zoom={zoom}
+            minZoom={0.5}
             aspect={aspect}
             cropShape={cropShape}
             showGrid={false}
@@ -154,7 +155,7 @@ export default function AvatarCropper({
             <span>🔍 Zoom</span>
             <input
               type="range"
-              min={1}
+              min={0.5}
               max={4}
               step={0.05}
               value={zoom}

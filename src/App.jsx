@@ -564,7 +564,17 @@ function App() {
       supabase.from('products').select('*').order('sort_order', { ascending: true })
         .then(({ data }) => { if (data) setDbProducts(data) })
       supabase.from('team').select('*').order('sort_order', { ascending: true })
-        .then(({ data }) => { if (data) setDbTeam(data) })
+        .then(({ data }) => {
+          if (data) {
+            const sanitized = data.map(m => {
+              if (m.name === 'Fumax' && m.image_url && m.image_url.includes('image_url-1779637272725')) {
+                return { ...m, image_url: null }
+              }
+              return m
+            })
+            setDbTeam(sanitized)
+          }
+        })
       supabase.from('bikes').select('*').order('sort_order', { ascending: true })
         .then(({ data }) => { if (data) setDbBikes(data) })
       supabase.from('settings').select('*')
