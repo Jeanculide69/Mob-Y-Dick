@@ -28,7 +28,8 @@ const DEMO_TEAMS = [
   { moto_number: 74, category: '70cc', pilot_1_name: 'Cédric Roger', pilot_1_sex: 'M', pilot_2_name: 'Arnaud Leroy', pilot_2_sex: 'M' }
 ]
 
-export default function RaceSetup({ event, session, isAdmin, onStartRace, onClose }) {
+export default function RaceSetup({ event, session, isAdmin, profile, onStartRace, onClose }) {
+  const isRaceManager = isAdmin || profile?.role === 'organisateur'
   const [raceSession, setRaceSession] = useState(null)
   const [teams, setTeams] = useState([])
 
@@ -524,7 +525,7 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
   }
 
   const isPublished = raceSession?.status === 'published'
-  const canModify = raceSession && (raceSession.status !== 'published' || isAdmin)
+  const canModify = raceSession && (raceSession.status !== 'published' || isRaceManager)
 
   if (raceSession && (raceSession.status === 'finished' || raceSession.status === 'published')) {
     const femaleWinner = getFemaleWinner()
@@ -556,9 +557,9 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
                 🏆 Publier les Résultats
               </button>
             ) : (
-              isAdmin && (
+              isRaceManager && (
                 <button className="btn btn-outline btn-sm" style={{ borderColor: '#ff4444', color: '#ff4444' }} onClick={handleUnpublishResults}>
-                  🔓 Dépublier (Admin)
+                  🔓 Dépublier
                 </button>
               )
             )}
@@ -955,8 +956,8 @@ export default function RaceSetup({ event, session, isAdmin, onStartRace, onClos
           </div>
         )}
 
-        {/* Delete session button is only visible to admin once published */}
-        {(!isPublished || isAdmin) && (
+        {/* Delete session button is only visible to admin/organizer once published */}
+        {(!isPublished || isRaceManager) && (
           <div className="race-setup-actions glass" style={{ marginTop: '20px' }}>
             <button className="btn btn-ghost race-delete-btn" onClick={handleDeleteSession}>
               🗑️ Supprimer la session
