@@ -1536,16 +1536,22 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
                         </p>
 
                         <div className="gemini-key-input-row" style={{ display: 'flex', gap: '8px', marginBottom: '15px', alignItems: 'center' }}>
-                          <input
-                            type="password"
-                            placeholder={import.meta.env.VITE_GEMINI_API_KEY ? "Clé API configurée (via variables d'env) 🔒" : "Entrez votre clé API Gemini (gratuite)..."}
-                            value={geminiApiKey}
-                            onChange={e => {
-                              setGeminiApiKey(e.target.value);
-                              localStorage.setItem('myd_gemini_api_key', e.target.value);
-                            }}
-                            style={{ flex: 1, padding: '8px 12px', background: 'rgba(0,0,0,0.5)', border: '1px solid var(--border-subtle)', borderRadius: '6px', color: '#fff', fontSize: '0.85rem' }}
-                          />
+                          {!import.meta.env.VITE_GEMINI_API_KEY ? (
+                            <input
+                              type="password"
+                              placeholder="Entrez votre clé API Gemini (gratuite)..."
+                              value={geminiApiKey}
+                              onChange={e => {
+                                setGeminiApiKey(e.target.value);
+                                localStorage.setItem('myd_gemini_api_key', e.target.value);
+                              }}
+                              style={{ flex: 1, padding: '8px 12px', background: 'rgba(0,0,0,0.5)', border: '1px solid var(--border-subtle)', borderRadius: '6px', color: '#fff', fontSize: '0.85rem' }}
+                            />
+                          ) : (
+                            <div style={{ flex: 1, padding: '8px 12px', background: 'rgba(0, 204, 102, 0.05)', border: '1px solid rgba(0, 204, 102, 0.2)', borderRadius: '6px', color: '#00cc66', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <span>🔒 Clé API configurée de manière sécurisée (variables d'environnement).</span>
+                            </div>
+                          )}
                           <button
                             type="button"
                             onClick={() => handleAskGemini(smoothingTeamId)}
