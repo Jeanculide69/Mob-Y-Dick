@@ -29,6 +29,55 @@ const RaceChrono     = lazy(() => import('./components/RaceChrono'))
 const Championnat    = lazy(() => import('./components/Championnat'))
 import './components/AuthNavbar.css'
 
+// Safe storage wrappers to prevent crashes in private browsing mode on iOS Safari
+const safeLocalStorage = {
+  getItem: (key) => {
+    try {
+      return localStorage.getItem(key)
+    } catch {
+      return null
+    }
+  },
+  setItem: (key, value) => {
+    try {
+      localStorage.setItem(key, value)
+    } catch (e) {
+      console.warn("safeLocalStorage.setItem failed", e)
+    }
+  },
+  removeItem: (key) => {
+    try {
+      localStorage.removeItem(key)
+    } catch (e) {
+      console.warn("safeLocalStorage.removeItem failed", e)
+    }
+  }
+}
+
+const safeSessionStorage = {
+  getItem: (key) => {
+    try {
+      return sessionStorage.getItem(key)
+    } catch {
+      return null
+    }
+  },
+  setItem: (key, value) => {
+    try {
+      sessionStorage.setItem(key, value)
+    } catch (e) {
+      console.warn("safeSessionStorage.setItem failed", e)
+    }
+  },
+  removeItem: (key) => {
+    try {
+      sessionStorage.removeItem(key)
+    } catch (e) {
+      console.warn("safeSessionStorage.removeItem failed", e)
+    }
+  }
+}
+
 // Loader léger pour les Suspense de code-split
 const LazyLoader = () => (
   <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'40vh', gap:'12px', color:'var(--text-muted)' }}>
@@ -402,7 +451,7 @@ const renderGalleryMedia = (item) => {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState(() => localStorage.getItem('myd_activeTab') || 'home')
+  const [activeTab, setActiveTab] = useState(() => safeLocalStorage.getItem('myd_activeTab') || 'home')
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isModerator, setIsModerator] = useState(false)
@@ -413,11 +462,11 @@ function App() {
   // Race state
   const [liveSession, setLiveSession] = useState(null)
   const [raceSessions, setRaceSessions] = useState([])
-  const [viewingSessionId, setViewingSessionId] = useState(() => localStorage.getItem('myd_viewingSessionId') || null)
-  const [activeRaceView, setActiveRaceView] = useState(() => localStorage.getItem('myd_activeRaceView') || null) // 'setup' | 'chrono' | null
+  const [viewingSessionId, setViewingSessionId] = useState(() => safeLocalStorage.getItem('myd_viewingSessionId') || null)
+  const [activeRaceView, setActiveRaceView] = useState(() => safeLocalStorage.getItem('myd_activeRaceView') || null) // 'setup' | 'chrono' | null
   const [selectedRaceEvent, setSelectedRaceEvent] = useState(() => {
     try {
-      const val = localStorage.getItem('myd_selectedRaceEvent')
+      const val = safeLocalStorage.getItem('myd_selectedRaceEvent')
       return val ? JSON.parse(val) : null
     } catch {
       return null
@@ -425,7 +474,7 @@ function App() {
   })
   const [activeRaceSession, setActiveRaceSession] = useState(() => {
     try {
-      const val = localStorage.getItem('myd_activeRaceSession')
+      const val = safeLocalStorage.getItem('myd_activeRaceSession')
       return val ? JSON.parse(val) : null
     } catch {
       return null
@@ -433,7 +482,7 @@ function App() {
   })
   const [activeRaceTeams, setActiveRaceTeams] = useState(() => {
     try {
-      const val = localStorage.getItem('myd_activeRaceTeams')
+      const val = safeLocalStorage.getItem('myd_activeRaceTeams')
       return val ? JSON.parse(val) : []
     } catch {
       return []
@@ -653,27 +702,27 @@ function App() {
 
   // Persist view state to localStorage
   useEffect(() => {
-    localStorage.setItem('myd_activeTab', activeTab)
+    safeLocalStorage.setItem('myd_activeTab', activeTab)
   }, [activeTab])
 
   useEffect(() => {
-    if (activeRaceView) localStorage.setItem('myd_activeRaceView', activeRaceView)
-    else localStorage.removeItem('myd_activeRaceView')
+    if (activeRaceView) safeLocalStorage.setItem('myd_activeRaceView', activeRaceView)
+    else safeLocalStorage.removeItem('myd_activeRaceView')
   }, [activeRaceView])
 
   useEffect(() => {
-    if (selectedRaceEvent) localStorage.setItem('myd_selectedRaceEvent', JSON.stringify(selectedRaceEvent))
-    else localStorage.removeItem('myd_selectedRaceEvent')
+    if (selectedRaceEvent) safeLocalStorage.setItem('myd_selectedRaceEvent', JSON.stringify(selectedRaceEvent))
+    else safeLocalStorage.removeItem('myd_selectedRaceEvent')
   }, [selectedRaceEvent])
 
   useEffect(() => {
-    if (activeRaceSession) localStorage.setItem('myd_activeRaceSession', JSON.stringify(activeRaceSession))
-    else localStorage.removeItem('myd_activeRaceSession')
+    if (activeRaceSession) safeLocalStorage.setItem('myd_activeRaceSession', JSON.stringify(activeRaceSession))
+    else safeLocalStorage.removeItem('myd_activeRaceSession')
   }, [activeRaceSession])
 
   useEffect(() => {
-    if (activeRaceTeams && activeRaceTeams.length > 0) localStorage.setItem('myd_activeRaceTeams', JSON.stringify(activeRaceTeams))
-    else localStorage.removeItem('myd_activeRaceTeams')
+    if (activeRaceTeams && activeRaceTeams.length > 0) safeLocalStorage.setItem('myd_activeRaceTeams', JSON.stringify(activeRaceTeams))
+    else safeLocalStorage.removeItem('myd_activeRaceTeams')
   }, [activeRaceTeams])
 
   // Ecoute des modifications en direct des équipes (ex: pénalités)
@@ -688,8 +737,8 @@ function App() {
   }, [activeRaceSession])
 
   useEffect(() => {
-    if (viewingSessionId) localStorage.setItem('myd_viewingSessionId', viewingSessionId)
-    else localStorage.removeItem('myd_viewingSessionId')
+    if (viewingSessionId) safeLocalStorage.setItem('myd_viewingSessionId', viewingSessionId)
+    else safeLocalStorage.removeItem('myd_viewingSessionId')
   }, [viewingSessionId])
 
   // Load active moto numbers from race_teams when bikes tab opens
@@ -707,7 +756,7 @@ function App() {
 
   // Trigger cinematic splash screen on first visit in the current session
   useEffect(() => {
-    const hasSeen = sessionStorage.getItem('myd_intro_seen')
+    const hasSeen = safeSessionStorage.getItem('myd_intro_seen')
     if (!hasSeen) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowIntroSplash(true)
@@ -718,7 +767,7 @@ function App() {
     setFadeIntro(true)
     setTimeout(() => {
       setShowIntroSplash(false)
-      sessionStorage.setItem('myd_intro_seen', 'true')
+      safeSessionStorage.setItem('myd_intro_seen', 'true')
     }, 800)
   }
 
@@ -772,8 +821,8 @@ function App() {
           refreshData(adminStatus)
         })
         // Re-fetch fresh race session data from Supabase to replace stale localStorage state
-        const storedSessionId = localStorage.getItem('myd_activeRaceSession')
-          ? (() => { try { return JSON.parse(localStorage.getItem('myd_activeRaceSession'))?.id } catch { return null } })()
+        const storedSessionId = safeLocalStorage.getItem('myd_activeRaceSession')
+          ? (() => { try { return JSON.parse(safeLocalStorage.getItem('myd_activeRaceSession'))?.id } catch { return null } })()
           : null
         if (storedSessionId) {
           supabase.from('race_sessions').select('*').eq('id', storedSessionId).single()
@@ -1278,14 +1327,14 @@ function App() {
         const { error } = await supabase.from('sponsors').insert([payload])
         if (error) {
           console.warn("Supabase insertion failed or table sponsors not found. Falling back to local storage.", error)
-          const localSponsors = JSON.parse(localStorage.getItem('myd_local_sponsors') || '[]')
+          const localSponsors = JSON.parse(safeLocalStorage.getItem('myd_local_sponsors') || '[]')
           localSponsors.push({ ...payload, id: Date.now().toString(), created_at: new Date().toISOString() })
-          localStorage.setItem('myd_local_sponsors', JSON.stringify(localSponsors))
+          safeLocalStorage.setItem('myd_local_sponsors', JSON.stringify(localSponsors))
         }
       } else {
-        const localSponsors = JSON.parse(localStorage.getItem('myd_local_sponsors') || '[]')
+        const localSponsors = JSON.parse(safeLocalStorage.getItem('myd_local_sponsors') || '[]')
         localSponsors.push({ ...payload, id: Date.now().toString(), created_at: new Date().toISOString() })
-        localStorage.setItem('myd_local_sponsors', JSON.stringify(localSponsors))
+        safeLocalStorage.setItem('myd_local_sponsors', JSON.stringify(localSponsors))
       }
 
       setSponsorSuccess(true)
@@ -2892,9 +2941,9 @@ function App() {
               </div>
             ) : activeForm === 'sponsors_admin' ? (
               <div className="admin-orders-container" style={{ maxHeight: '75vh', overflowY: 'auto' }}>
-                <h3>Propositions de Sponsoring ({dbSponsors.length + (JSON.parse(localStorage.getItem('myd_local_sponsors') || '[]').length)})</h3>
+                <h3>Propositions de Sponsoring ({dbSponsors.length + (JSON.parse(safeLocalStorage.getItem('myd_local_sponsors') || '[]').length)})</h3>
                 
-                {(!dbSponsors || dbSponsors.length === 0) && JSON.parse(localStorage.getItem('myd_local_sponsors') || '[]').length === 0 && (
+                {(!dbSponsors || dbSponsors.length === 0) && JSON.parse(safeLocalStorage.getItem('myd_local_sponsors') || '[]').length === 0 && (
                   <div style={{ background: 'rgba(255, 85, 0, 0.08)', border: '1px dashed var(--accent)', padding: '20px', borderRadius: '12px', marginBottom: '20px', textAlign: 'center' }}>
                     <p style={{ margin: '0', fontSize: '0.9rem', color: '#fff', lineHeight: '1.5' }}>
                       Aucune proposition de sponsoring reçue pour le moment.
@@ -2905,7 +2954,7 @@ function App() {
 
 
                 <div className="admin-orders-list" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
-                  {[...dbSponsors, ...JSON.parse(localStorage.getItem('myd_local_sponsors') || '[]')].map((s, idx) => {
+                  {[...dbSponsors, ...JSON.parse(safeLocalStorage.getItem('myd_local_sponsors') || '[]')].map((s, idx) => {
                     const isLocal = !s.id || !s.id.toString().includes('-');
                     return (
                       <div key={s.id || idx} className="order-item glass" style={{ border: '1px solid var(--border-accent)', padding: '16px', borderRadius: '12px' }}>
@@ -2937,10 +2986,10 @@ function App() {
                               className="btn btn-sm btn-primary" 
                               onClick={async () => {
                                 if (isLocal) {
-                                  const localSponsors = JSON.parse(localStorage.getItem('myd_local_sponsors') || '[]')
+                                  const localSponsors = JSON.parse(safeLocalStorage.getItem('myd_local_sponsors') || '[]')
                                   const found = localSponsors.find(ls => ls.id === s.id)
                                   if (found) found.status = 'Accepté 🍻'
-                                  localStorage.setItem('myd_local_sponsors', JSON.stringify(localSponsors))
+                                  safeLocalStorage.setItem('myd_local_sponsors', JSON.stringify(localSponsors))
                                   refreshData()
                                 } else {
                                   await supabase.from('sponsors').update({ status: 'Accepté 🍻' }).eq('id', s.id)
@@ -2957,9 +3006,9 @@ function App() {
                             onClick={async () => {
                               if (window.confirm('Supprimer cette proposition de sponsor ?')) {
                                 if (isLocal) {
-                                  const localSponsors = JSON.parse(localStorage.getItem('myd_local_sponsors') || '[]')
+                                  const localSponsors = JSON.parse(safeLocalStorage.getItem('myd_local_sponsors') || '[]')
                                   const filtered = localSponsors.filter(ls => ls.id !== s.id)
-                                  localStorage.setItem('myd_local_sponsors', JSON.stringify(filtered))
+                                  safeLocalStorage.setItem('myd_local_sponsors', JSON.stringify(filtered))
                                   refreshData()
                                 } else {
                                   await supabase.from('sponsors').delete().eq('id', s.id)
