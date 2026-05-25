@@ -53,6 +53,8 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
   const [aiResponse, setAiResponse] = useState(null)
   const [aiError, setAiError] = useState('')
   const [customSmoothRange, setCustomSmoothRange] = useState({ start: '', end: '' })
+  const [lastLapsBackup, setLastLapsBackup] = useState(null)
+
 
 
 
@@ -505,6 +507,10 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
     if (!lapToDelete) return
     const teamId = lapToDelete.team_id
 
+    // Backup before delete
+    const teamLapsToBackup = laps.filter(l => l.team_id === teamId).map(l => ({ ...l }))
+    setLastLapsBackup({ teamId, laps: teamLapsToBackup })
+
     const { error } = await supabase.from('race_laps').delete().eq('id', lapId)
     if (error) {
       alert("Erreur lors de la suppression : " + error.message)
@@ -536,6 +542,10 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
       alert("Le temps du tour doit être supérieur à 0 !")
       return
     }
+
+    // Backup before update
+    const teamLapsToBackup = laps.filter(l => l.team_id === teamId).map(l => ({ ...l }))
+    setLastLapsBackup({ teamId, laps: teamLapsToBackup })
 
     const { error } = await supabase
       .from('race_laps')
@@ -651,6 +661,10 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
     const team = teams.find(t => t.id === teamId)
     if (!confirm(`Confirmer le lissage automatique du bloc pour la Moto #${team?.moto_number} du Tour ${group.startLapNumber} au Tour ${group.endLapNumber} ?`)) return
 
+    // Backup before lissage
+    const teamLapsToBackup = laps.filter(l => l.team_id === teamId).map(l => ({ ...l }))
+    setLastLapsBackup({ teamId, laps: teamLapsToBackup })
+
     const teamLaps = laps.filter(l => l.team_id === teamId).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
     const baseTime = group.startIndex === 0 ? 0 : teamLaps[group.startIndex - 1].lap_time_ms
     const K = group.numLaps
@@ -700,6 +714,10 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
 
     const team = teams.find(t => t.id === smoothingTeamId)
     if (!confirm(`Confirmer le lissage de la Moto #${team?.moto_number} du Tour ${startNum} au Tour ${endNum} ?`)) return
+
+    // Backup before custom range lissage
+    const teamLapsToBackup = laps.filter(l => l.team_id === smoothingTeamId).map(l => ({ ...l }))
+    setLastLapsBackup({ teamId: smoothingTeamId, laps: teamLapsToBackup })
 
     const baseTime = startLapIdx === 0 ? 0 : teamLaps[startLapIdx - 1].lap_time_ms
     const totalTime = teamLaps[endLapIdx].lap_time_ms - baseTime
@@ -839,6 +857,10 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
     const label = team ? `Moto #${team.moto_number}` : ''
     if (!confirm(`Appliquer le plan de correction de l'IA pour la ${label} ?`)) return
 
+    // Backup before AI updates
+    const teamLapsToBackup = laps.filter(l => l.team_id === teamId).map(l => ({ ...l }))
+    setLastLapsBackup({ teamId, laps: teamLapsToBackup })
+
     try {
       if (aiResponse.deletions && aiResponse.deletions.length > 0) {
         for (const lapId of aiResponse.deletions) {
@@ -867,6 +889,60 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
       loadSession()
     } catch (err) {
       alert("Erreur lors de l'application des corrections : " + err.message)
+    }
+  }
+
+  const handleUndoLastLissage = async () => {
+    if (!lastLapsBackup) return
+    const team = teams.find(t => t.id === lastLapsBackup.teamId)
+    if (!confirm(`Restaurer les passages d'origine pour la Moto #${team?.moto_number} ?`)) return
+
+    try {
+      const currentTeamLaps = laps.filter(l => l.team_id === lastLapsBackup.teamId)
+      const toDelete = currentTeamLaps.filter(l => !lastLapsBackup.laps.some(b => b.id === l.id))
+      const toInsert = lastLapsBackup.laps.filter(b => !currentTeamLaps.some(l => l.id === b.id))
+      const toUpdate = lastLapsBackup.laps.filter(b => currentTeamLaps.some(l => l.id === b.id))
+
+      const dbPromises = []
+
+      if (toDelete.length > 0) {
+        dbPromises.push(
+          supabase.from('race_laps').delete().in('id', toDelete.map(l => l.id))
+        )
+      }
+
+      if (toInsert.length > 0) {
+        dbPromises.push(
+          supabase.from('race_laps').insert(toInsert.map(l => ({
+            id: l.id,
+            session_id: l.session_id,
+            team_id: l.team_id,
+            moto_number: l.moto_number,
+            lap_time_ms: l.lap_time_ms,
+            lap_number: l.lap_number,
+            recorded_at: l.recorded_at,
+            recorded_by: l.recorded_by,
+            client_id: l.client_id
+          })))
+        )
+      }
+
+      if (toUpdate.length > 0) {
+        toUpdate.forEach(l => {
+          dbPromises.push(
+            supabase.from('race_laps').update({ lap_time_ms: l.lap_time_ms }).eq('id', l.id)
+          )
+        })
+      }
+
+      await Promise.all(dbPromises)
+      await resequenceLapNumbers(lastLapsBackup.teamId)
+      
+      setLastLapsBackup(null)
+      loadSession()
+      alert("Annulation réussie, chronos d'origine restaurés !")
+    } catch (err) {
+      alert("Erreur lors de l'annulation : " + err.message)
     }
   }
 
@@ -1380,6 +1456,20 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
                         <h5 style={{ margin: 0, color: 'var(--accent)', fontSize: '1rem' }}>📈 Tableau de bord de correction - Moto #{selectedTeam?.moto_number}</h5>
                         <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Temps Médian : <strong>{formatTime(median)}</strong></span>
                       </div>
+
+                      {lastLapsBackup && lastLapsBackup.teamId === smoothingTeamId && (
+                        <div style={{ marginBottom: '15px', background: 'rgba(255, 68, 68, 0.05)', border: '1px solid rgba(255, 68, 68, 0.2)', padding: '10px 14px', borderRadius: '8px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize: '0.82rem', color: '#ff4444' }}>⚠️ Modifications en cours de test.</span>
+                          <button
+                            type="button"
+                            onClick={handleUndoLastLissage}
+                            className="btn btn-outline btn-xs"
+                            style={{ borderColor: '#ff4444', color: '#ff4444', padding: '4px 8px', fontSize: '0.75rem', minHeight: 'auto' }}
+                          >
+                            ↩️ Annuler la dernière action (Restaurer l'origine)
+                          </button>
+                        </div>
+                      )}
 
                       {/* Interactive Timeline Visualizer */}
                       <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block', marginBottom: '6px' }}>Frise chronologique des tours (cliquez sur un tour pour le modifier) :</label>
