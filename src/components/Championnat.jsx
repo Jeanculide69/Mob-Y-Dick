@@ -3,9 +3,6 @@ import { supabase } from '../supabaseClient'
 import { formatCategoryShort } from '../utils/formatCategory'
 import './Championnat.css'
 
-// F1-style points system
-const POINTS_TABLE = [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]
-
 const formatTime = (ms) => {
   if (!ms && ms !== 0) return '--:--.---'
   const hours = Math.floor(ms / 3600000)
@@ -19,117 +16,164 @@ const formatTime = (ms) => {
 }
 
 export default function Championnat() {
-  const [sessions, setSessions]     = useState([])
-  const [leaderboard, setLeaderboard] = useState({}) // category → [{name, points, results:[]}]
-  const [loading, setLoading]       = useState(true)
-  const [selectedCat, setSelectedCat] = useState('all')
-  const [allCategories, setAllCategories] = useState([])
-  const [showSessions, setShowSessions] = useState(false)
-
+  const [sessions, setSessions]             = useState([])
+  const [rawTeams, setRawTeams]             = useState([])
+  const [rawLaps, setRawLaps]               = useState([])
+  const [selectedSessions, setSelectedSessions] = useState([])
+  const [leaderboard, setLeaderboard]       = useState({}) // category → [{name, laps, wins, podiums, sessionResults:[], bestLap, totalTime}]
+  const [loading, setLoading]               = useState(true)
+  const [selectedCat, setSelectedCat]       = useState('all')
+  const [allCategories, setAllCategories]   = useState([])
 
   const loadChampionship = async () => {
-    setLoading(true)
+    try {
+      // 1. Fetch all published sessions
+      const { data: sessionData } = await supabase
+        .from('race_sessions')
+        .select('*')
+        .eq('status', 'published')
+        .order('created_at', { ascending: true })
 
-    // 1. Fetch all published sessions
-    const { data: sessionData } = await supabase
-      .from('race_sessions')
-      .select('*')
-      .eq('status', 'published')
-      .order('created_at', { ascending: true })
+      if (!sessionData || sessionData.length === 0) {
+        setLoading(false)
+        return
+      }
 
-    if (!sessionData || sessionData.length === 0) {
+      setSessions(sessionData)
+      setSelectedSessions(sessionData.map(s => s.id))
+
+      // 2. Fetch all teams + laps for those sessions in parallel
+      const sessionIds = sessionData.map(s => s.id)
+
+      const [{ data: teamsData }, { data: lapsData }] = await Promise.all([
+        supabase.from('race_teams').select('*').in('session_id', sessionIds),
+        supabase.from('race_laps').select('*').in('session_id', sessionIds),
+      ])
+
+      setRawTeams(teamsData || [])
+      setRawLaps(lapsData || [])
+    } catch (err) {
+      console.error("Error loading championship data:", err)
+    } finally {
       setLoading(false)
-      return
     }
-
-    setSessions(sessionData)
-
-    // 2. Fetch all teams + laps for those sessions in parallel
-    const sessionIds = sessionData.map(s => s.id)
-
-    const [{ data: teamsData }, { data: lapsData }] = await Promise.all([
-      supabase.from('race_teams').select('*').in('session_id', sessionIds),
-      supabase.from('race_laps').select('*').in('session_id', sessionIds),
-    ])
-
-    const teams = teamsData || []
-    const laps  = lapsData  || []
-
-    // 3. Collect all categories across sessions
-    const cats = new Set()
-    sessionData.forEach(s => (s.categories || []).forEach(c => cats.add(c)))
-    const categories = [...cats]
-    setAllCategories(categories)
-
-    // 4. Build points accumulator: { pilotKey → { name, points, wins, sessions, bestLap, category } }
-    //    pilotKey = `${category}__${pilot_1_name}`
-    const accumulator = {}
-
-    const addPoints = (name, cat, pts, sessionName, position, bestLapMs) => {
-      const key = `${cat}__${name}`
-      if (!accumulator[key]) {
-        accumulator[key] = { name, category: cat, points: 0, wins: 0, podiums: 0, sessionResults: [], bestLap: null }
-      }
-      accumulator[key].points += pts
-      if (position === 1) accumulator[key].wins++
-      if (position <= 3) accumulator[key].podiums++
-      accumulator[key].sessionResults.push({ sessionName, position, pts, bestLapMs })
-      if (bestLapMs && (!accumulator[key].bestLap || bestLapMs < accumulator[key].bestLap)) {
-        accumulator[key].bestLap = bestLapMs
-      }
-    }
-
-    // 5. For each session × category → compute ranking → award points
-    sessionData.forEach(sess => {
-      const sessTeams = teams.filter(t => t.session_id === sess.id)
-      const sessLaps  = laps.filter(l => l.session_id === sess.id)
-      const sessCats  = sess.categories || []
-
-      sessCats.forEach(cat => {
-        const catTeams = sessTeams.filter(t => t.category === cat)
-
-        const ranked = catTeams.map(team => {
-          const teamLaps = sessLaps
-            .filter(l => l.team_id === team.id)
-            .sort((a, b) => a.lap_time_ms - b.lap_time_ms)
-          const actualLapsCount = teamLaps.length
-          const totalLaps = Math.max(0, actualLapsCount - (team.penalty_laps || 0))
-          const splits = teamLaps.map((lap, idx) =>
-            idx === 0 ? lap.lap_time_ms : lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms
-          )
-          const bestLap = splits.length ? Math.min(...splits) : null
-          const lastPassageTime = actualLapsCount > 0 ? teamLaps[actualLapsCount - 1].lap_time_ms : Infinity
-          return { team, totalLaps, bestLap, lastPassageTime }
-        })
-        .filter(r => r.totalLaps > 0)
-        .sort((a, b) =>
-          b.totalLaps !== a.totalLaps
-            ? b.totalLaps - a.totalLaps
-            : a.lastPassageTime - b.lastPassageTime
-        )
-
-        ranked.forEach((r, i) => {
-          const pts = POINTS_TABLE[i] || 0
-          const identifier = `Moto ${r.team.moto_number}`
-          addPoints(identifier, cat, pts, sess.name, i + 1, r.bestLap)
-        })
-      })
-    })
-
-    // 6. Build per-category leaderboards
-    const board = {}
-    categories.forEach(cat => {
-      const entries = Object.values(accumulator)
-        .filter(e => e.category === cat)
-        .sort((a, b) => b.points !== a.points ? b.points - a.points : b.wins - a.wins)
-      if (entries.length > 0) board[cat] = entries
-    })
-    setLeaderboard(board)
-    setLoading(false)
   }
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { loadChampionship() }, [])
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      loadChampionship()
+    }, 0)
+    return () => clearTimeout(timer)
+  }, [])
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (sessions.length === 0) {
+        setLeaderboard({})
+        setAllCategories([])
+        return
+      }
+
+      // 3. Filter sessions by selection
+      const selectedSessData = sessions.filter(s => selectedSessions.includes(s.id))
+      
+      // Collect all categories across selected sessions
+      const cats = new Set()
+      selectedSessData.forEach(s => (s.categories || []).forEach(c => cats.add(c)))
+      const categories = [...cats]
+      setAllCategories(categories)
+
+      // 4. Build laps accumulator: { pilotKey → { name, category, laps, wins, podiums, sessionResults, bestLap, totalTime } }
+      const accumulator = {}
+
+      const addLaps = (name, cat, lapsCount, sessionName, position, bestLapMs, totalTimeMs) => {
+        const key = `${cat}__${name}`
+        if (!accumulator[key]) {
+          accumulator[key] = { 
+            name, 
+            category: cat, 
+            laps: 0, 
+            wins: 0, 
+            podiums: 0, 
+            sessionResults: [], 
+            bestLap: null,
+            totalTime: 0 
+          }
+        }
+        accumulator[key].laps += lapsCount
+        if (position === 1) accumulator[key].wins++
+        if (position <= 3) accumulator[key].podiums++
+        accumulator[key].sessionResults.push({ sessionName, position, laps: lapsCount, bestLapMs })
+        if (totalTimeMs && totalTimeMs !== Infinity) {
+          accumulator[key].totalTime += totalTimeMs
+        }
+        if (bestLapMs && (!accumulator[key].bestLap || bestLapMs < accumulator[key].bestLap)) {
+          accumulator[key].bestLap = bestLapMs
+        }
+      }
+
+      // 5. For each selected session × category → compute ranking → award laps
+      selectedSessData.forEach(sess => {
+        const sessTeams = rawTeams.filter(t => t.session_id === sess.id)
+        const sessLaps  = rawLaps.filter(l => l.session_id === sess.id)
+        const sessCats  = sess.categories || []
+
+        sessCats.forEach(cat => {
+          const catTeams = sessTeams.filter(t => t.category === cat)
+
+          const ranked = catTeams.map(team => {
+            const teamLaps = sessLaps
+              .filter(l => l.team_id === team.id)
+              .sort((a, b) => a.lap_time_ms - b.lap_time_ms)
+            const actualLapsCount = teamLaps.length
+            const totalLaps = Math.max(0, actualLapsCount - (team.penalty_laps || 0))
+            const splits = teamLaps.map((lap, idx) =>
+              idx === 0 ? lap.lap_time_ms : lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms
+            )
+            const bestLap = splits.length ? Math.min(...splits) : null
+            const lastPassageTime = actualLapsCount > 0 ? teamLaps[actualLapsCount - 1].lap_time_ms : Infinity
+            return { team, totalLaps, bestLap, lastPassageTime }
+          })
+          .filter(r => r.totalLaps > 0)
+          .sort((a, b) =>
+            b.totalLaps !== a.totalLaps
+              ? b.totalLaps - a.totalLaps
+              : a.lastPassageTime - b.lastPassageTime
+          )
+
+          ranked.forEach((r, i) => {
+            const identifier = `Moto ${r.team.moto_number}`
+            addLaps(identifier, cat, r.totalLaps, sess.name, i + 1, r.bestLap, r.lastPassageTime)
+          })
+        })
+      })
+
+      // 6. Build per-category leaderboards
+      const board = {}
+      categories.forEach(cat => {
+        const entries = Object.values(accumulator)
+          .filter(e => e.category === cat)
+          .sort((a, b) => {
+            if (b.laps !== a.laps) {
+              return b.laps - a.laps
+            }
+            return a.totalTime - b.totalTime
+          })
+        if (entries.length > 0) board[cat] = entries
+      })
+      setLeaderboard(board)
+    }, 0)
+
+    return () => clearTimeout(timer)
+  }, [selectedSessions, rawTeams, rawLaps, sessions])
+
+  const handleToggleSession = (id) => {
+    setSelectedSessions(prev =>
+      prev.includes(id)
+        ? prev.filter(sessId => sessId !== id)
+        : [...prev, id]
+    )
+  }
 
   if (loading) return (
     <section className="section page-top">
@@ -142,8 +186,7 @@ export default function Championnat() {
     </section>
   )
 
-  const hasData = Object.keys(leaderboard).length > 0
-
+  const hasData = Object.keys(leaderboard).length > 0 && selectedSessions.length > 0
   const displayedCats = selectedCat === 'all' ? allCategories : [selectedCat]
 
   return (
@@ -155,50 +198,63 @@ export default function Championnat() {
           <div className="champ-header-left">
             <h1 className="champ-title">🏆 Championnat</h1>
             <p className="champ-subtitle">
-              Classement général de la saison — {sessions.length} manche{sessions.length > 1 ? 's' : ''} disputée{sessions.length > 1 ? 's' : ''}
+              Cumul des manches de la saison par nombre de tours
             </p>
-          </div>
-          <div className="champ-points-legend">
-            <span className="champ-legend-label">Barème points</span>
-            <div className="champ-points-chips">
-              {POINTS_TABLE.slice(0, 5).map((p, i) => (
-                <span key={i} className="champ-point-chip">
-                  {i + 1}<sup>e</sup> → {p}pts
-                </span>
-              ))}
-              <span className="champ-point-chip champ-point-chip-muted">…</span>
-            </div>
           </div>
         </div>
 
-        {/* ── Sessions list (replié par défaut) ── */}
+        {/* ── Sessions selection checkboxes ── */}
         {sessions.length > 0 && (
-          <div className="champ-sessions-section">
-            <button
-              type="button"
-              className="champ-sessions-toggle"
-              onClick={() => setShowSessions(s => !s)}
-              aria-expanded={showSessions}
-            >
-              <span className={`champ-sessions-toggle-chevron ${showSessions ? 'open' : ''}`}>▸</span>
-              <span className="champ-sessions-toggle-label">Détail des manches</span>
-              <span className="champ-sessions-toggle-count">{sessions.length}</span>
-            </button>
-            {showSessions && (
-              <div className="champ-sessions-strip">
-                {sessions.map((s, i) => (
-                  <div key={s.id} className="champ-session-chip">
-                    <span className="champ-session-num">M{i + 1}</span>
-                    <span className="champ-session-name">{s.name}</span>
-                  </div>
-                ))}
-              </div>
+          <div className="champ-sessions-section glass" style={{ padding: '20px', marginBottom: '24px' }}>
+            <h4 style={{ fontSize: '0.9rem', marginBottom: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              📅 Choisir les manches à inclure :
+            </h4>
+            <div className="champ-sessions-checkboxes" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
+              {sessions.map((s, i) => {
+                const isSelected = selectedSessions.includes(s.id)
+                return (
+                  <label 
+                    key={s.id} 
+                    className={`champ-session-label ${isSelected ? 'active' : ''}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '8px 14px',
+                      borderRadius: '20px',
+                      background: isSelected ? 'rgba(255, 85, 0, 0.12)' : 'rgba(255,255,255,0.03)',
+                      border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
+                      cursor: 'pointer',
+                      fontSize: '0.85rem',
+                      color: isSelected ? 'var(--accent)' : 'var(--text-secondary)',
+                      transition: 'all 0.2s',
+                      fontWeight: 600
+                    }}
+                  >
+                    <input 
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => handleToggleSession(s.id)}
+                      style={{
+                        accentColor: 'var(--accent)',
+                        cursor: 'pointer'
+                      }}
+                    />
+                    <span>Manche {i + 1} — {s.name}</span>
+                  </label>
+                )
+              })}
+            </div>
+            {selectedSessions.length === 0 && (
+              <p style={{ color: '#ff4444', fontSize: '0.85rem', marginTop: '12px', fontWeight: 600 }}>
+                ⚠️ Sélectionnez au moins une manche ci-dessus pour afficher le classement.
+              </p>
             )}
           </div>
         )}
 
         {/* ── Category Tabs ── */}
-        {allCategories.length > 1 && (
+        {hasData && allCategories.length > 1 && (
           <div className="champ-cat-tabs">
             <button
               className={`champ-cat-tab ${selectedCat === 'all' ? 'active' : ''}`}
@@ -224,12 +280,16 @@ export default function Championnat() {
           <div className="champ-empty glass">
             <span className="champ-empty-icon">🏁</span>
             <h2>Aucun résultat disponible</h2>
-            <p>Le championnat affiche les résultats des manches officiellement publiées. Revenez après la prochaine course !</p>
+            <p>
+              {selectedSessions.length === 0 
+                ? "Veuillez cocher au moins une manche ci-dessus pour afficher les totaux."
+                : "Le championnat affiche les résultats des manches officiellement publiées. Revenez après la prochaine course !"}
+            </p>
           </div>
         )}
 
         {/* ── Per-category leaderboards ── */}
-        {displayedCats.map(cat => {
+        {hasData && displayedCats.map(cat => {
           const entries = leaderboard[cat]
           if (!entries) return null
           const leader = entries[0]
@@ -242,7 +302,7 @@ export default function Championnat() {
                   <div className="champ-cat-leader">
                     <span className="champ-leader-crown">👑</span>
                     <span className="champ-leader-name">{leader.name}</span>
-                    <span className="champ-leader-pts">{leader.points} pts</span>
+                    <span className="champ-leader-pts">{leader.laps} Tours</span>
                   </div>
                 )}
               </div>
@@ -253,7 +313,7 @@ export default function Championnat() {
                   <div className="champ-podium-step champ-step-2">
                     <div className="champ-podium-avatar">🥈</div>
                     <div className="champ-podium-pilot-name">{entries[1].name}</div>
-                    <div className="champ-podium-pts">{entries[1].points} pts</div>
+                    <div className="champ-podium-pts">{entries[1].laps} Tours</div>
                     <div className="champ-podium-block silver">2</div>
                   </div>
                 )}
@@ -261,7 +321,7 @@ export default function Championnat() {
                   <div className="champ-podium-step champ-step-1">
                     <div className="champ-podium-avatar">🥇</div>
                     <div className="champ-podium-pilot-name">{entries[0].name}</div>
-                    <div className="champ-podium-pts">{entries[0].points} pts</div>
+                    <div className="champ-podium-pts">{entries[0].laps} Tours</div>
                     <div className="champ-podium-block gold">1</div>
                   </div>
                 )}
@@ -269,7 +329,7 @@ export default function Championnat() {
                   <div className="champ-podium-step champ-step-3">
                     <div className="champ-podium-avatar">🥉</div>
                     <div className="champ-podium-pilot-name">{entries[2].name}</div>
-                    <div className="champ-podium-pts">{entries[2].points} pts</div>
+                    <div className="champ-podium-pts">{entries[2].laps} Tours</div>
                     <div className="champ-podium-block bronze">3</div>
                   </div>
                 )}
@@ -282,19 +342,19 @@ export default function Championnat() {
                     <tr>
                       <th className="champ-th-pos">POS</th>
                       <th>MOTO</th>
-                      <th className="champ-th-num">POINTS</th>
+                      <th className="champ-th-num">TOURS TOTAL</th>
                       <th className="champ-th-num">VICTOIRES</th>
                       <th className="champ-th-num">PODIUMS</th>
                       <th className="champ-th-num">MEILLEUR</th>
-                      {sessions.map((s, i) => (
-                        <th key={s.id} className="champ-th-session">M{i + 1}</th>
+                      {sessions.filter(s => selectedSessions.includes(s.id)).map(s => (
+                        <th key={s.id} className="champ-th-session">M{sessions.indexOf(s) + 1}</th>
                       ))}
                     </tr>
                   </thead>
                   <tbody>
                     {entries.map((entry, i) => {
                       const isLeader = i === 0
-                      const gap = isLeader ? null : leader.points - entry.points
+                      const gap = isLeader ? null : leader.laps - entry.laps
                       return (
                         <tr key={entry.name} className={`champ-row ${i < 3 ? `champ-podium-${i + 1}` : ''}`}>
                           <td className="champ-pos">
@@ -306,12 +366,12 @@ export default function Championnat() {
                           <td className="champ-pilot">
                             <span className="champ-pilot-name">{entry.name}</span>
                             {!isLeader && gap !== null && (
-                              <span className="champ-gap">-{gap} pts</span>
+                              <span className="champ-gap">-{gap} Trs</span>
                             )}
                           </td>
                           <td className="champ-points-cell">
                             <span className={`champ-pts-value ${isLeader ? 'leader' : ''}`}>
-                              {entry.points}
+                              {entry.laps}
                             </span>
                           </td>
                           <td className="champ-num-cell">
@@ -323,14 +383,14 @@ export default function Championnat() {
                           <td className="champ-num-cell champ-best-lap">
                             {entry.bestLap ? formatTime(entry.bestLap) : '—'}
                           </td>
-                          {sessions.map(s => {
+                          {sessions.filter(s => selectedSessions.includes(s.id)).map(s => {
                             const res = entry.sessionResults.find(r => r.sessionName === s.name)
                             return (
                               <td key={s.id} className="champ-session-result">
                                 {res ? (
                                   <div className="champ-result-pill">
                                     <span className="champ-result-pos">P{res.position}</span>
-                                    <span className="champ-result-pts">+{res.pts}</span>
+                                    <span className="champ-result-pts">{res.laps} Trs</span>
                                   </div>
                                 ) : (
                                   <span className="champ-zero">—</span>
