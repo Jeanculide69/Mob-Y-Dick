@@ -1398,7 +1398,7 @@ function App() {
       </div>
 
       {/* ─── Navbar ─── */}
-      <header className="navbar glass">
+      <header className="navbar">
         <div className="container nav-inner">
           <button className="nav-brand" onClick={() => navigate('home')}>
             <img src="/logo.png" alt="Mob Y Dick" className="nav-logo" />

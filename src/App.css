@@ -52,6 +52,18 @@
   border-right: 0;
   border-top: 0;
   border-bottom: 1px solid var(--border-subtle);
+  background: transparent; /* Parent transparent */
+}
+
+.navbar::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--bg-glass);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  z-index: -1;
+  pointer-events: none;
 }
 
 .nav-inner {
