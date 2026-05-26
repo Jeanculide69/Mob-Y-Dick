@@ -176,6 +176,27 @@
   font-variant-numeric: tabular-nums;
 }
 
+.live-stat-remaining .live-stat-value {
+  font-size: 1rem;
+  color: #66e6a3;
+  font-variant-numeric: tabular-nums;
+}
+
+.live-stat-remaining.is-critical .live-stat-value {
+  color: #ffbb33;
+  animation: liveRemainingPulse 1s ease-in-out infinite;
+}
+
+.live-stat-remaining.is-overtime .live-stat-value {
+  color: #ff3344;
+  animation: liveRemainingPulse 0.7s ease-in-out infinite;
+}
+
+@keyframes liveRemainingPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
 /* ─── Best Overall ─── */
 .live-best-overall {
   display: flex;

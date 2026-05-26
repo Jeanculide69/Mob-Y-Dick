@@ -27,6 +27,7 @@ const AdminDashboard = lazy(() => import('./components/AdminDashboard'))
 const RaceSetup      = lazy(() => import('./components/RaceSetup'))
 const RaceChrono     = lazy(() => import('./components/RaceChrono'))
 const Championnat    = lazy(() => import('./components/Championnat'))
+const Blog           = lazy(() => import('./components/Blog'))
 import './components/AuthNavbar.css'
 
 // Safe storage wrappers to prevent crashes in private browsing mode on iOS Safari
@@ -88,6 +89,19 @@ const LazyLoader = () => (
 
 const SITE_VERSION = 'v3.1.0'
 
+const loadAdSenseScript = () => {
+  if (typeof window === 'undefined') return
+  window.adsbygoogle = window.adsbygoogle || []
+  const scriptId = 'adsense-script'
+  if (document.getElementById(scriptId)) return
+  const script = document.createElement('script')
+  script.id = scriptId
+  script.async = true
+  script.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6244816354585064"
+  script.crossOrigin = "anonymous"
+  document.head.appendChild(script)
+}
+
 // Reusable Google AdSense component with highly premium, warm fallback mockup
 const GoogleAd = ({ slot = '1234567890', format = 'auto', style = { display: 'block' }, navigate }) => {
   const [adStatus, setAdStatus] = useState('unfilled')
@@ -98,8 +112,9 @@ const GoogleAd = ({ slot = '1234567890', format = 'auto', style = { display: 'bl
   // stabilisé, container display:none, mobile en chargement). Le fix : on
   // attend que le <ins> ait une vraie largeur avant de pousher.
   useEffect(() => {
+    loadAdSenseScript()
     const insEl = document.querySelector(`ins[data-ad-slot="${slot}"]`)
-    if (!insEl || !window.adsbygoogle) return
+    if (!insEl) return
 
     let pushed = false
     const tryPush = () => {
@@ -191,8 +206,9 @@ const SidebarAd = ({ side = 'left', navigate }) => {
 
   // Même pattern défensif que GoogleAd (cf. commentaire plus haut).
   useEffect(() => {
+    loadAdSenseScript()
     const insEl = document.querySelector(`ins[data-ad-slot="${slot}"]`)
-    if (!insEl || !window.adsbygoogle) return
+    if (!insEl) return
     let pushed = false
     const tryPush = () => {
       if (pushed) return
@@ -907,7 +923,7 @@ function App() {
   // additionnelles stockees dans profile.permissions.
   const ROLE_BASELINE_PERMISSIONS = {
     organisateur: ['manage_races', 'manage_events'],
-    moderator: ['moderate_content', 'manage_products', 'manage_team', 'manage_gallery', 'manage_bikes'],
+    moderator: ['moderate_content', 'manage_products', 'manage_team', 'manage_gallery', 'manage_bikes', 'manage_blog'],
   }
   const hasPermission = (perm) => {
     if (isAdmin) return true
@@ -1506,7 +1522,7 @@ function App() {
               )
             })()}
 
-            {['gallery', 'team', 'bikes', 'shop', 'sponsors', 'events', 'championnat'].map((tab) => (
+            {['gallery', 'team', 'bikes', 'shop', 'sponsors', 'events', 'championnat', 'blog'].map((tab) => (
               <button
                 key={tab}
                 className={`nav-link ${activeTab === tab ? 'active' : ''}`}
@@ -1517,7 +1533,8 @@ function App() {
                  tab === 'bikes'       ? 'Motos'        :
                  tab === 'shop'        ? 'Boutique'     :
                  tab === 'sponsors'    ? 'Sponsors'     :
-                 tab === 'championnat' ? '🏆 Championnat' : 'Événements'}
+                 tab === 'championnat' ? '🏆 Championnat' :
+                 tab === 'blog'        ? 'Actualités'   : 'Événements'}
               </button>
             ))}
 
@@ -1548,8 +1565,12 @@ function App() {
         </div>
       </header>
 
-      <SidebarAd side="left" navigate={navigate} />
-      <SidebarAd side="right" navigate={navigate} />
+      {['home', 'team', 'bikes', 'gallery', 'events', 'sponsors', 'championnat', 'blog', 'live'].includes(activeTab) && !showIntroSplash && (
+        <>
+          <SidebarAd side="left" navigate={navigate} />
+          <SidebarAd side="right" navigate={navigate} />
+        </>
+      )}
 
       <main>
         {/* ─── HOME ─── */}
@@ -2347,6 +2368,18 @@ function App() {
               <GoogleAd slot="sponsors-banner" navigate={navigate} />
             </div>
           </section>
+        )}
+
+        {/* ─── BLOG / ACTUALITÉS ─── */}
+        {activeTab === 'blog' && (
+          <Suspense fallback={<LazyLoader />}>
+            <Blog
+              hasPermission={hasPermission}
+              isAdmin={isAdmin}
+              profile={profile}
+              navigate={navigate}
+            />
+          </Suspense>
         )}
       </main>
 

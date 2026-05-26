@@ -55,7 +55,12 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
   const [customSmoothRange, setCustomSmoothRange] = useState({ start: '', end: '' })
   const [lastLapsBackup, setLastLapsBackup] = useState(null)
 
-
+  // Durée prévue de la course (en minutes) — saisie locale, persistée sur blur
+  const [durationInput, setDurationInput] = useState('')
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setDurationInput(raceSession?.duration_minutes != null ? String(raceSession.duration_minutes) : '')
+  }, [raceSession?.duration_minutes])
 
 
   // Team form
@@ -150,6 +155,27 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
     if (raceSession) {
       supabase.from('race_sessions').update({ categories: updated }).eq('id', raceSession.id)
     }
+  }
+
+  const handleSaveDuration = async () => {
+    if (!raceSession) return
+    const trimmed = (durationInput || '').trim()
+    const parsed = trimmed === '' ? null : parseInt(trimmed, 10)
+    if (trimmed !== '' && (!Number.isFinite(parsed) || parsed <= 0)) {
+      alert('Durée invalide. Entrez un nombre de minutes positif ou laissez vide.')
+      setDurationInput(raceSession?.duration_minutes != null ? String(raceSession.duration_minutes) : '')
+      return
+    }
+    if (parsed === (raceSession.duration_minutes ?? null)) return
+    const { error } = await supabase
+      .from('race_sessions')
+      .update({ duration_minutes: parsed })
+      .eq('id', raceSession.id)
+    if (error) {
+      alert('Erreur enregistrement durée : ' + error.message)
+      return
+    }
+    setRaceSession(prev => prev ? { ...prev, duration_minutes: parsed } : prev)
   }
 
   const handleTeamSubmit = async (e) => {
@@ -1916,6 +1942,35 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
               />
             </>
           )}
+
+          {/* ─── Durée de l'événement ─── */}
+          <div className="race-duration glass">
+            <h3>⏳ Durée de l'événement</h3>
+            <div className="race-duration-row">
+              <input
+                type="number"
+                min="1"
+                step="1"
+                value={durationInput}
+                onChange={e => setDurationInput(e.target.value)}
+                onBlur={handleSaveDuration}
+                onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur() } }}
+                placeholder="Durée en minutes (ex: 120)"
+                className="race-duration-input"
+              />
+              <span className="race-duration-unit">minutes</span>
+              {raceSession.duration_minutes != null && (
+                <span className="race-duration-preview">
+                  ⏱ {Math.floor(raceSession.duration_minutes / 60) > 0
+                    ? `${Math.floor(raceSession.duration_minutes / 60)}h${String(raceSession.duration_minutes % 60).padStart(2, '0')}`
+                    : `${raceSession.duration_minutes} min`}
+                </span>
+              )}
+            </div>
+            <p className="race-duration-hint">
+              Le temps restant s'affichera sous le chrono et côté spectateurs. Laissez vide pour ne pas afficher de décompte.
+            </p>
+          </div>
 
           {/* ─── Categories Manager ─── */}
           <div className="race-categories glass">

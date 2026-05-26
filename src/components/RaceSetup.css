@@ -81,6 +81,63 @@
   color: var(--text-secondary);
 }
 
+/* ─── Durée de l'événement ─── */
+.race-duration {
+  padding: 20px;
+  border-radius: 14px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border-subtle);
+}
+
+.race-duration h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+  color: #fff;
+}
+
+.race-duration-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.race-duration-input {
+  flex: 0 0 200px;
+  padding: 8px 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-family: var(--font-body);
+}
+
+.race-duration-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.race-duration-unit {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.race-duration-preview {
+  margin-left: auto;
+  color: #66e6a3;
+  font-weight: 700;
+  font-size: 0.95rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.race-duration-hint {
+  margin: 10px 0 0;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.4;
+}
+
 /* ─── Categories ─── */
 .race-categories {
   padding: 20px;

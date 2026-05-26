@@ -1428,6 +1428,20 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
                   <span className="live-stat-label">Temps écoulé</span>
                 </div>
               )}
+              {isLive && session?.duration_minutes != null && (() => {
+                const durMs = session.duration_minutes * 60 * 1000
+                const remaining = durMs - elapsed
+                const over = remaining < 0
+                const critical = !over && remaining <= 60_000
+                return (
+                  <div className={`live-stat live-stat-remaining${over ? ' is-overtime' : ''}${critical ? ' is-critical' : ''}`}>
+                    <span className="live-stat-value">
+                      {over ? `+${formatElapsed(Math.abs(remaining))}` : formatElapsed(remaining)}
+                    </span>
+                    <span className="live-stat-label">{over ? 'Dépassement' : 'Temps restant'}</span>
+                  </div>
+                )
+              })()}
               {isLive && (
                 <div className="live-stat live-stat-spectators">
                   <span className="live-stat-value">

@@ -603,6 +603,12 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
 
   const previewTeam = motoInput ? teams.find(t => t.moto_number === parseInt(motoInput)) : null
 
+  // Temps restant (si une durée est définie sur la session)
+  const durationMs = sessionData?.duration_minutes != null ? sessionData.duration_minutes * 60 * 1000 : null
+  const remainingMs = durationMs != null ? durationMs - chrono : null
+  const isOvertime = remainingMs != null && remainingMs < 0
+  const isCritical = remainingMs != null && remainingMs >= 0 && remainingMs <= 60_000
+
   // ── XXL Numpad Overlay ──
   // Portal sur document.body : un ancêtre (.section avec animation pageEnter
   // qui laisse un transform résiduel) crée un containing block et casserait
@@ -614,7 +620,16 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
       <div className="chrono-xxl-overlay">
         <div className="chrono-xxl-header">
           <button className="btn btn-ghost chrono-xxl-close" onClick={() => setXxlMode(false)}>✕ Normal</button>
-          <div className="chrono-xxl-timer">{formatTime(chrono, false)}</div>
+          <div className="chrono-xxl-timer-wrap">
+            <div className="chrono-xxl-timer">{formatTime(chrono, false)}</div>
+            {durationMs != null && (
+              <div className={`chrono-xxl-remaining${isOvertime ? ' is-overtime' : ''}${isCritical ? ' is-critical' : ''}`}>
+                {isOvertime
+                  ? `⏰ +${formatTime(Math.abs(remainingMs), false)} dépassement`
+                  : `⏳ ${formatTime(remainingMs, false)} restant`}
+              </div>
+            )}
+          </div>
           <div className="chrono-xxl-badge">
             {isRunning ? <><span className="chrono-live-dot" />EN DIRECT</> : '⏸ EN ATTENTE'}
             {pendingCount > 0 && <span style={{ marginLeft: 8, fontSize: '0.85em', opacity: 0.85 }}>📡 {pendingCount}</span>}
@@ -708,6 +723,13 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
           {/* Big Chrono Display */}
           <div className="chrono-display glass">
             <div className="chrono-time">{formatTime(chrono, false)}</div>
+            {durationMs != null && (
+              <div className={`chrono-remaining${isOvertime ? ' is-overtime' : ''}${isCritical ? ' is-critical' : ''}`}>
+                {isOvertime
+                  ? `⏰ +${formatTime(Math.abs(remainingMs), false)} de dépassement`
+                  : `⏳ ${formatTime(remainingMs, false)} restant`}
+              </div>
+            )}
             <div className="chrono-controls">
               {!isRunning ? (
                 <button className="chrono-btn chrono-btn-start" onClick={handleStartChrono}>

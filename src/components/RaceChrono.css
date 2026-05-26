@@ -96,6 +96,34 @@
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
 }
 
+.chrono-remaining {
+  margin-top: 6px;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #66e6a3;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  text-shadow: 0 0 12px rgba(102, 230, 163, 0.35);
+}
+
+.chrono-remaining.is-critical {
+  color: #ffbb33;
+  text-shadow: 0 0 14px rgba(255, 187, 51, 0.5);
+  animation: chronoRemainingPulse 1s ease-in-out infinite;
+}
+
+.chrono-remaining.is-overtime {
+  color: #ff3344;
+  text-shadow: 0 0 14px rgba(255, 51, 68, 0.5);
+  animation: chronoRemainingPulse 0.7s ease-in-out infinite;
+}
+
+@keyframes chronoRemainingPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
 .chrono-controls {
   margin-top: 16px;
   display: flex;
@@ -580,12 +608,38 @@
   padding: 8px 14px !important;
 }
 
+.chrono-xxl-timer-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
 .chrono-xxl-timer {
   font-size: 1.8rem;
   font-weight: 800;
   color: var(--accent);
   font-variant-numeric: tabular-nums;
   font-family: monospace;
+}
+
+.chrono-xxl-remaining {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #66e6a3;
+  font-variant-numeric: tabular-nums;
+  font-family: monospace;
+  letter-spacing: 0.5px;
+}
+
+.chrono-xxl-remaining.is-critical {
+  color: #ffbb33;
+  animation: chronoRemainingPulse 1s ease-in-out infinite;
+}
+
+.chrono-xxl-remaining.is-overtime {
+  color: #ff3344;
+  animation: chronoRemainingPulse 0.7s ease-in-out infinite;
 }
 
 .chrono-xxl-badge {
