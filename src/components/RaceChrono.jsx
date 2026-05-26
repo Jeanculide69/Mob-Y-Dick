@@ -37,6 +37,13 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
   const [sessionData, setSessionData]       = useState(raceSession)
   const [lastLapFlash, setLastLapFlash]     = useState(null)
   const [selectedCategory, setSelectedCategory] = useState('all')
+  const [lightMode, setLightMode] = useState(() => {
+    return localStorage.getItem('myd_chrono_light_mode') === 'true'
+  })
+
+  useEffect(() => {
+    localStorage.setItem('myd_chrono_light_mode', lightMode)
+  }, [lightMode])
 
   // ── Undo + annonce ──
   const [lastInsertedLapId, setLastInsertedLapId] = useState(null)
@@ -617,9 +624,19 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
   // du clavier dépasse, on voit le footer/navbar autour.
   if (xxlMode) {
     return createPortal(
-      <div className="chrono-xxl-overlay">
+      <div className={`chrono-xxl-overlay${lightMode ? ' light-mode' : ''}`}>
         <div className="chrono-xxl-header">
-          <button className="btn btn-ghost chrono-xxl-close" onClick={() => setXxlMode(false)}>✕ Normal</button>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button className="btn btn-ghost chrono-xxl-close" onClick={() => setXxlMode(false)}>✕ Normal</button>
+            <button
+              className="btn btn-ghost chrono-light-toggle-btn"
+              onClick={() => setLightMode(prev => !prev)}
+              title={lightMode ? "Mode sombre" : "Mode clair"}
+              style={{ padding: '6px 12px', minHeight: '40px', display: 'flex', alignItems: 'center', fontSize: '1.2rem' }}
+            >
+              {lightMode ? '🌙' : '☀️'}
+            </button>
+          </div>
           <div className="chrono-xxl-timer-wrap">
             <div className="chrono-xxl-timer">{formatTime(chrono, false)}</div>
             {durationMs != null && (
@@ -687,7 +704,7 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
   }
 
   return (
-    <div className="chrono-container">
+    <div className={`chrono-container${lightMode ? ' light-mode' : ''}`}>
       {/* ─── Top Bar ─── */}
       <div className="chrono-top-bar">
         <div className="chrono-top-left">
@@ -704,6 +721,14 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
         </div>
         <h2 className="chrono-title">{raceSession.name}</h2>
         <div className="chrono-top-right">
+          <button
+            className="btn btn-ghost chrono-light-toggle-btn"
+            onClick={() => setLightMode(prev => !prev)}
+            title={lightMode ? "Mode sombre" : "Mode clair"}
+            style={{ fontSize: '1.2rem', padding: '8px 12px' }}
+          >
+            {lightMode ? '🌙' : '☀️'}
+          </button>
           <button
             className="btn btn-ghost chrono-xxl-toggle"
             onClick={() => setXxlMode(true)}

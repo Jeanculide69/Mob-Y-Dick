@@ -832,3 +832,180 @@
     width: 100%;
   }
 }
+
+/* =========================================================================
+   LIGHT MODE FOR TIMING VIEW (High visibility in direct sunlight)
+   ========================================================================= */
+
+.chrono-container.light-mode,
+.chrono-xxl-overlay.light-mode {
+  background-color: #f8f9fa !important;
+  color: #1a1a1a !important;
+}
+
+/* Base text overrides */
+.chrono-container.light-mode h2,
+.chrono-container.light-mode h3,
+.chrono-container.light-mode .chrono-title,
+.chrono-container.light-mode .chrono-recent h3,
+.chrono-container.light-mode .chrono-rankings-header h3,
+.chrono-container.light-mode .chrono-recent-time,
+.chrono-container.light-mode .chrono-recent-name,
+.chrono-container.light-mode .chrono-best,
+.chrono-container.light-mode .chrono-pilot,
+.chrono-container.light-mode .chrono-xxl-timer,
+.chrono-container.light-mode .chrono-xxl-pilot,
+.chrono-container.light-mode .chrono-xxl-input,
+.chrono-container.light-mode .chrono-flash-time {
+  color: #000000 !important;
+}
+
+/* Glass panel overrides in light mode */
+.chrono-container.light-mode .glass,
+.chrono-container.light-mode .chrono-display,
+.chrono-container.light-mode .chrono-input-area,
+.chrono-container.light-mode .chrono-recent,
+.chrono-container.light-mode .chrono-rankings,
+.chrono-container.light-mode .chrono-undo-btn,
+.chrono-container.light-mode .chrono-announce-panel {
+  background: #ffffff !important;
+  border-color: #ced4da !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Chrono time values */
+.chrono-container.light-mode .chrono-time,
+.chrono-xxl-overlay.light-mode .chrono-xxl-timer {
+  color: #ff5500 !important;
+  text-shadow: none !important;
+}
+
+.chrono-container.light-mode .chrono-moto-input {
+  background: #ffffff !important;
+  border-color: #adb5bd !important;
+  color: #000000 !important;
+}
+
+.chrono-container.light-mode .chrono-moto-input:focus {
+  border-color: #ff5500 !important;
+  box-shadow: 0 0 10px rgba(255, 85, 0, 0.2) !important;
+}
+
+.chrono-container.light-mode .chrono-moto-preview {
+  background: rgba(255, 85, 0, 0.08) !important;
+  color: #d04000 !important;
+}
+
+/* Tables and Rankings list */
+.chrono-container.light-mode .chrono-rankings-table th {
+  color: #495057 !important;
+  border-bottom: 2px solid #dee2e6 !important;
+}
+
+.chrono-container.light-mode .chrono-rankings-table td {
+  border-bottom: 1px solid #e9ecef !important;
+}
+
+.chrono-container.light-mode .chrono-rankings-table tr:hover {
+  background-color: #f1f3f5 !important;
+}
+
+/* Live indicators */
+.chrono-container.light-mode .chrono-live-badge,
+.chrono-xxl-overlay.light-mode .chrono-xxl-badge {
+  background: rgba(255, 0, 0, 0.08) !important;
+  border-color: rgba(255, 0, 0, 0.25) !important;
+  color: #cc0000 !important;
+}
+
+.chrono-container.light-mode .chrono-live-dot,
+.chrono-xxl-overlay.light-mode .chrono-live-dot {
+  background: #cc0000 !important;
+}
+
+/* XXL Mode Specifics */
+.chrono-xxl-overlay.light-mode {
+  background: #f1f3f5 !important;
+}
+
+.chrono-xxl-overlay.light-mode .chrono-xxl-header {
+  background: #ffffff !important;
+  border-bottom: 1px solid #ced4da !important;
+}
+
+.chrono-xxl-overlay.light-mode .chrono-xxl-display {
+  background: #ffffff !important;
+  border-bottom: 1px solid #ced4da !important;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.05) !important;
+}
+
+.chrono-xxl-overlay.light-mode .chrono-xxl-input {
+  color: #000000 !important;
+  text-shadow: none !important;
+}
+
+.chrono-xxl-overlay.light-mode .chrono-xxl-preview {
+  background: #e8f5e9 !important;
+  border: 1px solid #a5d6a7 !important;
+}
+
+.chrono-xxl-overlay.light-mode .chrono-xxl-cat {
+  color: #2e7d32 !important;
+}
+
+.chrono-xxl-overlay.light-mode .chrono-xxl-pilot {
+  color: #1b5e20 !important;
+}
+
+.chrono-xxl-overlay.light-mode .chrono-xxl-notfound {
+  background: #ffebee !important;
+  border: 1px solid #ffcdd2 !important;
+  color: #c62828 !important;
+}
+
+.chrono-xxl-overlay.light-mode .chrono-xxl-flash {
+  background: #e8f5e9 !important;
+  border-color: #2e7d32 !important;
+  color: #2e7d32 !important;
+}
+
+/* Numpad buttons in light mode */
+.chrono-xxl-overlay.light-mode .chrono-xxl-key {
+  background: #ffffff !important;
+  border: 2px solid #ced4da !important;
+  color: #1d1d1f !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05) !important;
+}
+
+.chrono-xxl-overlay.light-mode .chrono-xxl-key:hover {
+  background: #f1f3f5 !important;
+  border-color: #adb5bd !important;
+}
+
+.chrono-xxl-overlay.light-mode .chrono-xxl-key:active {
+  background: #e9ecef !important;
+  transform: scale(0.92) !important;
+}
+
+.chrono-xxl-overlay.light-mode .chrono-xxl-key.key-confirm {
+  background: linear-gradient(135deg, #2e7d32, #1b5e20) !important;
+  border-color: #1b5e20 !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 12px rgba(46, 125, 50, 0.2) !important;
+}
+
+.chrono-xxl-overlay.light-mode .chrono-xxl-key.key-del {
+  background: #ffebee !important;
+  border-color: #ffcdd2 !important;
+  color: #c62828 !important;
+}
+
+.chrono-xxl-overlay.light-mode .chrono-xxl-key.key-del:hover {
+  background: #ffcdd2 !important;
+}
+
+.chrono-xxl-overlay.light-mode .chrono-xxl-undo {
+  background: #fff3e0 !important;
+  border-color: #ffe0b2 !important;
+  color: #e65100 !important;
+}

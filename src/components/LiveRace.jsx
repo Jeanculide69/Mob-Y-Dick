@@ -1224,6 +1224,15 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
     canvas.height = 240 + limit.length * 64 + 60
     const ctx = canvas.getContext('2d')
 
+    const truncateText = (ctxObj, text, maxWidth) => {
+      if (ctxObj.measureText(text).width <= maxWidth) return text
+      let truncated = text
+      while (truncated.length > 0 && ctxObj.measureText(truncated + '...').width > maxWidth) {
+        truncated = truncated.slice(0, -1)
+      }
+      return truncated + '...'
+    }
+
     const drawAll = (qrImg = null) => {
       // 1. Background Gradient
       const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height)
@@ -1288,12 +1297,14 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
 
         ctx.fillStyle = '#c084fc'
         ctx.font = 'bold 12px sans-serif'
-        ctx.fillText('⚡ MEILLEUR TOUR GLOBAL', 54, startY + 6)
+        const labelText = '⚡ MEILLEUR TOUR GLOBAL'
+        ctx.fillText(labelText, 54, startY + 6)
+        const labelWidth = ctx.measureText(labelText).width
 
         ctx.fillStyle = '#ffffff'
         ctx.font = 'bold 13px sans-serif'
         const bestTimeText = `${bestTeam.pilot_1_name} (Moto #${bestTeam.moto_number})  •  ${formatTime(bestOverall)}`
-        ctx.fillText(bestTimeText, 215, startY + 6)
+        ctx.fillText(bestTimeText, 54 + labelWidth + 15, startY + 6)
         startY += 45
       }
 
@@ -1343,27 +1354,27 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
         ctx.fillStyle = '#ffffff'
         ctx.font = 'bold 16px sans-serif'
         const riderText = `${r.pilot_1_name}${r.pilot_2_name ? ` & ${r.pilot_2_name}` : ''} (Moto #${r.moto_number})`
-        ctx.fillText(riderText, 100, y + 10)
+        const truncatedRiderText = truncateText(ctx, riderText, 290)
+        ctx.fillText(truncatedRiderText, 100, y + 10)
 
         // Category Badge
         const catLabel = formatCategoryShort(r.category || '')
-        const nameWidth = ctx.measureText(riderText).width
         ctx.fillStyle = 'rgba(255, 255, 255, 0.08)'
         ctx.beginPath()
-        ctx.roundRect(115 + nameWidth, y - 9, ctx.measureText(catLabel).width + 12, 18, 9)
+        ctx.roundRect(400, y - 9, ctx.measureText(catLabel).width + 12, 18, 9)
         ctx.fill()
         ctx.fillStyle = '#aaaaaa'
         ctx.font = 'bold 11px sans-serif'
-        ctx.fillText(catLabel, 121 + nameWidth, y + 3)
+        ctx.fillText(catLabel, 406, y + 3)
 
         // Laps and Best Lap
         ctx.fillStyle = '#ff5500'
         ctx.font = 'bold 15px sans-serif'
-        ctx.fillText(`${r.totalLaps} tours`, 520, y + 10)
+        ctx.fillText(`${r.totalLaps} tours`, 490, y + 10)
 
         ctx.fillStyle = '#888888'
         ctx.font = '13px monospace'
-        ctx.fillText(`M: ${formatTime(r.bestLap)}`, 640, y + 10)
+        ctx.fillText(`M: ${formatTime(r.bestLap)}`, 590, y + 10)
       })
 
       // 7. Footer Watermark
