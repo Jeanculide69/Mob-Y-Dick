@@ -854,6 +854,38 @@
   color: var(--text-secondary);
 }
 
+/* junior winner */
+.junior-winner-card {
+  padding: 24px;
+  border-radius: 16px;
+  border: 1px solid rgba(0, 176, 255, 0.3);
+  background: linear-gradient(135deg, rgba(0, 176, 255, 0.1) 0%, rgba(0, 230, 118, 0.05) 100%);
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  box-shadow: 0 4px 20px rgba(0, 176, 255, 0.05);
+}
+
+.junior-crown-badge {
+  display: inline-block;
+  padding: 4px 12px;
+  background: rgba(0, 176, 255, 0.2);
+  border: 1px solid rgba(0, 176, 255, 0.4);
+  color: #00b0ff;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
+.junior-pilot-name {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #00b0ff;
+  text-shadow: 0 0 10px rgba(0, 176, 255, 0.3);
+}
+
 /* manual lap form */
 .manual-lap-form {
   padding: 20px;

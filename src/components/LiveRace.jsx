@@ -1139,40 +1139,257 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
   const computeLapSplits = (riderLaps) =>
     riderLaps.map((lap, idx) => idx === 0 ? lap.lap_time_ms : lap.lap_time_ms - riderLaps[idx - 1].lap_time_ms)
 
+  const getFemaleWinner = () => {
+    const femaleTeams = teams.filter(t => 
+      t.pilot_1_sex === 'F' || 
+      t.pilot_2_sex === 'F' || 
+      t.pilot_3_sex === 'F'
+    )
+    if (femaleTeams.length === 0) return null
+
+    const rankedFemale = femaleTeams.map(team => {
+      const teamLaps = laps.filter(l => l.team_id === team.id).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
+      const actualLapsCount = teamLaps.length
+      const totalLaps = Math.max(0, actualLapsCount - (team.penalty_laps || 0))
+      
+      let bestLap = null
+      if (actualLapsCount > 0) {
+        const durations = teamLaps.map((lap, idx) => {
+          if (idx === 0) return lap.lap_time_ms
+          return lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms
+        })
+        bestLap = Math.min(...durations)
+      }
+
+      return {
+        ...team,
+        totalLaps,
+        bestLap,
+        lastPassageTime: actualLapsCount > 0 ? teamLaps[actualLapsCount - 1].lap_time_ms : Infinity
+      }
+    }).filter(t => t.totalLaps > 0)
+      .sort((a, b) => {
+        if (b.totalLaps !== a.totalLaps) {
+          return b.totalLaps - a.totalLaps
+        }
+        return a.lastPassageTime - b.lastPassageTime
+      })
+
+    return rankedFemale[0] || null
+  }
+
+  const getJuniorWinner = () => {
+    const juniorTeams = teams.filter(t => 
+      t.pilot_1_sex === 'J' || 
+      t.pilot_2_sex === 'J' || 
+      t.pilot_3_sex === 'J'
+    )
+    if (juniorTeams.length === 0) return null
+
+    const rankedJunior = juniorTeams.map(team => {
+      const teamLaps = laps.filter(l => l.team_id === team.id).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
+      const actualLapsCount = teamLaps.length
+      const totalLaps = Math.max(0, actualLapsCount - (team.penalty_laps || 0))
+      
+      let bestLap = null
+      if (actualLapsCount > 0) {
+        const durations = teamLaps.map((lap, idx) => {
+          if (idx === 0) return lap.lap_time_ms
+          return lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms
+        })
+        bestLap = Math.min(...durations)
+      }
+
+      return {
+        ...team,
+        totalLaps,
+        bestLap,
+        lastPassageTime: actualLapsCount > 0 ? teamLaps[actualLapsCount - 1].lap_time_ms : Infinity
+      }
+    }).filter(t => t.totalLaps > 0)
+      .sort((a, b) => {
+        if (b.totalLaps !== a.totalLaps) {
+          return b.totalLaps - a.totalLaps
+        }
+        return a.lastPassageTime - b.lastPassageTime
+      })
+
+    return rankedJunior[0] || null
+  }
+
   const generateCard = (rankingsList) => {
     const canvas = document.createElement('canvas')
+    const limit = rankingsList.slice(0, 10)
     canvas.width = 800
-    canvas.height = Math.max(640, 220 + rankingsList.length * 58)
+    canvas.height = 240 + limit.length * 64 + 60
     const ctx = canvas.getContext('2d')
-    ctx.fillStyle = '#0a0a0a'; ctx.fillRect(0, 0, canvas.width, canvas.height)
-    ctx.fillStyle = '#ff5500'; ctx.fillRect(0, 0, canvas.width, 6)
-    ctx.fillStyle = '#ff5500'; ctx.font = 'bold 42px sans-serif'
-    ctx.fillText('MOB Y DICK', 40, 70)
-    ctx.fillStyle = '#ffffff'; ctx.font = '20px sans-serif'
-    ctx.fillText(session?.name || 'Course', 40, 105)
-    ctx.fillStyle = '#666'; ctx.font = '14px sans-serif'
-    ctx.fillText(eventInfo ? `${eventInfo.location} • ${new Date(eventInfo.date).toLocaleDateString('fr-FR')}` : '', 40, 130)
-    if (bestTeam) {
-      ctx.fillStyle = '#a855f7'; ctx.font = 'bold 14px sans-serif'
-      ctx.fillText(`⚡ Meilleur tour : ${bestTeam.pilot_1_name} — ${formatTime(bestOverall)}`, 40, 158)
+
+    const drawAll = (qrImg = null) => {
+      // 1. Background Gradient
+      const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height)
+      grad.addColorStop(0, '#0d0d0d')
+      grad.addColorStop(0.5, '#151515')
+      grad.addColorStop(1, '#1d0f07') // warm orange touch
+      ctx.fillStyle = grad
+      ctx.fillRect(0, 0, canvas.width, canvas.height)
+
+      // 2. Double Border Accent
+      ctx.strokeStyle = 'rgba(255, 85, 0, 0.2)'
+      ctx.lineWidth = 2
+      ctx.strokeRect(15, 15, canvas.width - 30, canvas.height - 30)
+
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.03)'
+      ctx.lineWidth = 1
+      ctx.strokeRect(20, 20, canvas.width - 40, canvas.height - 40)
+
+      // 3. Header Text
+      ctx.fillStyle = '#ff5500'
+      ctx.font = 'bold 44px sans-serif'
+      ctx.fillText('MOB Y DICK', 40, 75)
+
+      ctx.fillStyle = '#ffffff'
+      ctx.font = 'bold 22px sans-serif'
+      ctx.fillText(session?.name || 'Résultats de la Course', 40, 112)
+
+      ctx.fillStyle = '#999999'
+      ctx.font = '14px sans-serif'
+      ctx.fillText(eventInfo ? `📍 ${eventInfo.location}  •  📅 ${new Date(eventInfo.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}` : '', 40, 138)
+
+      // 4. QR Code Image (if loaded)
+      if (qrImg) {
+        ctx.save()
+        // Draw frame around QR Code
+        ctx.fillStyle = 'rgba(255, 85, 0, 0.05)'
+        ctx.strokeStyle = 'rgba(255, 85, 0, 0.2)'
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.roundRect(635, 30, 125, 125, 10)
+        ctx.fill()
+        ctx.stroke()
+
+        // Clip the image with rounded corners
+        ctx.beginPath()
+        ctx.roundRect(640, 35, 115, 115, 8)
+        ctx.clip()
+        ctx.drawImage(qrImg, 640, 35, 115, 115)
+        ctx.restore()
+      }
+
+      // 5. Best Lap Banner
+      let startY = 175
+      if (bestTeam) {
+        ctx.fillStyle = 'rgba(168, 85, 247, 0.08)'
+        ctx.strokeStyle = 'rgba(168, 85, 247, 0.3)'
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.roundRect(40, startY - 18, 570, 38, 8)
+        ctx.fill()
+        ctx.stroke()
+
+        ctx.fillStyle = '#c084fc'
+        ctx.font = 'bold 12px sans-serif'
+        ctx.fillText('⚡ MEILLEUR TOUR GLOBAL', 54, startY + 6)
+
+        ctx.fillStyle = '#ffffff'
+        ctx.font = 'bold 13px sans-serif'
+        const bestTimeText = `${bestTeam.pilot_1_name} (Moto #${bestTeam.moto_number})  •  ${formatTime(bestOverall)}`
+        ctx.fillText(bestTimeText, 215, startY + 6)
+        startY += 45
+      }
+
+      // 6. Rankings Grid
+      limit.forEach((r, i) => {
+        const y = startY + i * 64
+        
+        // Row Card Container
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.02)'
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)'
+        if (i === 0) {
+          ctx.fillStyle = 'rgba(255, 85, 0, 0.05)'
+          ctx.strokeStyle = 'rgba(255, 85, 0, 0.2)'
+        }
+        ctx.lineWidth = 1
+        ctx.beginPath()
+        ctx.roundRect(40, y - 20, 720, 50, 8)
+        ctx.fill()
+        ctx.stroke()
+
+        // Rank Badge
+        const colors = ['#ffd700', '#c0c0c0', '#cd7f32']
+        if (i < 3) {
+          ctx.fillStyle = colors[i]
+          ctx.beginPath()
+          ctx.arc(68, y + 5, 14, 0, Math.PI * 2)
+          ctx.fill()
+
+          ctx.fillStyle = '#0a0a0a'
+          ctx.font = 'bold 14px sans-serif'
+          ctx.textAlign = 'center'
+          ctx.fillText(`${i + 1}`, 68, y + 10)
+        } else {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.05)'
+          ctx.beginPath()
+          ctx.arc(68, y + 5, 14, 0, Math.PI * 2)
+          ctx.fill()
+
+          ctx.fillStyle = '#888888'
+          ctx.font = 'bold 14px sans-serif'
+          ctx.textAlign = 'center'
+          ctx.fillText(`${i + 1}`, 68, y + 10)
+        }
+        ctx.textAlign = 'left'
+
+        // Rider & Moto Names
+        ctx.fillStyle = '#ffffff'
+        ctx.font = 'bold 16px sans-serif'
+        const riderText = `${r.pilot_1_name}${r.pilot_2_name ? ` & ${r.pilot_2_name}` : ''} (Moto #${r.moto_number})`
+        ctx.fillText(riderText, 100, y + 10)
+
+        // Category Badge
+        const catLabel = formatCategoryShort(r.category || '')
+        const nameWidth = ctx.measureText(riderText).width
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)'
+        ctx.beginPath()
+        ctx.roundRect(115 + nameWidth, y - 9, ctx.measureText(catLabel).width + 12, 18, 9)
+        ctx.fill()
+        ctx.fillStyle = '#aaaaaa'
+        ctx.font = 'bold 11px sans-serif'
+        ctx.fillText(catLabel, 121 + nameWidth, y + 3)
+
+        // Laps and Best Lap
+        ctx.fillStyle = '#ff5500'
+        ctx.font = 'bold 15px sans-serif'
+        ctx.fillText(`${r.totalLaps} tours`, 520, y + 10)
+
+        ctx.fillStyle = '#888888'
+        ctx.font = '13px monospace'
+        ctx.fillText(`M: ${formatTime(r.bestLap)}`, 640, y + 10)
+      })
+
+      // 7. Footer Watermark
+      ctx.fillStyle = '#ff5500'
+      ctx.font = 'bold 16px sans-serif'
+      ctx.fillText('mob-y-dick.vercel.app', 40, canvas.height - 24)
+
+      ctx.fillStyle = '#555555'
+      ctx.font = '12px sans-serif'
+      ctx.textAlign = 'right'
+      ctx.fillText(`Généré le ${new Date().toLocaleDateString('fr-FR')} à ${new Date().toLocaleTimeString('fr-FR', {hour: '2-digit', minute:'2-digit'})}`, canvas.width - 40, canvas.height - 24)
+      ctx.textAlign = 'left'
+
+      // Download
+      const a = document.createElement('a')
+      a.href = canvas.toDataURL('image/png')
+      a.download = `resultats-${session?.name || 'mob-y-dick'}.png`
+      a.click()
     }
-    rankingsList.slice(0, 10).forEach((r, i) => {
-      const y = 200 + i * 56
-      const colors = ['#ffd700', '#c0c0c0', '#cd7f32']
-      ctx.fillStyle = i < 3 ? colors[i] : '#ffffff'
-      ctx.font = `bold ${i < 3 ? 22 : 17}px sans-serif`
-      ctx.fillText(`${i + 1}. ${r.pilot_1_name}${r.pilot_2_name ? ` & ${r.pilot_2_name}` : ''}`, 50, y)
-      ctx.fillStyle = '#ff5500'; ctx.font = '15px monospace'
-      ctx.fillText(`${r.totalLaps} tours  •  ${formatTime(r.bestLap)}`, 500, y)
-      if (r.gapToLeader && i > 0) { ctx.fillStyle = '#888'; ctx.font = '13px sans-serif'; ctx.fillText(r.gapToLeader, 500, y + 18) }
-      ctx.strokeStyle = 'rgba(255,255,255,0.06)'; ctx.beginPath(); ctx.moveTo(40, y + 22); ctx.lineTo(760, y + 22); ctx.stroke()
-    })
-    ctx.fillStyle = '#ff5500'; ctx.font = 'bold 15px sans-serif'
-    ctx.fillText('mobydick.fr', 40, canvas.height - 24)
-    const a = document.createElement('a')
-    a.href = canvas.toDataURL('image/png')
-    a.download = `resultats-mob-y-dick.png`
-    a.click()
+
+    // Load QR code public image first
+    const qrImg = new Image()
+    qrImg.crossOrigin = 'anonymous'
+    qrImg.onload = () => drawAll(qrImg)
+    qrImg.onerror = () => drawAll(null)
+    qrImg.src = '/QRCODEMYD.png'
   }
 
   // Lecture du classement (wrapper sur le memo)
@@ -1192,6 +1409,23 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
   const allRankings  = getRankings(selectedCategory)
   const recentLaps   = laps.slice(0, 8)
   const totalLaps    = laps.length
+
+  const femaleWinner = selectedCategory === 'all' ? getFemaleWinner() : null
+  const juniorWinner = selectedCategory === 'all' ? getJuniorWinner() : null
+
+  const femaleNames = []
+  if (femaleWinner) {
+    if (femaleWinner.pilot_1_sex === 'F') femaleNames.push(femaleWinner.pilot_1_name)
+    if (femaleWinner.pilot_2_sex === 'F') femaleNames.push(femaleWinner.pilot_2_name)
+    if (femaleWinner.pilot_3_sex === 'F') femaleNames.push(femaleWinner.pilot_3_name)
+  }
+
+  const juniorNames = []
+  if (juniorWinner) {
+    if (juniorWinner.pilot_1_sex === 'J') juniorNames.push(juniorWinner.pilot_1_name)
+    if (juniorWinner.pilot_2_sex === 'J') juniorNames.push(juniorWinner.pilot_2_name)
+    if (juniorWinner.pilot_3_sex === 'J') juniorNames.push(juniorWinner.pilot_3_name)
+  }
 
   // ── Modes overlay : pré-course (drapeau "départ imminent") et post-course
   //    ("fin de la course" 5min + auto-exit). Calculés à partir du status
@@ -1399,7 +1633,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
               {/* Share button */}
               <div className="live-hero-actions">
                 <button className="btn btn-ghost live-share-btn" onClick={handleShare}>
-                  {copied ? '✅ Lien copié !' : '🔗 Partager ce live'}
+                  {copied ? '✅ Lien copié !' : (isFinished ? '🔗 Partager ces résultats' : '🔗 Partager ce live')}
                 </button>
                 {isFinished && (
                   <button className="btn btn-ghost live-share-btn" onClick={() => generateCard(allRankings)} style={{ borderColor: 'rgba(168,85,247,0.4)', color: '#a855f7' }}>
@@ -1684,6 +1918,45 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
           {/* ── Onglet Podiums ── */}
           {activeViewTab === 'podiums' && (
             <div className="live-podiums-section" style={{ width: '100%' }}>
+                {/* Overall winners side by side */}
+                {selectedCategory === 'all' && (femaleWinner || juniorWinner) && (
+                  <div className="live-special-winners-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+                    {femaleWinner && (
+                      <div className="female-winner-card glass" style={{ margin: 0 }}>
+                        <div className="female-winner-header">
+                          <span className="female-crown-badge">👑 Coupe Féminine</span>
+                          <h4>Gagnante Féminine Toute Catégorie</h4>
+                        </div>
+                        <div className="female-winner-body">
+                          <div className="female-winner-trophy">🏆</div>
+                          <div className="female-winner-details">
+                            <span className="female-pilot-name">{femaleNames.join(' & ')}</span>
+                            <span className="female-pilot-team">Moto #{femaleWinner.moto_number} — {femaleWinner.category}</span>
+                            <span className="female-pilot-stats">{femaleWinner.totalLaps} Tours complets — Meilleur tour : {formatTime(femaleWinner.bestLap)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {juniorWinner && (
+                      <div className="junior-winner-card glass" style={{ margin: 0 }}>
+                        <div className="female-winner-header">
+                          <span className="junior-crown-badge">👑 Coupe Junior</span>
+                          <h4>Gagnant Junior Toute Catégorie</h4>
+                        </div>
+                        <div className="female-winner-body">
+                          <div className="female-winner-trophy">🏆</div>
+                          <div className="female-winner-details">
+                            <span className="junior-pilot-name">{juniorNames.join(' & ')}</span>
+                            <span className="female-pilot-team">Moto #{juniorWinner.moto_number} — {juniorWinner.category}</span>
+                            <span className="female-pilot-stats">{juniorWinner.totalLaps} Tours complets — Meilleur tour : {formatTime(juniorWinner.bestLap)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <h2 className="live-podiums-title">🏆 Podiums {selectedCategory !== 'all' ? `— ${selectedCategory}` : 'par Catégorie'}</h2>
                 <div className="live-podiums-grid">
                   {(selectedCategory === 'all' ? categories : [selectedCategory]).map(cat => {

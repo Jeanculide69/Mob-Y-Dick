@@ -24,6 +24,8 @@ export default function Championnat() {
   const [loading, setLoading]               = useState(true)
   const [selectedCat, setSelectedCat]       = useState('all')
   const [allCategories, setAllCategories]   = useState([])
+  const [champFemaleWinner, setChampFemaleWinner] = useState(null)
+  const [champJuniorWinner, setChampJuniorWinner] = useState(null)
 
   const loadChampionship = async () => {
     try {
@@ -71,6 +73,8 @@ export default function Championnat() {
       if (sessions.length === 0) {
         setLeaderboard({})
         setAllCategories([])
+        setChampFemaleWinner(null)
+        setChampJuniorWinner(null)
         return
       }
 
@@ -86,7 +90,7 @@ export default function Championnat() {
       // 4. Build laps accumulator: { pilotKey → { name, category, laps, wins, podiums, sessionResults, bestLap, totalTime } }
       const accumulator = {}
 
-      const addLaps = (name, cat, lapsCount, sessionName, position, bestLapMs, totalTimeMs) => {
+      const addLaps = (name, cat, lapsCount, sessionName, position, bestLapMs, totalTimeMs, team) => {
         const key = `${cat}__${name}`
         if (!accumulator[key]) {
           accumulator[key] = { 
@@ -97,7 +101,8 @@ export default function Championnat() {
             podiums: 0, 
             sessionResults: [], 
             bestLap: null,
-            totalTime: 0 
+            totalTime: 0,
+            team: team
           }
         }
         accumulator[key].laps += lapsCount
@@ -143,7 +148,7 @@ export default function Championnat() {
 
           ranked.forEach((r, i) => {
             const identifier = `Moto ${r.team.moto_number}`
-            addLaps(identifier, cat, r.totalLaps, sess.name, i + 1, r.bestLap, r.lastPassageTime)
+            addLaps(identifier, cat, r.totalLaps, sess.name, i + 1, r.bestLap, r.lastPassageTime, r.team)
           })
         })
       })
@@ -162,6 +167,33 @@ export default function Championnat() {
         if (entries.length > 0) board[cat] = entries
       })
       setLeaderboard(board)
+
+      // Calculate championship overall winners
+      const allEntries = Object.values(accumulator)
+      const femaleEntries = allEntries.filter(e => 
+        e.team && (
+          e.team.pilot_1_sex === 'F' || 
+          e.team.pilot_2_sex === 'F' || 
+          e.team.pilot_3_sex === 'F'
+        )
+      ).sort((a, b) => {
+        if (b.laps !== a.laps) return b.laps - a.laps
+        return a.totalTime - b.totalTime
+      })
+
+      const juniorEntries = allEntries.filter(e => 
+        e.team && (
+          e.team.pilot_1_sex === 'J' || 
+          e.team.pilot_2_sex === 'J' || 
+          e.team.pilot_3_sex === 'J'
+        )
+      ).sort((a, b) => {
+        if (b.laps !== a.laps) return b.laps - a.laps
+        return a.totalTime - b.totalTime
+      })
+
+      setChampFemaleWinner(femaleEntries[0] || null)
+      setChampJuniorWinner(juniorEntries[0] || null)
     }, 0)
 
     return () => clearTimeout(timer)
@@ -188,6 +220,22 @@ export default function Championnat() {
 
   const hasData = Object.keys(leaderboard).length > 0 && selectedSessions.length > 0
   const displayedCats = selectedCat === 'all' ? allCategories : [selectedCat]
+
+  const champFemaleNames = []
+  if (champFemaleWinner && champFemaleWinner.team) {
+    const t = champFemaleWinner.team
+    if (t.pilot_1_sex === 'F') champFemaleNames.push(t.pilot_1_name)
+    if (t.pilot_2_sex === 'F') champFemaleNames.push(t.pilot_2_name)
+    if (t.pilot_3_sex === 'F') champFemaleNames.push(t.pilot_3_name)
+  }
+
+  const champJuniorNames = []
+  if (champJuniorWinner && champJuniorWinner.team) {
+    const t = champJuniorWinner.team
+    if (t.pilot_1_sex === 'J') champJuniorNames.push(t.pilot_1_name)
+    if (t.pilot_2_sex === 'J') champJuniorNames.push(t.pilot_2_name)
+    if (t.pilot_3_sex === 'J') champJuniorNames.push(t.pilot_3_name)
+  }
 
   return (
     <section className="section page-top">
@@ -285,6 +333,45 @@ export default function Championnat() {
                 ? "Veuillez cocher au moins une manche ci-dessus pour afficher les totaux."
                 : "Le championnat affiche les résultats des manches officiellement publiées. Revenez après la prochaine course !"}
             </p>
+          </div>
+        )}
+
+        {/* Overall championship winners side-by-side */}
+        {hasData && selectedCat === 'all' && (champFemaleWinner || champJuniorWinner) && (
+          <div className="champ-special-winners-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', marginBottom: '32px' }}>
+            {champFemaleWinner && (
+              <div className="female-winner-card glass" style={{ margin: 0 }}>
+                <div className="female-winner-header">
+                  <span className="female-crown-badge">👑 Coupe Féminine du Championnat</span>
+                  <h4>Championne Féminine</h4>
+                </div>
+                <div className="female-winner-body">
+                  <div className="female-winner-trophy">🏆</div>
+                  <div className="female-winner-details">
+                    <span className="female-pilot-name">{champFemaleNames.join(' & ')}</span>
+                    <span className="female-pilot-team">{champFemaleWinner.name} — {champFemaleWinner.category}</span>
+                    <span className="female-pilot-stats">{champFemaleWinner.laps} Tours cumulés — Meilleur tour : {formatTime(champFemaleWinner.bestLap)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {champJuniorWinner && (
+              <div className="junior-winner-card glass" style={{ margin: 0 }}>
+                <div className="female-winner-header">
+                  <span className="junior-crown-badge">👑 Coupe Junior du Championnat</span>
+                  <h4>Champion Junior</h4>
+                </div>
+                <div className="female-winner-body">
+                  <div className="female-winner-trophy">🏆</div>
+                  <div className="female-winner-details">
+                    <span className="junior-pilot-name">{champJuniorNames.join(' & ')}</span>
+                    <span className="female-pilot-team">{champJuniorWinner.name} — {champJuniorWinner.category}</span>
+                    <span className="female-pilot-stats">{champJuniorWinner.laps} Tours cumulés — Meilleur tour : {formatTime(champJuniorWinner.bestLap)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

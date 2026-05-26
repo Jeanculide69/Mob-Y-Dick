@@ -448,6 +448,45 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
     return rankedFemale[0] || null
   }
 
+  const getJuniorWinner = () => {
+    const juniorTeams = teams.filter(t => 
+      t.pilot_1_sex === 'J' || 
+      t.pilot_2_sex === 'J' || 
+      t.pilot_3_sex === 'J'
+    )
+    if (juniorTeams.length === 0) return null
+
+    const rankedJunior = juniorTeams.map(team => {
+      const teamLaps = laps.filter(l => l.team_id === team.id).sort((a, b) => a.lap_time_ms - b.lap_time_ms)
+      const actualLapsCount = teamLaps.length
+      const totalLaps = Math.max(0, actualLapsCount - (team.penalty_laps || 0))
+      
+      let bestLap = null
+      if (actualLapsCount > 0) {
+        const durations = teamLaps.map((lap, idx) => {
+          if (idx === 0) return lap.lap_time_ms
+          return lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms
+        })
+        bestLap = Math.min(...durations)
+      }
+
+      return {
+        ...team,
+        totalLaps,
+        bestLap,
+        lastPassageTime: actualLapsCount > 0 ? teamLaps[actualLapsCount - 1].lap_time_ms : Infinity
+      }
+    }).filter(t => t.totalLaps > 0)
+      .sort((a, b) => {
+        if (b.totalLaps !== a.totalLaps) {
+          return b.totalLaps - a.totalLaps
+        }
+        return a.lastPassageTime - b.lastPassageTime
+      })
+
+    return rankedJunior[0] || null
+  }
+
   const checkAnomalies = () => {
     const foundAnomalies = []
     
@@ -1064,6 +1103,14 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
       if (femaleWinner.pilot_3_sex === 'F') femaleNames.push(femaleWinner.pilot_3_name)
     }
 
+    const juniorWinner = getJuniorWinner()
+    const juniorNames = []
+    if (juniorWinner) {
+      if (juniorWinner.pilot_1_sex === 'J') juniorNames.push(juniorWinner.pilot_1_name)
+      if (juniorWinner.pilot_2_sex === 'J') juniorNames.push(juniorWinner.pilot_2_name)
+      if (juniorWinner.pilot_3_sex === 'J') juniorNames.push(juniorWinner.pilot_3_name)
+    }
+
     return (
       <div className="race-setup">
         <div className="race-setup-header">
@@ -1119,21 +1166,42 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
         {/* Tab Contents */}
         {activeReviewTab === 'results' && (
           <div className="review-tab-content fade-in">
-            {/* Gagnante Féminine Overall */}
-            {femaleWinner && (
-              <div className="female-winner-card glass">
-                <div className="female-winner-header">
-                  <span className="female-crown-badge">👑 Coupe Féminine</span>
-                  <h4>Gagnante Féminine Toute Catégorie</h4>
-                </div>
-                <div className="female-winner-body">
-                  <div className="female-winner-trophy">🏆</div>
-                  <div className="female-winner-details">
-                    <span className="female-pilot-name">{femaleNames.join(' & ')}</span>
-                    <span className="female-pilot-team">Moto #{femaleWinner.moto_number} — {femaleWinner.category}</span>
-                    <span className="female-pilot-stats">{femaleWinner.totalLaps} Tours complets — Meilleur tour : {formatTime(femaleWinner.bestLap)}</span>
+            {/* Overall Winners */}
+            {(femaleWinner || juniorWinner) && (
+              <div className="special-winners-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', marginBottom: '24px' }}>
+                {femaleWinner && (
+                  <div className="female-winner-card glass" style={{ margin: 0 }}>
+                    <div className="female-winner-header">
+                      <span className="female-crown-badge">👑 Coupe Féminine</span>
+                      <h4>Gagnante Féminine Toute Catégorie</h4>
+                    </div>
+                    <div className="female-winner-body">
+                      <div className="female-winner-trophy">🏆</div>
+                      <div className="female-winner-details">
+                        <span className="female-pilot-name">{femaleNames.join(' & ')}</span>
+                        <span className="female-pilot-team">Moto #{femaleWinner.moto_number} — {femaleWinner.category}</span>
+                        <span className="female-pilot-stats">{femaleWinner.totalLaps} Tours complets — Meilleur tour : {formatTime(femaleWinner.bestLap)}</span>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                )}
+
+                {juniorWinner && (
+                  <div className="junior-winner-card glass" style={{ margin: 0 }}>
+                    <div className="female-winner-header">
+                      <span className="junior-crown-badge">👑 Coupe Junior</span>
+                      <h4>Gagnant Junior Toute Catégorie</h4>
+                    </div>
+                    <div className="female-winner-body">
+                      <div className="female-winner-trophy">🏆</div>
+                      <div className="female-winner-details">
+                        <span className="junior-pilot-name">{juniorNames.join(' & ')}</span>
+                        <span className="female-pilot-team">Moto #{juniorWinner.moto_number} — {juniorWinner.category}</span>
+                        <span className="female-pilot-stats">{juniorWinner.totalLaps} Tours complets — Meilleur tour : {formatTime(juniorWinner.bestLap)}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
