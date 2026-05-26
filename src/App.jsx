@@ -530,6 +530,7 @@ function App() {
   const [editingItem, setEditingItem] = useState(null)
   const [formData, setFormData] = useState({})
   const [uploading, setUploading] = useState(false)
+  const [uploadStatusText, setUploadStatusText] = useState('')
 
   // Checkout Modal States (Client)
   const [checkoutProduct, setCheckoutProduct] = useState(null)
@@ -1113,7 +1114,7 @@ function App() {
     if (type === 'event') {
       setFormData(item ? { title: item.title, date: item.date, location: item.location, description: item.description } : { title: '', date: '', location: '', description: '' })
     } else if (type === 'gallery') {
-      setFormData({ title: '', type: 'photo', source: 'upload', file: null, embed_url: '' })
+      setFormData({ title: '', type: 'photo', source: 'upload', files: [], file: null, embed_url: '', ai_titling: true })
     } else if (type === 'product') {
       setFormData(item ? { 
         name: item.name, 
@@ -1181,21 +1182,84 @@ function App() {
           }])
           if (insertErr) throw new Error(`Erreur Supabase : ${insertErr.message}`)
         } else {
-          if (!formData.file) { alert('Veuillez sélectionner un fichier.'); setUploading(false); return }
-          const file = formData.file
-          if (file.size > 10 * 1024 * 1024) {
-            alert(`Fichier trop volumineux (${(file.size / 1024 / 1024).toFixed(1)} Mo). Maximum : 10 Mo.`)
-            setUploading(false); return
+          const files = formData.files || (formData.file ? [formData.file] : [])
+          if (files.length === 0) { 
+            alert('Veuillez sélectionner au moins un fichier.'); 
+            setUploading(false); 
+            return 
           }
-          const fileName = `${Date.now()}.${file.name.split('.').pop()}`
-          const { error } = await supabase.storage.from('Gallery').upload(fileName, file)
-          if (error) throw error
-          const { data: { publicUrl } } = supabase.storage.from('Gallery').getPublicUrl(fileName)
-          const { error: insertErr2 } = await supabase.from('gallery').insert([{
-            title: formData.title, type: formData.type,
-            url: publicUrl, file_name: fileName, source: 'upload'
-          }])
-          if (insertErr2) throw new Error(`Erreur Supabase : ${insertErr2.message}`)
+
+          const geminiKey = import.meta.env.VITE_GEMINI_API_KEY || localStorage.getItem('myd_gemini_api_key') || ''
+          const useAi = formData.ai_titling !== false && formData.type === 'photo' && geminiKey
+
+          for (let idx = 0; idx < files.length; idx++) {
+            const file = files[idx]
+            if (file.size > 10 * 1024 * 1024) {
+              throw new Error(`Le fichier "${file.name}" dépasse 10 Mo.`)
+            }
+
+            let finalTitle = formData.title || file.name.split('.')[0]
+            if (files.length > 1 && !useAi && formData.title) {
+              finalTitle = `${formData.title} #${idx + 1}`
+            }
+
+            if (useAi && file.type.startsWith('image/')) {
+              setUploadStatusText(`🤖 IA : Analyse de l'image ${idx + 1}/${files.length}...`)
+              try {
+                const base64Data = await new Promise((resolve, reject) => {
+                  const reader = new FileReader()
+                  reader.readAsDataURL(file)
+                  reader.onload = () => resolve(reader.result.split(',')[1])
+                  reader.onerror = error => reject(error)
+                })
+
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    contents: [{
+                      parts: [
+                        { text: "Tu es un assistant expert pour la team de mobcross Mob Y Dick. Analyse cette photo et propose un titre court, stylé et dynamique en français (maximum 6 mots) décrivant l'action ou la scène pour la galerie d'actualités. Réponds uniquement avec le titre brut, sans guillemets, sans explications, sans ponctuation finale." },
+                        {
+                          inlineData: {
+                            mimeType: file.type,
+                            data: base64Data
+                          }
+                        }
+                      ]
+                    }]
+                  })
+                })
+
+                if (response.ok) {
+                  const resData = await response.json()
+                  const aiTitle = resData.candidates?.[0]?.content?.parts?.[0]?.text
+                  if (aiTitle && aiTitle.trim()) {
+                    finalTitle = aiTitle.trim().replace(/^["']|["']$/g, '')
+                  }
+                }
+              } catch (aiErr) {
+                console.warn(`AI titling failed for file ${file.name}, using fallback:`, aiErr)
+              }
+            }
+
+            setUploadStatusText(`📁 Upload de l'image ${idx + 1}/${files.length}...`)
+            const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${file.name.split('.').pop()}`
+            const { error: uploadError } = await supabase.storage.from('Gallery').upload(fileName, file)
+            if (uploadError) throw uploadError
+
+            const { data: { publicUrl } } = supabase.storage.from('Gallery').getPublicUrl(fileName)
+            const { error: insertErr } = await supabase.from('gallery').insert([{
+              title: finalTitle,
+              type: formData.type,
+              url: publicUrl,
+              file_name: fileName,
+              source: 'upload'
+            }])
+            if (insertErr) throw insertErr
+          }
         }
       } else if (activeForm === 'product') {
         const uploadedUrls = []
@@ -1300,6 +1364,7 @@ function App() {
       alert('Erreur lors de la sauvegarde: ' + err.message)
     } finally {
       setUploading(false)
+      setUploadStatusText('')
     }
   }
 
@@ -3294,7 +3359,13 @@ function App() {
 
                 {activeForm === 'gallery' && (
                   <>
-                    <input type="text" placeholder="Titre de l'image/vidéo" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} required />
+                    <input 
+                      type="text" 
+                      placeholder="Titre de l'image/vidéo (optionnel avec le titrage auto)" 
+                      value={formData.title} 
+                      onChange={e => setFormData({...formData, title: e.target.value})} 
+                      required={formData.source !== 'upload' || (formData.type === 'photo' && formData.ai_titling === false)} 
+                    />
                     <div className="admin-row">
                       <select value={formData.type} onChange={e => setFormData({...formData, type: e.target.value})}>
                         <option value="photo">📸 Photo</option>
@@ -3306,7 +3377,34 @@ function App() {
                       </select>
                     </div>
                     {formData.source === 'upload' ? (
-                      <input type="file" accept="image/*,video/*" onChange={e => setFormData({...formData, file: e.target.files[0]})} required />
+                      <>
+                        <input 
+                          type="file" 
+                          accept="image/*,video/*" 
+                          multiple 
+                          onChange={e => setFormData({...formData, files: Array.from(e.target.files)})} 
+                          required 
+                        />
+                        {formData.files && formData.files.length > 0 && (
+                          <div style={{ color: 'var(--accent)', fontSize: '0.85rem', marginTop: '5px' }}>
+                            📂 {formData.files.length} fichier(s) sélectionné(s)
+                          </div>
+                        )}
+                        {formData.type === 'photo' && (
+                          <div className="admin-row-checkbox" style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '10px', marginBottom: '10px' }}>
+                            <input 
+                              type="checkbox" 
+                              id="ai_titling" 
+                              checked={formData.ai_titling !== false} 
+                              onChange={e => setFormData({...formData, ai_titling: e.target.checked})} 
+                              style={{ width: 'auto', margin: 0 }} 
+                            />
+                            <label htmlFor="ai_titling" style={{ color: '#fff', fontSize: '0.85rem', cursor: 'pointer' }}>
+                              🤖 Titrage automatique par l'IA (Gemini)
+                            </label>
+                          </div>
+                        )}
+                      </>
                     ) : (
                       <>
                         <input
@@ -3508,7 +3606,7 @@ function App() {
                 )}
 
                 <button type="submit" className="btn btn-primary" style={{ width: '100%', marginTop: '16px' }} disabled={uploading}>
-                  {uploading ? 'Enregistrement en cours...' : 'Enregistrer'}
+                  {uploading ? (uploadStatusText || 'Enregistrement en cours...') : 'Enregistrer'}
                 </button>
               </form>
 
