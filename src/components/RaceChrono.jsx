@@ -690,15 +690,13 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
         )}
 
         {/* Penalty in XXL */}
-        {previewTeam && (
-          <button
-            className="chrono-xxl-penalty"
-            onClick={() => handleAddPenalty()}
-            disabled={!motoInput}
-          >
-            ⚠️ PÉNALITÉ (-1 Tour)
-          </button>
-        )}
+        <button
+          className="chrono-xxl-penalty"
+          onClick={() => handleAddPenalty()}
+          disabled={!motoInput || !previewTeam}
+        >
+          ⚠️ PÉNALITÉ (-1 Tour)
+        </button>
 
         {/* Numpad */}
         <div className="chrono-xxl-numpad">
@@ -810,16 +808,14 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
                 ⏱️ ENREGISTRER
               </button>
             </div>
-            {motoInput && (
-              <button
-                className="btn btn-error chrono-penalty-btn"
-                onClick={() => handleAddPenalty()}
-                disabled={!motoInput}
-                title="Ajouter une pénalité (-1 Tour)"
-              >
-                ⚠️ PÉNALITÉ (-1 Tour)
-              </button>
-            )}
+            <button
+              className="btn btn-error chrono-penalty-btn"
+              onClick={() => handleAddPenalty()}
+              disabled={!motoInput}
+              title="Ajouter une pénalité (-1 Tour)"
+            >
+              ⚠️ PÉNALITÉ (-1 Tour)
+            </button>
             {motoInput && previewTeam && (
               <div className="chrono-moto-preview">
                 {previewTeam.category} — {previewTeam.pilot_1_name}
