@@ -218,6 +218,25 @@
   white-space: nowrap;
 }
 
+.chrono-penalty-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px 16px !important;
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  background: rgba(255, 60, 60, 0.1) !important;
+  border: 1px solid rgba(255, 60, 60, 0.3) !important;
+  color: #ff6666 !important;
+  border-radius: 10px;
+  letter-spacing: 0.5px;
+  transition: all 0.2s;
+}
+
+.chrono-penalty-btn:hover {
+  background: rgba(255, 60, 60, 0.2) !important;
+  border-color: rgba(255, 60, 60, 0.5) !important;
+}
+
 .chrono-moto-preview {
   margin-top: 8px;
   font-size: 0.85rem;
@@ -744,6 +763,30 @@
   animation: undoPulse 1s ease-in-out infinite;
 }
 
+.chrono-xxl-penalty {
+  flex-shrink: 0;
+  width: 100%;
+  max-width: 460px;
+  margin: 4px auto 0;
+  padding: 12px;
+  background: rgba(255, 60, 60, 0.12);
+  border: 2px solid rgba(255, 60, 60, 0.35);
+  border-radius: 12px;
+  color: #ff6666;
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+  font-family: var(--font-heading);
+  letter-spacing: 0.5px;
+  transition: all 0.2s;
+}
+
+.chrono-xxl-penalty:hover {
+  background: rgba(255, 60, 60, 0.2);
+  border-color: rgba(255, 60, 60, 0.5);
+}
+
 /* Numpad */
 .chrono-xxl-numpad {
   flex: 1;
@@ -1030,4 +1073,27 @@ body.chrono-light-mode .video-overlay {
   background: #fff3e0 !important;
   border-color: #ffe0b2 !important;
   color: #e65100 !important;
+}
+
+/* Penalty buttons in light mode */
+.chrono-container.light-mode .chrono-penalty-btn {
+  background: #ffebee !important;
+  border-color: #ffcdd2 !important;
+  color: #c62828 !important;
+}
+
+.chrono-container.light-mode .chrono-penalty-btn:hover {
+  background: #ffcdd2 !important;
+  border-color: #ef9a9a !important;
+}
+
+.chrono-xxl-overlay.light-mode .chrono-xxl-penalty {
+  background: #ffebee !important;
+  border-color: #ffcdd2 !important;
+  color: #c62828 !important;
+}
+
+.chrono-xxl-overlay.light-mode .chrono-xxl-penalty:hover {
+  background: #ffcdd2 !important;
+  border-color: #ef9a9a !important;
 }
