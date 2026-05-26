@@ -2469,9 +2469,25 @@ body.shake-heavy  { animation: pemoteCameraShakeHeavy 1s ease-in-out; }
   .live-fab-btn .live-fab-label {
     font-size: 0.8rem;
   }
+  /* Sur mobile, on détache le menu du flex-container du FAB pour qu'il
+     occupe toute la largeur du viewport (sinon il déborde à gauche car
+     le container est ancré à right:130px et le menu fait 240px min). */
   .live-fab-menu {
-    min-width: 240px;
-    max-width: calc(100vw - 40px);
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 72px;
+    min-width: 0;
+    max-width: none;
+    max-height: calc(100dvh - 92px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  @supports (padding: env(safe-area-inset-bottom)) {
+    .live-fab-menu {
+      bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+      max-height: calc(100dvh - 92px - env(safe-area-inset-bottom, 0px));
+    }
   }
 }
 

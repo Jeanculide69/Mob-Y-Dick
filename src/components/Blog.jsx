@@ -231,6 +231,161 @@ L''un des grands points forts du Mobcross est son coût dérisoire comparé au M
 N''hésitez pas à venir nous voir lors des entraînements de la team Mob Y Dick ou à nous envoyer un message via notre formulaire de contact, nous serons ravis de vous conseiller pour votre premier montage !', 'Vous rêvez de tâter de la terre en 50cc ? Voici les conseils de la team pour choisir sa mobylette, s''équiper et obtenir sa licence.', '/motos/6c3be747-ab9a-4ae3-8414-d6e23a6698fe.jpg', 5, 'Bob', '2026-05-25T09:00:00Z'
 WHERE NOT EXISTS (SELECT 1 FROM blog WHERE title = 'Guide du Débutant : Comment se lancer dans le Mobcross ?');`
 
+const LOCAL_PHOTOS = [
+  { url: "/motos/2cd0ab6d-2472-4496-aac8-af9a290fbf14.jpg", title: "Beast R-1 Rouge (Profil)" },
+  { url: "/motos/05c88f5e-250c-41fa-bdc4-dc97b785cd54.jpg", title: "Storm O-4 Orange (Saut)" },
+  { url: "/motos/5e66cf75-e1de-41d7-8273-ed89eb9c8e3e.jpg", title: "Stealth N-67 Noire" },
+  { url: "/motos/6c3be747-ab9a-4ae3-8414-d6e23a6698fe.jpg", title: "Beast R-1 dans l'atelier" },
+  { url: "/motos/5bebfecf-6fbf-4327-a6ec-59df4de8dffd.jpg", title: "Storm O-4 au stand" },
+  { url: "/motos/6fae5df4-0ec9-4e66-ba64-885a453960df.jpg", title: "Stealth N-67 au départ" },
+  { url: "/motos/9ee5fac2-769a-461d-9f22-936c44a2b717.jpg", title: "Détails moteur Beast R-1" },
+  { url: "/motos/a5956043-1e5b-454c-82e1-db0afdad9d99.jpg", title: "Stealth N-67 en action" },
+  { url: "/motos/c2b259ef-7132-42f1-bbe6-225949254c2a.jpg", title: "Amortisseur arrière Storm O-4" }
+]
+
+const renderInlineMarkdown = (text) => {
+  if (!text) return '';
+  const regex = /(!\[.*?\]\(.*?\))|(\*\*.*?\*\*)|(`.*?`)/g;
+  const tokens = text.split(regex);
+  
+  return tokens.map((token, idx) => {
+    if (token === undefined || token === '') return null;
+    
+    if (token.startsWith('![') && token.endsWith(')')) {
+      const match = token.match(/!\[(.*?)\]\((.*?)\)/);
+      if (match) {
+        return (
+          <span key={idx} className="article-inline-image-wrapper">
+            <img src={match[2]} alt={match[1]} className="article-inline-img" />
+            {match[1] && <span className="article-inline-img-caption">{match[1]}</span>}
+          </span>
+        );
+      }
+    }
+    
+    if (token.startsWith('**') && token.endsWith('**')) {
+      return <strong key={idx}>{token.slice(2, -2)}</strong>;
+    }
+    
+    if (token.startsWith('`') && token.endsWith('`')) {
+      return <code key={idx}>{token.slice(1, -1)}</code>;
+    }
+    
+    return token;
+  });
+};
+
+const renderMarkdown = (content) => {
+  if (!content) return null;
+  const lines = content.split(/\r?\n/);
+  const elements = [];
+  let currentList = [];
+  let currentQuote = [];
+  let currentParagraph = [];
+
+  const flushList = (key) => {
+    if (currentList.length > 0) {
+      elements.push(
+        <ul key={`list-${key}`} className="article-ul">
+          {currentList.map((item, idx) => (
+            <li key={idx} className="article-li">
+              {renderInlineMarkdown(item)}
+            </li>
+          ))}
+        </ul>
+      );
+      currentList = [];
+    }
+  };
+
+  const flushQuote = (key) => {
+    if (currentQuote.length > 0) {
+      elements.push(
+        <blockquote key={`quote-${key}`} className="article-blockquote">
+          {renderInlineMarkdown(currentQuote.join('\n'))}
+        </blockquote>
+      );
+      currentQuote = [];
+    }
+  };
+
+  const flushParagraph = (key) => {
+    if (currentParagraph.length > 0) {
+      elements.push(
+        <p key={`p-${key}`} className="article-p">
+          {renderInlineMarkdown(currentParagraph.join(' '))}
+        </p>
+      );
+      currentParagraph = [];
+    }
+  };
+
+  const flushAll = (key) => {
+    flushList(key);
+    flushQuote(key);
+    flushParagraph(key);
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+
+    if (line === '') {
+      flushAll(i);
+      continue;
+    }
+
+    if (line.startsWith('- ') || line.startsWith('* ')) {
+      flushQuote(i);
+      flushParagraph(i);
+      currentList.push(line.substring(2));
+      continue;
+    }
+
+    if (line.startsWith('>')) {
+      flushList(i);
+      flushParagraph(i);
+      const quoteText = line.substring(1).replace(/^\s*"/, '').replace(/"\s*$/, '').trim();
+      currentQuote.push(quoteText);
+      continue;
+    }
+
+    if (line.startsWith('### ')) {
+      flushAll(i);
+      elements.push(<h3 key={i} className="article-h3">{renderInlineMarkdown(line.substring(4))}</h3>);
+      continue;
+    }
+    if (line.startsWith('## ')) {
+      flushAll(i);
+      elements.push(<h2 key={i} className="article-h2">{renderInlineMarkdown(line.substring(3))}</h2>);
+      continue;
+    }
+    if (line.startsWith('# ')) {
+      flushAll(i);
+      elements.push(<h1 key={i} className="article-h1">{renderInlineMarkdown(line.substring(2))}</h1>);
+      continue;
+    }
+
+    const imgMatch = line.match(/^!\[(.*?)\]\((.*?)\)$/);
+    if (imgMatch) {
+      flushAll(i);
+      elements.push(
+        <div key={i} className="article-image-container">
+          <img src={imgMatch[2]} alt={imgMatch[1]} className="article-inline-img" />
+          {imgMatch[1] && <span className="article-image-caption">{imgMatch[1]}</span>}
+        </div>
+      );
+      continue;
+    }
+
+    flushList(i);
+    flushQuote(i);
+    currentParagraph.push(line);
+  }
+
+  flushAll(lines.length);
+  return elements;
+};
+
 const Blog = ({ hasPermission, isAdmin, profile, navigate }) => {
   const [articles, setArticles] = useState([])
   const [selectedArticle, setSelectedArticle] = useState(null)
@@ -250,6 +405,13 @@ const Blog = ({ hasPermission, isAdmin, profile, navigate }) => {
     author: ''
   })
   const [submitting, setSubmitting] = useState(false)
+
+  // AI assistant states
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [galleryPhotos, setGalleryPhotos] = useState([])
+  const [selectedPhotos, setSelectedPhotos] = useState([])
+  const [customApiKey, setCustomApiKey] = useState(localStorage.getItem('myd_gemini_api_key') || '')
 
   const canManage = hasPermission('manage_blog') || isAdmin || (profile && ['moderator', 'organisateur'].includes(profile.role))
 
@@ -289,9 +451,143 @@ const Blog = ({ hasPermission, isAdmin, profile, navigate }) => {
     }
   }
 
+  const fetchPhotos = async () => {
+    if (!supabase) return
+    try {
+      const { data, error } = await supabase
+        .from('gallery')
+        .select('*')
+        .eq('type', 'photo')
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      if (data) {
+        setGalleryPhotos(data)
+      }
+    } catch (err) {
+      console.warn("Could not load gallery photos for AI Assistant:", err)
+    }
+  }
+
   useEffect(() => {
     fetchArticles()
+    fetchPhotos()
   }, [])
+
+  const handleAiGenerate = async () => {
+    const geminiKey = import.meta.env.VITE_GEMINI_API_KEY || customApiKey
+    if (!geminiKey) {
+      alert("Veuillez configurer une clé API Gemini (dans le champ dédié ou via VITE_GEMINI_API_KEY).")
+      return
+    }
+
+    setAiGenerating(true)
+
+    // Build the unique photos list
+    const seenUrls = new Set()
+    const combined = [
+      ...galleryPhotos.map(p => ({ url: p.url, title: p.title || 'Photo Galerie' })),
+      ...LOCAL_PHOTOS
+    ]
+    const uniquePhotos = []
+    combined.forEach(p => {
+      if (p.url && !seenUrls.has(p.url)) {
+        seenUrls.add(p.url)
+        uniquePhotos.push(p)
+      }
+    })
+
+    const promptText = `
+Tu es l'assistant de rédaction officiel de la team Mob Y Dick (mobcross de compétition).
+Rédige un article de blog complet, de haute qualité en français basé sur les instructions suivantes : "${aiPrompt}".
+
+Le ton de l'article doit correspondre à la catégorie sélectionnée ("${formData.category}").
+Si c'est "mecanique", utilise un ton technique et explicatif de mécanicien expert.
+Si c'est "competition", utilise un ton dynamique et captivant de reporter sportif.
+Si c'est "histoire", utilise un ton nostalgique, chaleureux et passionné.
+Si c'est "guide", utilise un ton pédagogique, clair et structuré.
+
+Tu DOIS impérativement utiliser et incorporer tout ou partie des photos sélectionnées ci-dessous à des moments logiques du texte pour l'illustrer. Utilise la syntaxe Markdown exacte : ![Légende de la photo](URL)
+Voici la liste des photos sélectionnées par l'utilisateur :
+${selectedPhotos.length > 0 
+  ? selectedPhotos.map(url => {
+      const match = uniquePhotos.find(p => p.url === url);
+      return `- URL: "${url}", Description suggérée: "${match?.title || 'Photo'}"`;
+    }).join('\n')
+  : "- Aucune photo sélectionnée."
+}
+
+Consignes de structure :
+1. Écris des titres de sections clairs avec "###" (et ajoute des émojis au début du titre).
+2. Utilise des listes à puces avec "-" pour énumérer des détails.
+3. Utilise des citations inspirantes ou des déclarations fortes avec ">".
+4. Rend l'article long, riche en vocabulaire de mobcross / mécanique / course 2-temps de campagne, vivant et engageant (entre 300 et 600 mots).
+
+Renvoie obligatoirement ta réponse sous la forme d'un objet JSON strict avec la structure suivante :
+{
+  "title": "Titre accrocheur de l'article avec émojis",
+  "category": "${formData.category}",
+  "excerpt": "Une courte introduction / phrase d'accroche captivante (1-2 phrases)",
+  "read_time": 5,
+  "content": "Le corps de l'article en Markdown complet avec titres, paragraphes, citations, et les images intégrées avec la syntaxe ![Description](URL)"
+}
+
+Renvoie UNIQUEMENT le JSON brut, sans blocs de code Markdown (pas de \`\`\`json ou \`\`\`), sans texte explicatif avant ou après. La réponse doit être directement analysable par JSON.parse().
+`;
+
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: promptText
+            }]
+          }],
+          generationConfig: {
+            responseMimeType: "application/json"
+          }
+        })
+      })
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`)
+      }
+
+      const resData = await response.json()
+      const generatedText = resData.candidates?.[0]?.content?.parts?.[0]?.text
+      if (!generatedText) throw new Error("Réponse vide de l'IA.")
+
+      let cleanText = generatedText.trim()
+      if (cleanText.includes('```')) {
+        const match = cleanText.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
+        if (match) {
+          cleanText = match[1].trim()
+        }
+      }
+
+      const parsed = JSON.parse(cleanText)
+      
+      setFormData(prev => ({
+        ...prev,
+        title: parsed.title || prev.title,
+        category: parsed.category || prev.category,
+        excerpt: parsed.excerpt || prev.excerpt,
+        read_time: parseInt(parsed.read_time) || prev.read_time || 5,
+        content: parsed.content || prev.content,
+        image_url: selectedPhotos[0] || parsed.image_url || prev.image_url || ''
+      }))
+
+      alert("✨ Article rédigé avec succès par l'IA ! Vous pouvez maintenant le relire et l'ajuster ci-dessous avant de le publier.")
+    } catch (err) {
+      console.error(err)
+      alert("Erreur lors de la génération par l'IA : " + err.message + "\n\nAssurez-vous que votre clé API est valide et que la consigne est claire.")
+    } finally {
+      setAiGenerating(false)
+    }
+  }
 
   const handleOpenAdd = () => {
     setEditingArticle(null)
@@ -562,60 +858,7 @@ const Blog = ({ hasPermission, isAdmin, profile, navigate }) => {
 
                 <div className="article-body">
                   <div className="article-content">
-                    {/* Render paragraphs & blockquotes. Simple custom markdown parser. */}
-                    {selectedArticle.content.split('\n\n').map((paragraph, index) => {
-                      // Check for blockquote
-                      if (paragraph.startsWith('>')) {
-                        return (
-                          <blockquote key={index}>
-                            {paragraph.replace(/^>\s*"/, '').replace(/"\s*$/, '').replace(/^>\s*/, '')}
-                          </blockquote>
-                        )
-                      }
-                      
-                      // Check for header h3
-                      if (paragraph.startsWith('###')) {
-                        return (
-                          <h3 key={index}>
-                            {paragraph.replace(/^###\s*/, '')}
-                          </h3>
-                        )
-                      }
-
-                      // Check for list items
-                      if (paragraph.startsWith('-')) {
-                        return (
-                          <ul key={index}>
-                            {paragraph.split('\n').map((item, idx) => (
-                              <li key={idx} style={{ marginBottom: '8px' }}>
-                                {/* Bold inside lists */}
-                                {item.replace(/^-\s*/, '').split('**').map((part, pIdx) => 
-                                  pIdx % 2 === 1 ? <strong key={pIdx}>{part}</strong> : part
-                                )}
-                              </li>
-                            ))}
-                          </ul>
-                        )
-                      }
-
-                      // Regular paragraph with potential bold/code formats
-                      return (
-                        <p key={index}>
-                          {paragraph.split('**').map((part, pIdx) => {
-                            // Check if this part contains code tags
-                            const renderCode = (text) => {
-                              return text.split('`').map((subpart, sIdx) => 
-                                sIdx % 2 === 1 ? <code key={sIdx}>{subpart}</code> : subpart
-                              )
-                            }
-                            
-                            return pIdx % 2 === 1 ? 
-                              <strong key={pIdx}>{renderCode(part)}</strong> : 
-                              <React.Fragment key={pIdx}>{renderCode(part)}</React.Fragment>
-                          })}
-                        </p>
-                      )
-                    })}
+                    {renderMarkdown(selectedArticle.content)}
                   </div>
                 </div>
               </div>
@@ -629,6 +872,92 @@ const Blog = ({ hasPermission, isAdmin, profile, navigate }) => {
         <div className="blog-editor-overlay">
           <div className="blog-editor-modal glass">
             <h3>{editingArticle ? '✏️ Modifier l\'article' : '➕ Ajouter un article'}</h3>
+            
+            {/* AI Assistant Section */}
+            <div className="blog-ai-panel">
+              <span className="blog-ai-tag">🤖 Assistant de Rédaction IA (Gemini)</span>
+              
+              <div className="blog-ai-input-row">
+                <textarea 
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
+                  placeholder="Que voulez-vous raconter dans cet article ? (ex: Raconte la course à Nozay sous le soleil avec Alex qui gagne et StickMan qui casse son embrayage...)"
+                  rows="2"
+                  disabled={aiGenerating}
+                  className="blog-ai-prompt-input"
+                />
+                <button 
+                  type="button" 
+                  className={`btn blog-ai-gen-btn ${aiGenerating ? 'loading' : ''}`}
+                  onClick={handleAiGenerate}
+                  disabled={aiGenerating || !aiPrompt.trim()}
+                >
+                  {aiGenerating ? '⏳ Rédaction...' : '✨ Rédiger'}
+                </button>
+              </div>
+
+              {/* Photos Selection Checklist */}
+              {(() => {
+                const seenUrls = new Set()
+                const combined = [
+                  ...galleryPhotos.map(p => ({ url: p.url, title: p.title || 'Photo Galerie' })),
+                  ...LOCAL_PHOTOS
+                ]
+                const uniquePhotos = []
+                combined.forEach(p => {
+                  if (p.url && !seenUrls.has(p.url)) {
+                    seenUrls.add(p.url)
+                    uniquePhotos.push(p)
+                  }
+                })
+
+                return (
+                  <div className="blog-ai-photos-section">
+                    <label className="blog-ai-photos-label">
+                      📸 Cochez les photos du site à intégrer dans le texte :
+                    </label>
+                    <div className="blog-ai-photos-grid">
+                      {uniquePhotos.map((photo) => {
+                        const isSelected = selectedPhotos.includes(photo.url);
+                        return (
+                          <div 
+                            key={photo.url} 
+                            className={`blog-ai-photo-thumb ${isSelected ? 'selected' : ''}`}
+                            onClick={() => {
+                              if (isSelected) {
+                                setSelectedPhotos(prev => prev.filter(u => u !== photo.url));
+                              } else {
+                                setSelectedPhotos(prev => [...prev, photo.url]);
+                              }
+                            }}
+                            title={photo.title}
+                          >
+                            <img src={photo.url} alt={photo.title} />
+                            <div className="blog-ai-photo-check">✓</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Custom API Key input if the key is not set in environment */}
+              {!import.meta.env.VITE_GEMINI_API_KEY && (
+                <div className="blog-ai-key-input">
+                  <input 
+                    type="password"
+                    placeholder="Saisissez votre clé API Gemini si besoin..."
+                    value={customApiKey}
+                    onChange={(e) => {
+                      setCustomApiKey(e.target.value);
+                      localStorage.setItem('myd_gemini_api_key', e.target.value);
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+
             <form onSubmit={handleSubmit}>
               
               <div className="blog-form-group">
