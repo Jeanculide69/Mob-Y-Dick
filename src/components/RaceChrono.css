@@ -818,7 +818,6 @@
 }
 
 /* ─── Responsive additions ─── */
-@media (max-width: 900px) {
 @media (max-width: 480px) {
   .chrono-top-right {
     gap: 6px;
@@ -836,6 +835,29 @@
 /* =========================================================================
    LIGHT MODE FOR TIMING VIEW (High visibility in direct sunlight)
    ========================================================================= */
+
+/* Body-level override: forces ALL parent backgrounds to light */
+body.chrono-light-mode {
+  background-color: #f1f3f5 !important;
+}
+
+body.chrono-light-mode .section.page-top {
+  background-color: #f1f3f5 !important;
+  background-image: none !important;
+}
+
+body.chrono-light-mode .navbar {
+  border-bottom-color: #ced4da !important;
+}
+
+body.chrono-light-mode .navbar::before {
+  background: rgba(255, 255, 255, 0.9) !important;
+}
+
+body.chrono-light-mode .video-bg,
+body.chrono-light-mode .video-overlay {
+  display: none !important;
+}
 
 .chrono-container.light-mode,
 .chrono-xxl-overlay.light-mode {

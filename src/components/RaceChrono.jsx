@@ -38,11 +38,19 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
   const [lastLapFlash, setLastLapFlash]     = useState(null)
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [lightMode, setLightMode] = useState(() => {
-    return localStorage.getItem('myd_chrono_light_mode') === 'true'
+    try {
+      return localStorage.getItem('myd_chrono_light_mode') === 'true'
+    } catch { return false }
   })
 
   useEffect(() => {
-    localStorage.setItem('myd_chrono_light_mode', lightMode)
+    try { localStorage.setItem('myd_chrono_light_mode', lightMode) } catch {}
+  }, [lightMode])
+
+  // Toggle body class for light mode (overrides parent section/body backgrounds)
+  useEffect(() => {
+    document.body.classList.toggle('chrono-light-mode', lightMode)
+    return () => document.body.classList.remove('chrono-light-mode')
   }, [lightMode])
 
   // ── Undo + annonce ──
