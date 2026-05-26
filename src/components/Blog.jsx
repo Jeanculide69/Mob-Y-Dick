@@ -496,9 +496,19 @@ const Blog = ({ hasPermission, isAdmin, profile, navigate }) => {
       }
     })
 
+    const isEditing = !!editingArticle
+    const currentArticleContext = isEditing 
+      ? `Voici l'article actuel en cours d'édition (Titre actuel: "${formData.title}", Catégorie actuelle: "${formData.category}", Description actuelle: "${formData.excerpt}", Contenu actuel: "${formData.content}").`
+      : ''
+
     const promptText = `
 Tu es l'assistant de rédaction officiel de la team Mob Y Dick (mobcross de compétition).
-Rédige un article de blog complet, de haute qualité en français basé sur les instructions suivantes : "${aiPrompt}".
+${isEditing 
+  ? `Tu dois MODIFIER l'article existant en appliquant les consignes suivantes : "${aiPrompt}".
+    ${currentArticleContext}
+    Applique rigoureusement les modifications demandées (comme insérer/swap de nouvelles photos, modifier un passage, changer le ton, ou traduire) tout en conservant l'essence et le style original du texte lorsque c'est pertinent.`
+  : `Rédige un article de blog complet, de haute qualité en français basé sur les instructions suivantes : "${aiPrompt}".`
+}
 
 Le ton de l'article doit correspondre à la catégorie sélectionnée ("${formData.category}").
 Si c'est "mecanique", utilise un ton technique et explicatif de mécanicien expert.
@@ -587,6 +597,27 @@ Renvoie UNIQUEMENT le JSON brut, sans blocs de code Markdown (pas de \`\`\`json 
     } finally {
       setAiGenerating(false)
     }
+  }
+
+  const insertAtCursor = (textToInsert) => {
+    const textarea = document.getElementById('blog-content-textarea')
+    if (!textarea) {
+      setFormData(prev => ({ ...prev, content: prev.content + textToInsert }))
+      return
+    }
+
+    const startPos = textarea.selectionStart
+    const endPos = textarea.selectionEnd
+    const text = formData.content
+
+    const newContent = text.substring(0, startPos) + textToInsert + text.substring(endPos)
+    setFormData(prev => ({ ...prev, content: newContent }))
+
+    setTimeout(() => {
+      textarea.focus()
+      const newCursorPos = startPos + textToInsert.length
+      textarea.setSelectionRange(newCursorPos, newCursorPos)
+    }, 50)
   }
 
   const handleOpenAdd = () => {
@@ -1033,12 +1064,59 @@ Renvoie UNIQUEMENT le JSON brut, sans blocs de code Markdown (pas de \`\`\`json 
               </div>
 
               <div className="blog-form-group">
-                <label>Contenu de l'article (Markdown basique supporté)</label>
+                <label>Contenu de l'article (Markdown supporté)</label>
+                
+                {/* Formatting Toolbar */}
+                <div className="blog-editor-toolbar">
+                  <button type="button" className="blog-toolbar-btn" onClick={() => insertAtCursor('### 📝 Titre de section\n')} title="Insérer un Titre de section">🏛️ Titre</button>
+                  <button type="button" className="blog-toolbar-btn" onClick={() => insertAtCursor('**texte en gras**')} title="Mettre en Gras"><b>G</b> Gras</button>
+                  <button type="button" className="blog-toolbar-btn" onClick={() => insertAtCursor('> "Citation"\n')} title="Insérer une Citation">💬 Citation</button>
+                  <button type="button" className="blog-toolbar-btn" onClick={() => insertAtCursor('- Un élément de liste\n')} title="Insérer une Liste à puces">• Liste</button>
+                </div>
+
+                {/* Click to Insert Photo grid */}
+                {(() => {
+                  const seenUrls = new Set()
+                  const combined = [
+                    ...galleryPhotos.map(p => ({ url: p.url, title: p.title || 'Photo Galerie' })),
+                    ...LOCAL_PHOTOS
+                  ]
+                  const uniquePhotos = []
+                  combined.forEach(p => {
+                    if (p.url && !seenUrls.has(p.url)) {
+                      seenUrls.add(p.url)
+                      uniquePhotos.push(p)
+                    }
+                  })
+
+                  return (
+                    <div className="blog-photos-inserter-section">
+                      <span className="blog-photos-inserter-label">
+                        📸 Positionnez le curseur dans le texte et cliquez sur une photo ci-dessous pour l'insérer :
+                      </span>
+                      <div className="blog-photos-inserter-grid">
+                        {uniquePhotos.map((photo) => (
+                          <div 
+                            key={photo.url} 
+                            className="blog-inserter-photo-thumb"
+                            onClick={() => insertAtCursor(`\n![${photo.title}](${photo.url})\n`)}
+                            title={`Cliquer pour insérer : ${photo.title}`}
+                          >
+                            <img src={photo.url} alt={photo.title} />
+                            <div className="blog-inserter-photo-overlay">➕ Insérer</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )
+                })()}
+
                 <textarea 
+                  id="blog-content-textarea"
                   rows="12"
                   value={formData.content} 
                   onChange={(e) => setFormData({ ...formData, content: e.target.value })} 
-                  placeholder="Écrivez l'article ici... Utilisez double saut de ligne pour séparer les paragraphes. Utilisez ### pour les titres de sections et > pour les citations."
+                  placeholder="Rédigez l'article ici ou utilisez l'assistant IA ci-dessus. Cliquez sur les photos pour les intégrer directement."
                   required
                 />
               </div>
