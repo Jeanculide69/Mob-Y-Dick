@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef, lazy, Suspense } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense, useMemo } from 'react'
+import { useNavigate as useRouterNavigate, useLocation } from 'react-router-dom'
 import './App.css'
 import './Admin.css'
 import { supabase } from './supabaseClient'
@@ -466,8 +467,32 @@ const renderGalleryMedia = (item) => {
   return <img src={src} alt={item.title} className="gallery-media" loading="lazy" />
 }
 
+// ─── Routing : correspondance onglet ↔ URL ───
+const TAB_TO_PATH = {
+  home:        '/',
+  team:        '/equipe',
+  bikes:       '/motos',
+  gallery:     '/galerie',
+  events:      '/evenements',
+  shop:        '/boutique',
+  sponsors:    '/sponsors',
+  live:        '/live',
+  championnat: '/championnat',
+  blog:        '/blog',
+  admin:       '/admin',
+  profile:     '/profil',
+}
+const PATH_TO_TAB = Object.fromEntries(
+  Object.entries(TAB_TO_PATH).map(([k, v]) => [v, k])
+)
+
 function App() {
-  const [activeTab, setActiveTab] = useState(() => safeLocalStorage.getItem('myd_activeTab') || 'home')
+  const routerNav    = useRouterNavigate()
+  const location     = useLocation()
+  // 'race' n'a pas d'URL (vue admin privée) — géré en state local
+  const [raceTabActive, setRaceTabActive] = useState(false)
+  const activeTab = raceTabActive ? 'race' : (PATH_TO_TAB[location.pathname] || 'home')
+
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [isModerator, setIsModerator] = useState(false)
@@ -735,10 +760,6 @@ function App() {
   }, [mobileMenuOpen])
 
   // Persist view state to localStorage
-  useEffect(() => {
-    safeLocalStorage.setItem('myd_activeTab', activeTab)
-  }, [activeTab])
-
   useEffect(() => {
     if (activeRaceView) safeLocalStorage.setItem('myd_activeRaceView', activeRaceView)
     else safeLocalStorage.removeItem('myd_activeRaceView')
@@ -1017,10 +1038,9 @@ function App() {
     : displayProducts.filter(p => p.is_visible !== false)
 
   const navigate = (tab) => {
-    if (tab === 'live') {
-      setViewingSessionId(null)
-    }
-    setActiveTab(tab)
+    setRaceTabActive(false)
+    const path = TAB_TO_PATH[tab]
+    if (path) routerNav(path)
     setMobileMenuOpen(false)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -1462,7 +1482,7 @@ function App() {
     
     if (!profile?.shipping_address || !profile?.shipping_city || !profile?.shipping_zip) {
       alert("Tu dois renseigner ton adresse postale dans l'onglet 'Adresse' de ton profil avant de commander.")
-      setActiveTab('profile')
+      navigate('profile')
       return
     }
 
@@ -1607,7 +1627,7 @@ function App() {
             {liveSession && liveSession.status === 'live' && (
               <button
                 className={`nav-link nav-live-btn ${activeTab === 'live' ? 'active' : ''}`}
-                onClick={() => navigate('live')}
+                onClick={() => { setViewingSessionId(null); navigate('live') }}
               >
                 <span className="nav-live-dot" />
                 📺 LIVE
@@ -1642,7 +1662,7 @@ function App() {
         {activeTab === 'home' && (
           <>
             {liveSession && liveSession.status === 'live' && (
-              <div className="live-race-banner fade-in" onClick={() => navigate('live')}>
+              <div className="live-race-banner fade-in" onClick={() => { setViewingSessionId(null); navigate('live') }}>
                 <span className="live-race-banner-dot" />
                 <span className="live-race-banner-title">
                   🏁 COURSE EN DIRECT EN COURS&nbsp;!
@@ -2116,7 +2136,7 @@ function App() {
                               onClick={() => {
                                 setSelectedRaceEvent(ev)
                                 setActiveRaceView('setup')
-                                setActiveTab('race')
+                                setRaceTabActive(true)
                               }}
                             >
                               🏁 Gérer la course
@@ -2134,7 +2154,7 @@ function App() {
                                   setActiveRaceSession(eventSession)
                                   setActiveRaceTeams(teamsData || [])
                                   setActiveRaceView('chrono')
-                                  setActiveTab('race')
+                                  setRaceTabActive(true)
                                   window.scrollTo({ top: 0, behavior: 'smooth' })
                                 }}
                               >
@@ -2157,7 +2177,7 @@ function App() {
                                 style={{ border: 'none', fontWeight: 'bold' }}
                                 onClick={() => {
                                   setViewingSessionId(eventSession.id)
-                                  setActiveTab('live')
+                                  routerNav('/live')
                                   window.scrollTo({ top: 0, behavior: 'smooth' })
                                 }}
                               >
@@ -2170,7 +2190,7 @@ function App() {
                                   onClick={() => {
                                     setSelectedRaceEvent(ev)
                                     setActiveRaceView('setup')
-                                    setActiveTab('race')
+                                    setRaceTabActive(true)
                                     window.scrollTo({ top: 0, behavior: 'smooth' })
                                   }}
                                 >
@@ -2187,7 +2207,7 @@ function App() {
                               style={{ borderColor: 'var(--accent)', color: '#fff', background: 'rgba(255, 85, 0, 0.05)', fontWeight: 'bold' }}
                               onClick={() => {
                                 setViewingSessionId(eventSession.id)
-                                setActiveTab('live')
+                                routerNav('/live')
                                 window.scrollTo({ top: 0, behavior: 'smooth' })
                               }}
                             >
@@ -2454,7 +2474,7 @@ function App() {
           customSessionId={viewingSessionId}
           onClose={() => {
             setViewingSessionId(null)
-            setActiveTab('events')
+            navigate('events')
           }}
           onAutoExit={() => {
             // Fin de course : on rentre à l'accueil (vs bouton retour
@@ -2462,7 +2482,7 @@ function App() {
             // le bouton LIVE de la navbar immédiatement.
             setViewingSessionId(null)
             setLiveSession(null)
-            setActiveTab('home')
+            navigate('home')
           }}
           isAdmin={hasPermission('manage_races')}
           onManage={(eventId) => {
@@ -2470,8 +2490,8 @@ function App() {
             if (ev) {
               setSelectedRaceEvent(ev)
               setActiveRaceView('setup')
-              setActiveTab('race')
               setViewingSessionId(null)
+              setRaceTabActive(true)
               window.scrollTo({ top: 0, behavior: 'smooth' })
             }
           }}
@@ -2504,7 +2524,8 @@ function App() {
                 onClose={() => {
                   setActiveRaceView(null)
                   setSelectedRaceEvent(null)
-                  setActiveTab('events')
+                  setRaceTabActive(false)
+                  navigate('events')
                 }}
               />
             </Suspense>
