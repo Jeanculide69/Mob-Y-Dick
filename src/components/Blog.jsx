@@ -117,7 +117,7 @@ N'hésitez pas à venir nous voir lors des entraînements de la team Mob Y Dick 
   }
 ]
 
-const SQL_CREATE_TABLE = `-- Requête de création de la table blog
+const SQL_CREATE_TABLE = `-- Requête de création de la table blog et pré-remplissage des articles
 CREATE TABLE IF NOT EXISTS blog (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   title TEXT NOT NULL,
@@ -134,12 +134,102 @@ CREATE TABLE IF NOT EXISTS blog (
 ALTER TABLE blog ENABLE ROW LEVEL SECURITY;
 
 -- Autoriser la lecture publique
+DROP POLICY IF EXISTS "Public read blog" ON blog;
 CREATE POLICY "Public read blog" ON blog FOR SELECT USING (true);
 
 -- Autoriser l'administration aux utilisateurs authentifiés
+DROP POLICY IF EXISTS "Auth insert blog" ON blog;
 CREATE POLICY "Auth insert blog" ON blog FOR INSERT TO authenticated WITH CHECK (true);
+
+DROP POLICY IF EXISTS "Auth update blog" ON blog;
 CREATE POLICY "Auth update blog" ON blog FOR UPDATE TO authenticated USING (true);
-CREATE POLICY "Auth delete blog" ON blog FOR DELETE TO authenticated USING (true);`
+
+DROP POLICY IF EXISTS "Auth delete blog" ON blog;
+CREATE POLICY "Auth delete blog" ON blog FOR DELETE TO authenticated USING (true);
+
+-- Pré-remplissage avec les 4 articles par défaut (si la table est vide)
+INSERT INTO blog (title, category, content, excerpt, image_url, read_time, author, created_at)
+SELECT 'L''Épopée de la Team Mob Y Dick : De la passion à la boue', 'histoire', 'C''est dans un coin d''atelier encombré de vieilles pièces de Peugeot 103 et de Motobécane 51 qu''est née l''histoire de la team Mob Y Dick. À l''origine, une simple bande de copains d''enfance, partageant une fascination pour la mécanique vintage et la vitesse brute. Ce qui ne devait être qu''une blague un après-midi de printemps s''est rapidement transformé en une véritable passion pour le Mobcross, cette discipline unique qui voit s''affronter des cyclomoteurs modifiés sur des pistes de terre.
+
+Le nom "Mob Y Dick" a été choisi en hommage aux célèbres machines bleues et au mythique monstre des mers, symbolisant notre quête pour dompter nos "monstres mécaniques" récalcitrants. Nos débuts ont été marqués par beaucoup de fumée, de rires et de pannes légendaires. Lors de notre première course, aucune meule n''a franchi la ligne d''arrivée, mais l''esprit de groupe était scellé.
+
+Au fil des saisons, l''équipe s''est structurée. Nous avons adopté nos couleurs distinctives (rouge, orange et noir) et commencé à personnaliser nos motos avec des kits déco style graffiti uniques, peints à la main. Mais notre philosophie reste inchangée :
+
+> "Chez nous, l''esprit d''équipe et la rigolade passent toujours avant la ligne d''arrivée. On rigole fort, on s''entraide au stand, et si une meule explose au bout de trois tours, c''est simplement l''excuse idéale pour ouvrir une bière et en discuter !"
+
+Aujourd''hui, la team compte plus de 9 riders et une équipe mécanique dévouée, prête à en découdre sur toutes les pistes de France. La passion de la boue et du 2-temps coule définitivement dans nos veines !', 'Découvrez comment une bande de copains d''enfance a transformé de vieux cyclomoteurs Peugeot en véritables bêtes de course sur terre.', '/motos/2cd0ab6d-2472-4496-aac8-af9a290fbf14.jpg', 6, 'Fumax', '2026-05-20T10:00:00Z'
+WHERE NOT EXISTS (SELECT 1 FROM blog WHERE title = 'L''Épopée de la Team Mob Y Dick : De la passion à la boue');
+
+INSERT INTO blog (title, category, content, excerpt, image_url, read_time, author, created_at)
+SELECT 'Préparation Moteur & Cycle : Comment monter une Mobcross de compétition', 'mecanique', 'Préparer un cyclomoteur de route Peugeot 103 pour lui faire subir les assauts du Mobcross est un art subtil qui demande rigueur, ingéniosité et patience. Notre chef mécanicien, Gauthier, nous livre ici les secrets de préparation de la célèbre "Beast R-1".
+
+### 1. La préparation moteur (Le cœur du 2-temps)
+Pour obtenir une accélération nerveuse à bas régime – essentielle pour s''extirper des virages boueux – nous modifions profondément le moteur :
+- **Les carters d''origine** sont méticuleusement alignés avec les transferts du cylindre. Nous utilisons des clapets Athena en carbone pour optimiser le flux de gaz frais.
+- **Le cylindre :** Nous restons sur une cylindrée de 50cc réglementaire pour la catégorie mais nous augmentons légèrement les diagrammes d''échappement (autour de 178°) et d''admission (120°) à la fraiseuse.
+- **La carburation :** Nous installons un carburateur Dell''Orto PHBG de 15 ou 17,5 mm, avec un réglage de gicleur principal peaufiné en fonction du climat. Un filtre à air en mousse type cornet de motocross protège le tout de la poussière.
+- **L''échappement :** Un pot de détente Giannelli Black Gun ou Doppler ER1, raccourci pour décaler la puissance dans les mi-régimes.
+
+### 2. Le châssis et la partie cycle (Sécurité et rigidité)
+Le cadre d''origine d''un Peugeot 103 n''est pas conçu pour faire des sauts. Sans modifications, il se plierait dès le premier saut.
+- **Renfort de cadre :** Nous soudons une barre centrale en acier entre la colonne de direction et le tube de selle. Les carters et le bras oscillant reçoivent des plaques de renfort soudées au TIG.
+- **Le bras oscillant :** Les bras oscillants d''origine ont tendance à vriller sous la tension de la chaîne. Nous installons un bras oscillant de Peugeot RCX renforcé ou fabriquons nos propres platines rigides.
+- **Suspensions :** À l''avant, nous adaptons une fourche hydraulique renforcée provenant d''une mécaboite 50cc. À l''arrière, une paire d''amortisseurs réglables à gaz de 360 mm absorbe les chocs.
+- **Pneumatiques :** Des pneus Michelin StarCross 5 ou Pirelli Scorpion MX montés sur des jantes à rayons renforcées de 17 pouces complètent la monte.
+
+> "La préparation d''une mobcross est un équilibre permanent entre puissance brute et fiabilité. Une machine hyper performante qui serre au bout de deux tours ne vous fera jamais gagner de course."', 'Carburation, diagrammes de cylindre, renforts de cadre au TIG... Plongez dans les détails techniques de nos préparations Mobcross.', '/motos/05c88f5e-250c-41fa-bdc4-dc97b785cd54.jpg', 8, 'Gauthier', '2026-05-22T14:30:00Z'
+WHERE NOT EXISTS (SELECT 1 FROM blog WHERE title = 'Préparation Moteur & Cycle : Comment monter une Mobcross de compétition');
+
+INSERT INTO blog (title, category, content, excerpt, image_url, read_time, author, created_at)
+SELECT 'Le Grand Récit du Championnat de France de Mobcross 2025', 'competition', 'La saison 2025 du Championnat de France de Mobcross restera gravée dans l''histoire de la team Mob Y Dick comme l''une des plus éparpillées, mais aussi l''une des plus mémorables. Retour sur les temps forts d''une année riche en adrénaline.
+
+### Nozay : L''épreuve de la poussière
+La première manche s''est déroulée sous un soleil de plomb et sur une piste sèche transformée en nuage de poussière géant. 
+- **Manche 1 :** Très bon départ d''Alex sur la Beast R-1 qui se faufile en 3ème position. Malheureusement, après 4 tours, son embrayage commence à patiner sévèrement à cause de la surchauffe. Il finit difficilement à la 8ème place.
+- **Manche 2 :** Après un changement d''embrayage express aux stands par Gauthier et StickMan, Alex repart gonflé à bloc et arrache la 5ème place après une bataille féroce dans le dernier tour.
+
+### Saint-Vincent-des-Landes : L''enfer de la boue
+Changement radical de décor pour la seconde épreuve : une pluie battante s''est abattue sur le circuit toute la nuit, transformant la piste en un bourbier sans nom. C''est ici que l''esprit de notre team a fait la différence.
+Dans ces conditions extrêmes, les moteurs chauffent et aspirent de l''eau. Bob a connu une panne d''allumage dans la première manche. Gauthier a réussi à nettoyer et à étanchéifier le rotor sous la pluie battante en moins de 15 minutes. 
+Grâce à un pilotage ultra-technique dans les ornières et à la fiabilité de nos filtres à air modifiés "anti-boue", Alex parvient à décrocher la 2ème place sur le podium de la journée !
+
+### Bilan de la saison 2025
+Grâce à une régularité exemplaire lors de la finale et à une solidarité sans faille au sein des stands (nous avons prêté un carburateur de rechange à une équipe concurrente en détresse), la team Mob Y Dick décroche une fantastique **3ème place au classement général par équipe du championnat** !
+
+Un immense merci à nos sponsors locaux et à tous les supporters venus nous encourager au bord des pistes avec leurs fumigènes orange et rouge. Rendez-vous en 2026 pour viser le titre !', 'Revivez les manches mémorables de la saison 2025, de la poussière étouffante de Nozay jusqu''au podium boueux de Saint-Vincent.', '/motos/5e66cf75-e1de-41d7-8273-ed89eb9c8e3e.jpg', 7, 'Alex', '2026-05-24T18:15:00Z'
+WHERE NOT EXISTS (SELECT 1 FROM blog WHERE title = 'Le Grand Récit du Championnat de France de Mobcross 2025');
+
+INSERT INTO blog (title, category, content, excerpt, image_url, read_time, author, created_at)
+SELECT 'Guide du Débutant : Comment se lancer dans le Mobcross ?', 'guide', 'Vous entendez le vrombissement rageur d''un moteur 2-temps, vous voyez des bécanes voler au-dessus des bosses et vous vous dites : "C''est ça qu''il me faut !" ? Vous avez raison. Le Mobcross est sans doute le sport mécanique le plus convivial, le plus fun et le plus accessible financièrement. Voici notre guide complet pour débuter dans les meilleures conditions.
+
+### 1. Choisir sa base (Le choix de la meule)
+Pour débuter, deux choix s''imposent en France :
+- **Le Peugeot 103 (MVL, RCX, SPX) :** C''est la base la plus populaire. Les pièces de rechange sont abondantes, peu chères, et la mécanique est extrêmement simple à comprendre.
+- **La Motobécane 51 (Club, Hard Rock, Magnum) :** Également très populaire, réputée pour son moteur AV10 très performant d''origine.
+
+Pour vos premiers tours de roues, évitez les cadres trop modifiés. Trouvez une base saine d''origine, démontez-la entièrement pour nettoyer le réservoir, et commencez par y greffer une barre de renfort centrale soudée.
+
+### 2. L''équipement de sécurité (Priorité absolue)
+Même si l''on roule sur un cyclo de 50cc, les chutes font mal et la sécurité ne doit jamais être négligée. L''équipement obligatoire comprend :
+- Un casque de motocross homologué.
+- Des lunettes de protection (masque) anti-poussière.
+- Une dorsale et un pare-pierres homologués FFM.
+- Des bottes de motocross rigides (les baskets sont strictement interdites sur circuit).
+- Des gants renforcés et une tenue en tissu résistant (pantalon et maillot de cross).
+
+### 3. La licence et les clubs
+Pour rouler en toute légalité et être couvert par les assurances, vous devez adhérer à un club affilié à la Fédération Française de Motocyclisme (FFM) ou à l''UFOLEP. Vous passerez un examen médical d''aptitude et obtiendrez votre licence annuelle de compétition ou d''entraînement.
+
+### 4. Le budget estimé pour débuter
+L''un des grands points forts du Mobcross est son coût dérisoire comparé au Motocross moderne :
+- **Achat du cyclo d''occasion :** 300 € à 600 €
+- **Pièces de préparation de base & pneus cross :** 250 €
+- **Équipement de protection complet :** 300 €
+- **Licence annuelle :** 150 €
+- **Budget total estimé :** Environ 1000 € à 1300 € pour une première saison complète !
+
+N''hésitez pas à venir nous voir lors des entraînements de la team Mob Y Dick ou à nous envoyer un message via notre formulaire de contact, nous serons ravis de vous conseiller pour votre premier montage !', 'Vous rêvez de tâter de la terre en 50cc ? Voici les conseils de la team pour choisir sa mobylette, s''équiper et obtenir sa licence.', '/motos/6c3be747-ab9a-4ae3-8414-d6e23a6698fe.jpg', 5, 'Bob', '2026-05-25T09:00:00Z'
+WHERE NOT EXISTS (SELECT 1 FROM blog WHERE title = 'Guide du Débutant : Comment se lancer dans le Mobcross ?');`
 
 const Blog = ({ hasPermission, isAdmin, profile, navigate }) => {
   const [articles, setArticles] = useState([])
@@ -283,7 +373,7 @@ const Blog = ({ hasPermission, isAdmin, profile, navigate }) => {
     }
 
     try {
-      if (editingArticle) {
+      if (editingArticle && !String(editingArticle.id).startsWith('static-')) {
         const { error } = await supabase
           .from('blog')
           .update(formData)
