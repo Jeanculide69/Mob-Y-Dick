@@ -11,6 +11,9 @@ const ASPECT = OUTPUT_W / OUTPUT_H // 1.5
 const loadImage = (src) =>
   new Promise((resolve, reject) => {
     const img = new Image()
+    // Permet l'export canvas d'images hébergées (Supabase, /motos…) sans taint,
+    // quand le serveur renvoie les en-têtes CORS. Sans effet sur les data URL.
+    img.crossOrigin = 'anonymous'
     img.onload = () => resolve(img)
     img.onerror = (e) => reject(e)
     img.src = src
@@ -26,7 +29,7 @@ const canvasSupportsWebp = (() => {
   }
 })()
 
-export default function MotoCropper({ imageSrc, onCancel, onConfirm }) {
+export default function MotoCropper({ imageSrc, onCancel, onConfirm, title = '📷 Recadrer la photo', hint = null }) {
   const [crop, setCrop]                     = useState({ x: 0, y: 0 })
   const [zoom, setZoom]                     = useState(1)
   const [croppedAreaPixels, setCroppedAreaPixels] = useState(null)
@@ -94,7 +97,7 @@ export default function MotoCropper({ imageSrc, onCancel, onConfirm }) {
       >
         {/* Header */}
         <div className="moto-cropper-header">
-          <h3 id="moto-cropper-title">📷 Recadrer la photo</h3>
+          <h3 id="moto-cropper-title">{title}</h3>
           <button
             type="button"
             className="moto-cropper-close"
@@ -143,7 +146,7 @@ export default function MotoCropper({ imageSrc, onCancel, onConfirm }) {
             />
           </label>
           <p className="moto-cropper-hint">
-            Déplace et zoome pour cadrer ta moto. La photo sera rognée en <strong>3:2 paysage</strong> et compressée automatiquement.
+            {hint || <>Déplace et zoome pour cadrer ta moto. La photo sera rognée en <strong>3:2 paysage</strong> et compressée automatiquement.</>}
           </p>
         </div>
 

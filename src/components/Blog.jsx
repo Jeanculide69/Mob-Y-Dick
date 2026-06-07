@@ -1,5 +1,7 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { supabase } from '../supabaseClient'
+import MotoCropper from './MotoCropper'
 import './Blog.css'
 
 // Initial content-rich articles written in French to satisfy Google AdSense
@@ -414,6 +416,57 @@ const Blog = ({ hasPermission, isAdmin, profile, navigate }) => {
   const [customApiKey, setCustomApiKey] = useState(localStorage.getItem('myd_gemini_api_key') || '')
 
   const canManage = hasPermission('manage_blog') || isAdmin || (profile && ['moderator', 'organisateur'].includes(profile.role))
+
+  // ─── Illustration : sélection fichier → cropper → upload (même système que les motos/avatars) ───
+  const illustrationInputRef = useRef(null)
+  const [cropperSrc, setCropperSrc] = useState(null)
+  const [imgUploading, setImgUploading] = useState(false)
+
+  const handleIllustrationFile = (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) { alert('Le fichier doit être une image.'); return }
+    if (file.size > 20 * 1024 * 1024) { alert('Image trop lourde (max 20 Mo). Le recadrage se charge de la compression.'); return }
+    const reader = new FileReader()
+    reader.onload = () => setCropperSrc(reader.result)
+    reader.onerror = () => alert('Impossible de lire ce fichier.')
+    reader.readAsDataURL(file)
+    if (illustrationInputRef.current) illustrationInputRef.current.value = ''
+  }
+
+  const blobToDataURL = (blob) => new Promise((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(r.result)
+    r.onerror = reject
+    r.readAsDataURL(blob)
+  })
+
+  const handleIllustrationCropConfirm = async (blob, ext) => {
+    setCropperSrc(null)
+    setImgUploading(true)
+    try {
+      let url = null
+      if (supabase) {
+        try {
+          const fileName = `blog/illustration-${Date.now()}.${ext}`
+          const { error: upErr } = await supabase.storage
+            .from('Gallery')
+            .upload(fileName, blob, { upsert: true, contentType: blob.type })
+          if (upErr) throw upErr
+          const { data } = supabase.storage.from('Gallery').getPublicUrl(fileName)
+          url = `${data.publicUrl}?t=${Date.now()}`
+        } catch (err) {
+          console.warn('Upload Supabase échoué, bascule sur un data URL local.', err)
+        }
+      }
+      if (!url) url = await blobToDataURL(blob) // fallback hors-ligne / storage indispo
+      setFormData(prev => ({ ...prev, image_url: url }))
+    } catch (err) {
+      alert("Erreur lors du traitement de l'image : " + (err?.message || err))
+    } finally {
+      setImgUploading(false)
+    }
+  }
 
   const fetchArticles = async () => {
     setLoading(true)
@@ -1042,13 +1095,56 @@ Renvoie UNIQUEMENT le JSON brut, sans blocs de code Markdown (pas de \`\`\`json 
                 </div>
 
                 <div className="blog-form-group">
-                  <label>URL Image d'illustration</label>
+                  <label>URL de l'image (optionnel — ou recadre ci-dessous)</label>
                   <input 
                     type="text" 
                     value={formData.image_url} 
                     onChange={(e) => setFormData({ ...formData, image_url: e.target.value })} 
                     placeholder="Ex: /motos/2cd0ab6d.jpg"
                   />
+                </div>
+              </div>
+
+              <div className="blog-form-group">
+                <label>Illustration de l'article</label>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                  {formData.image_url ? (
+                    <img
+                      src={formData.image_url}
+                      alt="Aperçu de l'illustration"
+                      style={{ width: '100%', aspectRatio: '3 / 2', maxHeight: '220px', objectFit: 'cover', borderRadius: '10px', border: '1px solid rgba(255,255,255,0.12)', background: '#0a0a0a' }}
+                    />
+                  ) : (
+                    <div style={{ width: '100%', aspectRatio: '3 / 2', maxHeight: '220px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.6rem', borderRadius: '10px', border: '1px dashed rgba(255,255,255,0.18)', background: '#0a0a0a', color: 'var(--text-muted)' }}>
+                      🏍️
+                    </div>
+                  )}
+                  <input
+                    ref={illustrationInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleIllustrationFile}
+                    style={{ display: 'none' }}
+                  />
+                  <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={() => illustrationInputRef.current?.click()}
+                      disabled={imgUploading}
+                    >
+                      {imgUploading ? '⏳ Traitement…' : (formData.image_url ? '🖼️ Nouveau fichier' : '🖼️ Choisir une image à recadrer')}
+                    </button>
+                    {formData.image_url && !imgUploading && (
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => setCropperSrc(formData.image_url)}
+                      >
+                        ♻️ Recadrer l'image actuelle
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
 
@@ -1142,6 +1238,20 @@ Renvoie UNIQUEMENT le JSON brut, sans blocs de code Markdown (pas de \`\`\`json 
             </form>
           </div>
         </div>
+      )}
+
+      {/* Cropper d'illustration (même système que les motos / avatars) — au-dessus de l'éditeur */}
+      {cropperSrc && createPortal(
+        <div style={{ position: 'fixed', inset: 0, zIndex: 13000 }}>
+          <MotoCropper
+            imageSrc={cropperSrc}
+            title="🖼️ Recadrer l'illustration"
+            hint={<>Déplace et zoome — tu peux aussi <strong>dézoomer</strong> pour tout faire rentrer. L'illustration sera rognée en <strong>3:2 paysage</strong> et compressée automatiquement.</>}
+            onCancel={() => setCropperSrc(null)}
+            onConfirm={handleIllustrationCropConfirm}
+          />
+        </div>,
+        document.body
       )}
     </section>
   )
