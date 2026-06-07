@@ -90,18 +90,24 @@ const LazyLoader = () => (
 
 const SITE_VERSION = 'v3.1.0'
 
-const loadAdSenseScript = () => {
-  if (typeof window === 'undefined') return
-  window.adsbygoogle = window.adsbygoogle || []
-  const scriptId = 'adsense-script'
-  if (document.getElementById(scriptId)) return
-  const script = document.createElement('script')
-  script.id = scriptId
-  script.async = true
-  script.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6244816354585064"
-  script.crossOrigin = "anonymous"
-  document.head.appendChild(script)
-}
+// ─── AdSense — DÉSACTIVÉ tant que le compte n'est pas (re)approuvé ───
+// Le site était en "non-respect des règles" AdSense : des pubs étaient
+// diffusées sur des écrans sans contenu d'éditeur (live, accueil, boutique…).
+// Pour stopper net l'infraction, on ne charge plus DU TOUT le script AdSense et
+// on n'injecte aucune unité <ins>. Le site n'affiche donc que les encarts
+// "sponsor" maison (HTML pur) — zéro pub Google diffusée nulle part.
+//
+// POUR RÉACTIVER (uniquement APRÈS avoir étoffé le contenu ET obtenu l'examen) :
+//   1. Crée une unité publicitaire dans le dashboard AdSense → note son slot
+//      numérique (ex: "1234567890").
+//   2. Place une unité <ins> avec ce slot UNIQUEMENT sur une page de contenu
+//      (ex: dans un article de blog), jamais sur le live / l'accueil / la boutique.
+//   3. Remets le loader dans index.html <head> :
+//      <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-6244816354585064" crossorigin="anonymous"></script>
+//   4. Passe ADSENSE_ENABLED à true.
+//   5. Garde "Auto ads" DÉSACTIVÉ dans le dashboard AdSense (sinon Google
+//      ré-injecte des pubs partout, y compris sur le live → re-refus immédiat).
+const ADSENSE_ENABLED = false
 
 // Reusable Google AdSense component with highly premium, warm fallback mockup
 const GoogleAd = ({ slot = '1234567890', format = 'auto', style = { display: 'block' }, navigate }) => {
@@ -113,7 +119,7 @@ const GoogleAd = ({ slot = '1234567890', format = 'auto', style = { display: 'bl
   // stabilisé, container display:none, mobile en chargement). Le fix : on
   // attend que le <ins> ait une vraie largeur avant de pousher.
   useEffect(() => {
-    loadAdSenseScript()
+    if (!ADSENSE_ENABLED) return // AdSense désactivé : aucune pub n'est injectée
     const insEl = document.querySelector(`ins[data-ad-slot="${slot}"]`)
     if (!insEl) return
 
@@ -207,7 +213,7 @@ const SidebarAd = ({ side = 'left', navigate }) => {
 
   // Même pattern défensif que GoogleAd (cf. commentaire plus haut).
   useEffect(() => {
-    loadAdSenseScript()
+    if (!ADSENSE_ENABLED) return // AdSense désactivé : aucune pub n'est injectée
     const insEl = document.querySelector(`ins[data-ad-slot="${slot}"]`)
     if (!insEl) return
     let pushed = false
@@ -1650,7 +1656,7 @@ function App() {
         </div>
       </header>
 
-      {['home', 'team', 'bikes', 'gallery', 'events', 'sponsors', 'championnat', 'blog', 'live'].includes(activeTab) && !showIntroSplash && (
+      {['home', 'team', 'bikes', 'gallery', 'events', 'sponsors', 'championnat', 'blog'].includes(activeTab) && !showIntroSplash && (
         <>
           <SidebarAd side="left" navigate={navigate} />
           <SidebarAd side="right" navigate={navigate} />
@@ -2706,7 +2712,7 @@ function App() {
 
               <h3 className="text-accent" style={{fontSize:'1rem', marginTop:'20px'}}>3. Cookies & Traceurs</h3>
               <p>
-                Le site utilise uniquement les cookies strictement nécessaires à son fonctionnement (session de connexion, panier d'achat, préférences d'affichage). Aucun cookie publicitaire ni de profilage n'est déposé sans votre consentement préalable. Les régies publicitaires éventuellement intégrées (Google AdSense) suivent leurs propres politiques accessibles depuis leurs sites respectifs.
+                Le site utilise des cookies strictement nécessaires à son fonctionnement (session de connexion, panier d'achat, préférences d'affichage). Lorsque des emplacements publicitaires <strong>Google AdSense</strong> sont activés, Google et ses partenaires sont susceptibles de déposer des cookies (dont le cookie DoubleClick/Google) afin de diffuser des annonces et, le cas échéant, des annonces personnalisées selon vos visites sur ce site et sur d'autres sites. Vous pouvez gérer ou désactiver la personnalisation des annonces depuis la page <strong>Paramètres des annonces Google</strong> (www.google.com/settings/ads) et consulter la politique de Google relative aux cookies publicitaires sur www.google.com/policies/technologies/ads. Pour les visiteurs de l'Union européenne, le dépôt de ces cookies publicitaires est subordonné à votre consentement préalable recueilli via notre bandeau de consentement.
               </p>
 
               <h3 className="text-accent" style={{fontSize:'1rem', marginTop:'20px'}}>4. CGV — Biens Physiques Personnalisés</h3>

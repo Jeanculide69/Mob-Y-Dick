@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://mob-y-dick.vercel.app/sitemap.xml
