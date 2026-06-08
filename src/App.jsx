@@ -566,6 +566,9 @@ function App() {
   // Checkout Modal States (Client)
   const [checkoutProduct, setCheckoutProduct] = useState(null)
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  // Index de la photo affichée pour chaque carte produit de la boutique
+  // (clé = id du produit), pour pouvoir feuilleter les photos sur place.
+  const [productImgIndices, setProductImgIndices] = useState({})
   const [checkoutStep, setCheckoutStep] = useState(1) // 1: Personalization, 2: Shipping, 3: Validation, 4: Redirection
   const [lightboxImage, setLightboxImage] = useState(null)
   const [selectedBike, setSelectedBike] = useState('rouge')
@@ -2282,15 +2285,40 @@ function App() {
 
                       {(() => {
                         const imageUrls = p.image_url ? p.image_url.split(',').filter(Boolean) : []
-                        const firstImage = imageUrls[0] || ''
+                        const cardKey = p.id ?? i
+                        const total = imageUrls.length
+                        const rawIndex = productImgIndices[cardKey] || 0
+                        const imgIndex = total ? ((rawIndex % total) + total) % total : 0
+                        const activeImage = imageUrls[imgIndex] || ''
+                        const hasMultiple = total > 1
+                        const goToImg = (next) => setProductImgIndices(prev => ({ ...prev, [cardKey]: next }))
                         return (
-                          <div 
-                            className="product-img" 
-                            style={firstImage ? { backgroundImage: `url(${firstImage})`, backgroundSize: 'cover', backgroundPosition: 'center', cursor: 'zoom-in' } : { cursor: 'zoom-in' }}
-                            onClick={() => { if (firstImage) setLightboxImage(firstImage); }}
+                          <div
+                            className="product-img"
+                            style={activeImage ? { backgroundImage: `url(${activeImage})`, backgroundSize: 'cover', backgroundPosition: 'center', cursor: 'zoom-in' } : { cursor: 'zoom-in' }}
+                            onClick={() => { if (activeImage) setLightboxImage(activeImage); }}
                             title="Cliquez pour agrandir"
                           >
-                            {!firstImage && <div className="product-badge">Graffiti</div>}
+                            {!activeImage && <div className="product-badge">Graffiti</div>}
+                            {hasMultiple && (
+                              <>
+                                <button
+                                  type="button"
+                                  className="product-img-nav left"
+                                  aria-label="Photo précédente"
+                                  title="Photo précédente"
+                                  onClick={(e) => { e.stopPropagation(); goToImg((imgIndex - 1 + total) % total); }}
+                                >◀</button>
+                                <button
+                                  type="button"
+                                  className="product-img-nav right"
+                                  aria-label="Photo suivante"
+                                  title="Photo suivante"
+                                  onClick={(e) => { e.stopPropagation(); goToImg((imgIndex + 1) % total); }}
+                                >▶</button>
+                                <div className="product-img-counter">📷 {imgIndex + 1}/{total}</div>
+                              </>
+                            )}
                           </div>
                         )
                       })()}
