@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, lazy, Suspense, useMemo } from 'react'
+import { useState, useEffect, useRef, lazy, Suspense } from 'react'
 import { useNavigate as useRouterNavigate, useLocation } from 'react-router-dom'
 import './App.css'
 import './Admin.css'
@@ -52,30 +52,6 @@ const safeLocalStorage = {
       localStorage.removeItem(key)
     } catch (e) {
       console.warn("safeLocalStorage.removeItem failed", e)
-    }
-  }
-}
-
-const safeSessionStorage = {
-  getItem: (key) => {
-    try {
-      return sessionStorage.getItem(key)
-    } catch {
-      return null
-    }
-  },
-  setItem: (key, value) => {
-    try {
-      sessionStorage.setItem(key, value)
-    } catch (e) {
-      console.warn("safeSessionStorage.setItem failed", e)
-    }
-  },
-  removeItem: (key) => {
-    try {
-      sessionStorage.removeItem(key)
-    } catch (e) {
-      console.warn("safeSessionStorage.removeItem failed", e)
     }
   }
 }
@@ -573,9 +549,6 @@ function App() {
   const [lightboxImage, setLightboxImage] = useState(null)
   const [selectedBike, setSelectedBike] = useState('rouge')
   const [selectedBikeImgIndex, setSelectedBikeImgIndex] = useState(0)
-  const [showIntroSplash, setShowIntroSplash] = useState(false)
-  const [fadeIntro, setFadeIntro] = useState(false)
-  const [introMuted, setIntroMuted] = useState(true)
   const [showTeaserModal, setShowTeaserModal] = useState(false)
   const [sponsorName, setSponsorName] = useState('')
   const [sponsorEmail, setSponsorEmail] = useState('')
@@ -817,23 +790,6 @@ function App() {
         }
       })
   }, [activeTab])
-
-  // Trigger cinematic splash screen on first visit in the current session
-  useEffect(() => {
-    const hasSeen = safeSessionStorage.getItem('myd_intro_seen')
-    if (!hasSeen) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setShowIntroSplash(true)
-    }
-  }, [])
-
-  const handleSplashEnd = () => {
-    setFadeIntro(true)
-    setTimeout(() => {
-      setShowIntroSplash(false)
-      safeSessionStorage.setItem('myd_intro_seen', 'true')
-    }, 800)
-  }
 
   // Check Supabase Auth session on mount and listen to changes
   useEffect(() => {
@@ -1659,7 +1615,7 @@ function App() {
         </div>
       </header>
 
-      {['home', 'team', 'bikes', 'gallery', 'events', 'sponsors', 'championnat', 'blog'].includes(activeTab) && !showIntroSplash && (
+      {['home', 'team', 'bikes', 'gallery', 'events', 'sponsors', 'championnat', 'blog'].includes(activeTab) && (
         <>
           <SidebarAd side="left" navigate={navigate} />
           <SidebarAd side="right" navigate={navigate} />
@@ -3747,29 +3703,7 @@ function App() {
         </div>
       )}
 
-      {/* ─── Option 1: Cinematic Splash Screen ─── */}
-      {showIntroSplash && (
-        <div className={`intro-splash-overlay ${fadeIntro ? 'fade-out' : ''}`}>
-          <video 
-            src="/intro.mp4" 
-            autoPlay 
-            muted={introMuted} 
-            playsInline 
-            onEnded={handleSplashEnd} 
-            className="intro-splash-video" 
-          />
-          <div className="intro-actions">
-            <button className="intro-action-btn" onClick={() => setIntroMuted(!introMuted)}>
-              {introMuted ? '🔊 Activer le son' : '🔇 Couper le son'}
-            </button>
-            <button className="intro-action-btn" onClick={handleSplashEnd}>
-              Passer l'intro ➔
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ─── Option 2: Lightbox Teaser Modal ─── */}
+      {/* ─── Teaser vidéo (ouvert à la demande via le bouton « Voir le Teaser ») ─── */}
       {showTeaserModal && (
         <div className="teaser-modal-overlay" onClick={() => setShowTeaserModal(false)}>
           <div className="teaser-modal-content" onClick={e => e.stopPropagation()}>
