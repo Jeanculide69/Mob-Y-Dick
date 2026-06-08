@@ -700,6 +700,62 @@
   transform: scale(1);
 }
 
+/* En-tête de la section photos : label + bouton d'ajout de photos d'article */
+.blog-ai-photos-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.blog-ai-photos-head .blog-ai-photos-label {
+  margin-bottom: 0;
+}
+
+.blog-ai-photo-upload-btn {
+  background: rgba(255, 85, 0, 0.12);
+  border: 1px dashed rgba(255, 85, 0, 0.5);
+  color: var(--accent);
+  font-weight: 600;
+  font-size: 0.78rem;
+  padding: 7px 14px;
+  border-radius: 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.blog-ai-photo-upload-btn:hover:not(:disabled) {
+  background: rgba(255, 85, 0, 0.22);
+  border-style: solid;
+  transform: translateY(-1px);
+}
+
+.blog-ai-photo-upload-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Badge identifiant une photo propre à l'article (non publiée dans la galerie) */
+.blog-ai-photo-badge {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(255, 85, 0, 0.85);
+  color: #fff;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  text-align: center;
+  padding: 1px 0;
+  pointer-events: none;
+  z-index: 2;
+}
+
 .blog-ai-key-input {
   margin-top: 14px;
   border-top: 1px solid rgba(255, 255, 255, 0.05);

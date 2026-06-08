@@ -414,8 +414,63 @@ const Blog = ({ hasPermission, isAdmin, profile, navigate }) => {
   const [galleryPhotos, setGalleryPhotos] = useState([])
   const [selectedPhotos, setSelectedPhotos] = useState([])
   const [customApiKey, setCustomApiKey] = useState(localStorage.getItem('myd_gemini_api_key') || '')
+  // Photos ajoutées spécifiquement pour CET article : uploadées dans le bucket de
+  // stockage 'Gallery' mais JAMAIS insérées dans la table `gallery`, donc invisibles
+  // dans la galerie publique du site. Disponibles à l'IA et à l'insertion manuelle.
+  const [articlePhotos, setArticlePhotos] = useState([])
+  const [articlePhotoUploading, setArticlePhotoUploading] = useState(false)
+  const articlePhotoInputRef = useRef(null)
 
   const canManage = hasPermission('manage_blog') || isAdmin || (profile && ['moderator', 'organisateur'].includes(profile.role))
+
+  // Liste unique des photos proposées à l'IA et à l'insertion : d'abord celles
+  // propres à l'article, puis la galerie du site, puis les photos locales statiques.
+  const availablePhotos = (() => {
+    const seen = new Set()
+    const out = []
+    const all = [
+      ...articlePhotos,
+      ...galleryPhotos.map(p => ({ url: p.url, title: p.title || 'Photo Galerie' })),
+      ...LOCAL_PHOTOS,
+    ]
+    all.forEach(p => {
+      if (p.url && !seen.has(p.url)) { seen.add(p.url); out.push(p) }
+    })
+    return out
+  })()
+
+  // Upload de photos rattachées uniquement à l'article (jamais ajoutées à la galerie).
+  const handleArticlePhotoFiles = async (e) => {
+    const files = Array.from(e.target.files || [])
+    if (articlePhotoInputRef.current) articlePhotoInputRef.current.value = ''
+    if (files.length === 0) return
+    if (!supabase) {
+      alert("Stockage indisponible : une connexion Supabase est nécessaire pour ajouter des photos.")
+      return
+    }
+    setArticlePhotoUploading(true)
+    try {
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) { alert(`"${file.name}" n'est pas une image, ignoré.`); continue }
+        if (file.size > 20 * 1024 * 1024) { alert(`"${file.name}" dépasse 20 Mo, ignoré.`); continue }
+        const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg'
+        const fileName = `blog/article-photo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+        const { error: upErr } = await supabase.storage
+          .from('Gallery')
+          .upload(fileName, file, { upsert: true, contentType: file.type })
+        if (upErr) { alert(`Échec de l'upload de "${file.name}" : ${upErr.message}`); continue }
+        const { data } = supabase.storage.from('Gallery').getPublicUrl(fileName)
+        const url = `${data.publicUrl}?t=${Date.now()}`
+        const title = file.name.replace(/\.[^.]+$/, '') || 'Photo article'
+        setArticlePhotos(prev => [...prev, { url, title }])
+        setSelectedPhotos(prev => prev.includes(url) ? prev : [...prev, url])
+      }
+    } catch (err) {
+      alert("Erreur lors de l'ajout des photos : " + (err?.message || err))
+    } finally {
+      setArticlePhotoUploading(false)
+    }
+  }
 
   // ─── Illustration : sélection fichier → cropper → upload (même système que les motos/avatars) ───
   const illustrationInputRef = useRef(null)
@@ -535,19 +590,8 @@ const Blog = ({ hasPermission, isAdmin, profile, navigate }) => {
 
     setAiGenerating(true)
 
-    // Build the unique photos list
-    const seenUrls = new Set()
-    const combined = [
-      ...galleryPhotos.map(p => ({ url: p.url, title: p.title || 'Photo Galerie' })),
-      ...LOCAL_PHOTOS
-    ]
-    const uniquePhotos = []
-    combined.forEach(p => {
-      if (p.url && !seenUrls.has(p.url)) {
-        seenUrls.add(p.url)
-        uniquePhotos.push(p)
-      }
-    })
+    // Photos disponibles (article + galerie + locales), déjà dédupliquées.
+    const uniquePhotos = availablePhotos
 
     const isEditing = !!editingArticle
     const currentArticleContext = isEditing 
@@ -684,6 +728,8 @@ Renvoie UNIQUEMENT le JSON brut, sans blocs de code Markdown (pas de \`\`\`json 
       read_time: 5,
       author: profile?.display_name || profile?.email?.split('@')[0] || 'Admin'
     })
+    setArticlePhotos([])
+    setSelectedPhotos([])
     setShowEditor(true)
   }
 
@@ -699,6 +745,8 @@ Renvoie UNIQUEMENT le JSON brut, sans blocs de code Markdown (pas de \`\`\`json 
       read_time: article.read_time || 5,
       author: article.author || 'Admin'
     })
+    setArticlePhotos([])
+    setSelectedPhotos([])
     setShowEditor(true)
   }
 
@@ -982,24 +1030,32 @@ Renvoie UNIQUEMENT le JSON brut, sans blocs de code Markdown (pas de \`\`\`json 
 
               {/* Photos Selection Checklist */}
               {(() => {
-                const seenUrls = new Set()
-                const combined = [
-                  ...galleryPhotos.map(p => ({ url: p.url, title: p.title || 'Photo Galerie' })),
-                  ...LOCAL_PHOTOS
-                ]
-                const uniquePhotos = []
-                combined.forEach(p => {
-                  if (p.url && !seenUrls.has(p.url)) {
-                    seenUrls.add(p.url)
-                    uniquePhotos.push(p)
-                  }
-                })
+                const uniquePhotos = availablePhotos
 
                 return (
                   <div className="blog-ai-photos-section">
-                    <label className="blog-ai-photos-label">
-                      📸 Cochez les photos du site à intégrer dans le texte :
-                    </label>
+                    <div className="blog-ai-photos-head">
+                      <label className="blog-ai-photos-label">
+                        📸 Cochez les photos à intégrer dans le texte :
+                      </label>
+                      <button
+                        type="button"
+                        className="blog-ai-photo-upload-btn"
+                        onClick={() => articlePhotoInputRef.current?.click()}
+                        disabled={articlePhotoUploading}
+                        title="Ajouter des photos visibles uniquement dans cet article (elles ne sont pas publiées dans la galerie)"
+                      >
+                        {articlePhotoUploading ? '⏳ Envoi…' : '📤 Ajouter mes photos'}
+                      </button>
+                      <input
+                        ref={articlePhotoInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        style={{ display: 'none' }}
+                        onChange={handleArticlePhotoFiles}
+                      />
+                    </div>
                     <div className="blog-ai-photos-grid">
                       {uniquePhotos.map((photo) => {
                         const isSelected = selectedPhotos.includes(photo.url);
@@ -1018,6 +1074,9 @@ Renvoie UNIQUEMENT le JSON brut, sans blocs de code Markdown (pas de \`\`\`json 
                           >
                             <img src={photo.url} alt={photo.title} />
                             <div className="blog-ai-photo-check">✓</div>
+                            {articlePhotos.some(ap => ap.url === photo.url) && (
+                              <div className="blog-ai-photo-badge">Article</div>
+                            )}
                           </div>
                         );
                       })}
@@ -1172,18 +1231,7 @@ Renvoie UNIQUEMENT le JSON brut, sans blocs de code Markdown (pas de \`\`\`json 
 
                 {/* Click to Insert Photo grid */}
                 {(() => {
-                  const seenUrls = new Set()
-                  const combined = [
-                    ...galleryPhotos.map(p => ({ url: p.url, title: p.title || 'Photo Galerie' })),
-                    ...LOCAL_PHOTOS
-                  ]
-                  const uniquePhotos = []
-                  combined.forEach(p => {
-                    if (p.url && !seenUrls.has(p.url)) {
-                      seenUrls.add(p.url)
-                      uniquePhotos.push(p)
-                    }
-                  })
+                  const uniquePhotos = availablePhotos
 
                   return (
                     <div className="blog-photos-inserter-section">
