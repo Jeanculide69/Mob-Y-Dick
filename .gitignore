@@ -8,3 +8,6 @@ public/*_backup.*
 
 # Variables d'environnement
 .env
+
+# Supabase CLI temp files
+supabase/.temp/

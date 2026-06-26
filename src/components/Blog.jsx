@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '../supabaseClient'
 import MotoCropper from './MotoCropper'
+import { generateGeminiContent } from '../utils/geminiApi'
 import './Blog.css'
 
 // Initial content-rich articles written in French to satisfy Google AdSense
@@ -642,28 +643,11 @@ Renvoie UNIQUEMENT le JSON brut, sans blocs de code Markdown (pas de \`\`\`json 
 `;
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: promptText
-            }]
-          }],
-          generationConfig: {
-            responseMimeType: "application/json"
-          }
-        })
-      })
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`)
-      }
-
-      const resData = await response.json()
+      const resData = await generateGeminiContent(
+        [{ parts: [{ text: promptText }] }],
+        geminiKey,
+        { responseMimeType: "application/json" }
+      )
       const generatedText = resData.candidates?.[0]?.content?.parts?.[0]?.text
       if (!generatedText) throw new Error("Réponse vide de l'IA.")
 

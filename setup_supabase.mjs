@@ -39,6 +39,10 @@ CREATE POLICY "Auth delete events" ON events FOR DELETE TO authenticated USING (
 CREATE POLICY "Auth insert gallery" ON gallery FOR INSERT TO authenticated WITH CHECK (true);
 CREATE POLICY "Auth update gallery" ON gallery FOR UPDATE TO authenticated USING (true);
 CREATE POLICY "Auth delete gallery" ON gallery FOR DELETE TO authenticated USING (true);
+
+-- Grant explicit API access
+GRANT ALL ON TABLE events TO anon, authenticated, service_role;
+GRANT ALL ON TABLE gallery TO anon, authenticated, service_role;
 `
 
 async function run() {

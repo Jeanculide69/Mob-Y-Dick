@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../supabaseClient'
 import AgoraRTC from 'agora-rtc-sdk-ng'
+import { generateGeminiContent } from '../utils/geminiApi'
 import './RaceSetup.css'
 
 const DEFAULT_CATEGORIES = ['Cadre en V serie A 50cc', 'Cadre en V serie B 70cc', 'Scoopette', 'Cadre tubulaire', 'Proto']
@@ -874,33 +875,11 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
     `
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiApiKey.trim()}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [
-                {
-                  text: promptText
-                }
-              ]
-            }
-          ],
-          generationConfig: {
-            responseMimeType: "application/json"
-          }
-        })
-      })
-
-      if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}))
-        throw new Error(errJson.error?.message || `Erreur API Gemini (${response.status})`)
-      }
-
-      const data = await response.json()
+      const data = await generateGeminiContent(
+        [{ parts: [{ text: promptText }] }],
+        geminiApiKey.trim(),
+        { responseMimeType: "application/json" }
+      )
       const textResult = data.candidates?.[0]?.content?.parts?.[0]?.text
       if (!textResult) {
         throw new Error("L'IA n'a pas renvoyé de réponse exploitable.")

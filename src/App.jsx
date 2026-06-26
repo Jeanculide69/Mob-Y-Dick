@@ -30,6 +30,7 @@ const RaceChrono     = lazy(() => import('./components/RaceChrono'))
 const Championnat    = lazy(() => import('./components/Championnat'))
 const Blog           = lazy(() => import('./components/Blog'))
 import './components/AuthNavbar.css'
+import { generateGeminiContent } from './utils/geminiApi'
 
 // Safe storage wrappers to prevent crashes in private browsing mode on iOS Safari
 const safeLocalStorage = {
@@ -1198,32 +1199,24 @@ function App() {
                   reader.onerror = error => reject(error)
                 })
 
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({
-                    contents: [{
-                      parts: [
-                        { text: "Tu es un assistant expert pour la team de mobcross Mob Y Dick. Analyse cette photo et propose un titre court, stylé et dynamique en français (maximum 6 mots) décrivant l'action ou la scène pour la galerie d'actualités. Réponds uniquement avec le titre brut, sans guillemets, sans explications, sans ponctuation finale." },
-                        {
-                          inlineData: {
-                            mimeType: file.type,
-                            data: base64Data
-                          }
+                const resData = await generateGeminiContent(
+                  [{
+                    parts: [
+                      { text: "Tu es un assistant expert pour la team de mobcross Mob Y Dick. Analyse cette photo et propose un titre court, stylé et dynamique en français (maximum 6 mots) décrivant l'action ou la scène pour la galerie d'actualités. Réponds uniquement avec le titre brut, sans guillemets, sans explications, sans ponctuation finale." },
+                      {
+                        inlineData: {
+                          mimeType: file.type,
+                          data: base64Data
                         }
-                      ]
-                    }]
-                  })
-                })
+                      }
+                    ]
+                  }],
+                  geminiKey
+                )
 
-                if (response.ok) {
-                  const resData = await response.json()
-                  const aiTitle = resData.candidates?.[0]?.content?.parts?.[0]?.text
-                  if (aiTitle && aiTitle.trim()) {
-                    finalTitle = aiTitle.trim().replace(/^["']|["']$/g, '')
-                  }
+                const aiTitle = resData.candidates?.[0]?.content?.parts?.[0]?.text
+                if (aiTitle && aiTitle.trim()) {
+                  finalTitle = aiTitle.trim().replace(/^["']|["']$/g, '')
                 }
               } catch (aiErr) {
                 console.warn(`AI titling failed for file ${file.name}, using fallback:`, aiErr)

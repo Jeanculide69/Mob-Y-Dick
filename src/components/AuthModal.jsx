@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { supabase } from '../supabaseClient';
+import { recordFailedLogin, resetFailedLogins } from '../utils/discordAlert';
 import './AuthModal.css';
 
 export default function AuthModal({ isOpen, onClose }) {
@@ -45,7 +46,12 @@ export default function AuthModal({ isOpen, onClose }) {
           email,
           password,
         });
-        if (error) throw error;
+        if (error) {
+          // Tentative échouée : comptage + alerte Discord si répétition
+          recordFailedLogin(email, error.message);
+          throw error;
+        }
+        resetFailedLogins(email);
         onClose();
       }
     } catch (err) {

@@ -797,7 +797,6 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
                 onChange={e => setMotoInput(e.target.value)}
                 onKeyDown={handleKeyDown}
                 placeholder="#"
-                disabled={!isRunning}
                 min="1"
               />
               <button
