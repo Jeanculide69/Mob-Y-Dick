@@ -3345,7 +3345,7 @@ function App() {
                       <div key={id} className="admin-order-card glass" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
                           <div style={{ width: '50px', height: '50px', borderRadius: '8px', overflow: 'hidden', background: '#000' }}>
-                            <img src={b.images[0] || '/logo.png'} alt={b.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            <img src={b.images[0] || '/logo.png'} alt={b.title} loading="lazy" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           </div>
                           <div>
                             <strong style={{ fontSize: '1.05rem', color: '#fff' }}>{b.title}</strong>

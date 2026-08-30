@@ -259,7 +259,7 @@ const renderInlineMarkdown = (text) => {
       if (match) {
         return (
           <span key={idx} className="article-inline-image-wrapper">
-            <img src={match[2]} alt={match[1]} className="article-inline-img" />
+            <img src={match[2]} alt={match[1]} className="article-inline-img" loading="lazy" decoding="async" />
             {match[1] && <span className="article-inline-img-caption">{match[1]}</span>}
           </span>
         );
@@ -373,7 +373,7 @@ const renderMarkdown = (content) => {
       flushAll(i);
       elements.push(
         <div key={i} className="article-image-container">
-          <img src={imgMatch[2]} alt={imgMatch[1]} className="article-inline-img" />
+          <img src={imgMatch[2]} alt={imgMatch[1]} className="article-inline-img" loading="lazy" decoding="async" />
           {imgMatch[1] && <span className="article-image-caption">{imgMatch[1]}</span>}
         </div>
       );
@@ -1056,7 +1056,7 @@ Renvoie UNIQUEMENT le JSON brut, sans blocs de code Markdown (pas de \`\`\`json 
                             }}
                             title={photo.title}
                           >
-                            <img src={photo.url} alt={photo.title} />
+                            <img src={photo.url} alt={photo.title} loading="lazy" decoding="async" />
                             <div className="blog-ai-photo-check">✓</div>
                             {articlePhotos.some(ap => ap.url === photo.url) && (
                               <div className="blog-ai-photo-badge">Article</div>
@@ -1230,7 +1230,7 @@ Renvoie UNIQUEMENT le JSON brut, sans blocs de code Markdown (pas de \`\`\`json 
                             onClick={() => insertAtCursor(`\n![${photo.title}](${photo.url})\n`)}
                             title={`Cliquer pour insérer : ${photo.title}`}
                           >
-                            <img src={photo.url} alt={photo.title} />
+                            <img src={photo.url} alt={photo.title} loading="lazy" decoding="async" />
                             <div className="blog-inserter-photo-overlay">➕ Insérer</div>
                           </div>
                         ))}
