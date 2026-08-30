@@ -39,6 +39,11 @@ const formatTime = (ms) => {
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${millis.toString().padStart(3, '0')}`
 }
 
+// Colonnes réellement lues par cette page. `select('*')` ramenait en plus
+// client_id, recorded_by et session_id — trois colonnes jamais utilisées ici,
+// soit ~25 % du poids d'un tour, multiplié par 1000 tours et par spectateur.
+const LAP_COLS = 'id, team_id, moto_number, lap_time_ms, lap_number, recorded_at'
+
 const formatElapsed = (ms) => {
   const h = Math.floor(ms / 3600000)
   const m = Math.floor((ms % 3600000) / 60000)
@@ -137,6 +142,8 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
   // gérés dans StripePurchaseButton.jsx, qui re-vérifie l'unicité du pseudo
   // côté serveur via l'Edge Function avant de créer le PaymentIntent.
 
+  useEffect(() => { lapsRef.current = laps }, [laps])
+
   // ── TTS warm-up : précharge les voix navigateur au mount (Chrome charge
   //    les voix de façon async, donc la 1re lecture peut tomber sur une
   //    liste vide si on ne pré-trigger pas. warmUpTTS() force le chargement.
@@ -170,6 +177,11 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
     }
   }, [unlockAudio])
 
+  // Miroir des tours : permet au fallback de comparer son comptage à ce qui est
+  // affiché sans dépendre de `laps` (qui relancerait l'effet à chaque passage).
+  const lapsRef             = useRef([])
+  // Dernier message live vu, pour ne demander que les suivants.
+  const lastMessageAtRef    = useRef(null)
   const elapsedRef          = useRef(null)
   const prevRankingsRef     = useRef({})
   const extrasChannelRef    = useRef(null)
@@ -582,7 +594,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
     try {
       const data = await fetchAllRows(() => supabase
         .from('race_laps')
-        .select('*')
+        .select(LAP_COLS)
         .eq('session_id', sid)
         .order('recorded_at', { ascending: false })
         .order('id', { ascending: true }))
@@ -991,8 +1003,25 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
     const sid = session.id
     console.warn('[LiveRace] Fallback polling actif (3s)')
 
-    const tick = () => {
-      // 1. Session : remplace si N'IMPORTE QUEL champ a changé
+    // ── Cadences ──
+    // Le direct passe par le WebSocket : chaque passage est poussé aux
+    // spectateurs en ~400 octets. Ce fallback n'existe que pour rattraper ce
+    // que le socket rate. Avant, il retéléchargeait TOUTE la table des tours
+    // toutes les 3 s : ~355 Ko par tick et par spectateur, soit ~500 Mo pour
+    // une course de 2 h 30 — à lui seul l'essentiel de l'egress Supabase, et
+    // multiplié par chaque personne qui regarde.
+    // Socket sain  → sondages espacés + simple comptage des tours.
+    // Socket tombé → on repasse en rattrapage complet, quitte à payer : à ce
+    //                moment-là c'est le seul canal qui reste.
+    // Socket sain, tout arrive déjà poussé : ces sondages ne sont qu'un filet.
+    // Chaque requête coûte ~1 Ko d'en-têtes même vide, donc on les espace.
+    const SESSION_MS = channelHealthy ?  20000 : 3000
+    const TEAMS_MS   = channelHealthy ? 120000 : 3000
+    const LAPS_MS    = channelHealthy ?  10000 : 3000
+    const MSG_MS     = channelHealthy ?  10000 : 3000
+
+    // 1. Session : remplace si N'IMPORTE QUEL champ a changé
+    const pollSession = () => {
       supabase.from('race_sessions').select('*').eq('id', sid).maybeSingle()
         .then(({ data }) => {
           if (!data) return
@@ -1003,9 +1032,11 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
             return data
           })
         })
+    }
 
-      // 2. Teams : remplace si N'IMPORTE QUEL changement détecté (avant : seulement
-      //    moto_number/pilot_1_name/category, on ratait pilot_2_name, etc.)
+    // 2. Teams : remplace si N'IMPORTE QUEL changement détecté (avant : seulement
+    //    moto_number/pilot_1_name/category, on ratait pilot_2_name, etc.)
+    const pollTeams = () => {
       supabase.from('race_teams').select('*').eq('session_id', sid).order('moto_number')
         .then(({ data }) => {
           if (!data) return
@@ -1019,10 +1050,11 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
             return prev
           })
         })
+    }
 
-      // 3. Laps : remplace si une ligne a changé (INSERT/UPDATE/DELETE), avant
-      //    on ratait les UPDATE car comparaison par set d'IDs uniquement.
-      fetchAllRows(() => supabase.from('race_laps').select('*').eq('session_id', sid)
+    // 3. Laps : rattrapage complet, réservé au socket mort ou à un écart détecté.
+    const refetchAllLaps = () =>
+      fetchAllRows(() => supabase.from('race_laps').select(LAP_COLS).eq('session_id', sid)
         .order('recorded_at', { ascending: false }).order('id', { ascending: true }))
         .then(data => {
           if (!data) return
@@ -1037,28 +1069,55 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
             return prev
           })
         })
-        .catch(err => console.error('Polling des tours échoué:', err))
 
-      // 4. live_messages : déclenche l'alerte live pour tout NOUVEL ID non vu.
-      //    Le triggerDonationAlert dédup déjà via seenDonationIdsRef, donc
-      //    sans danger de re-trigger sur ceux déjà reçus via realtime.
-      //    Crucial pour que les achats s'affichent même quand le WebSocket
-      //    Supabase est down (cf. issue : "alertes ne s'affichent plus en live").
-      supabase.from('live_messages').select('*').eq('session_id', sid)
-        .order('created_at', { ascending: false })
-        .limit(20)
-        .then(({ data }) => {
-          if (!data) return
-          // On parcourt du plus ancien au plus récent pour que la file
-          // d'alertes garde un ordre chronologique cohérent.
-          for (let i = data.length - 1; i >= 0; i--) {
-            triggerDonationAlert(data[i])
-          }
+    const pollLaps = () => {
+      if (!channelHealthy) {
+        refetchAllLaps().catch(err => console.error('Rattrapage des tours échoué:', err))
+        return
+      }
+      // Comptage seul : requête HEAD, la réponse n'a pas de corps (le total
+      // arrive dans l'en-tête Content-Range). Quelques centaines d'octets au
+      // lieu de 355 Ko. Détecte les passages ajoutés ou supprimés qu'on aurait
+      // ratés ; les corrections de temps passent par le socket (et par le
+      // rattrapage complet dès que le compte diverge ou que le socket tombe).
+      supabase.from('race_laps').select('id', { count: 'exact', head: true }).eq('session_id', sid)
+        .then(({ count, error }) => {
+          if (error || count == null) return
+          if (count !== lapsRef.current.length) return refetchAllLaps()
         })
+        .catch(err => console.error('Comptage des tours échoué:', err))
     }
-    tick()
-    const interval = setInterval(tick, 3000)
-    return () => clearInterval(interval)
+
+    // 4. live_messages : déclenche l'alerte live pour tout NOUVEL ID non vu.
+    //    Le triggerDonationAlert dédup déjà via seenDonationIdsRef, donc
+    //    sans danger de re-trigger sur ceux déjà reçus via realtime.
+    //    Crucial pour que les achats s'affichent même quand le WebSocket
+    //    Supabase est down (cf. issue : "alertes ne s'affichent plus en live").
+    //    Incrémental : `created_at` est posé par la base, donc strictement
+    //    croissant — on ne redemande pas les 20 derniers à chaque tick.
+    const pollMessages = () => {
+      let q = supabase.from('live_messages').select('*').eq('session_id', sid)
+        .order('created_at', { ascending: false }).limit(20)
+      if (lastMessageAtRef.current) q = q.gt('created_at', lastMessageAtRef.current)
+      q.then(({ data }) => {
+        if (!data || data.length === 0) return
+        lastMessageAtRef.current = data[0].created_at
+        // On parcourt du plus ancien au plus récent pour que la file
+        // d'alertes garde un ordre chronologique cohérent.
+        for (let i = data.length - 1; i >= 0; i--) {
+          triggerDonationAlert(data[i])
+        }
+      })
+    }
+
+    pollSession(); pollTeams(); pollLaps(); pollMessages()
+    const timers = [
+      setInterval(pollSession, SESSION_MS),
+      setInterval(pollTeams, TEAMS_MS),
+      setInterval(pollLaps, LAPS_MS),
+      setInterval(pollMessages, MSG_MS),
+    ]
+    return () => timers.forEach(clearInterval)
   }, [session?.id, session?.status, channelHealthy])
 
   // ── Track position changes when laps update ──

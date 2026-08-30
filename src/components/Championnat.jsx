@@ -39,7 +39,7 @@ const formatSessionHours = (s) => {
 export default function Championnat() {
   const [sessions, setSessions]             = useState([])
   const [rawTeams, setRawTeams]             = useState([])
-  const [rawLaps, setRawLaps]               = useState([])
+  const [rawStandings, setRawStandings]     = useState([])
   const [selectedSessions, setSelectedSessions] = useState([])
   const [leaderboard, setLeaderboard]       = useState({}) // category → [{name, laps, wins, podiums, sessionResults:[], bestLap, totalTime}]
   const [loading, setLoading]               = useState(true)
@@ -70,27 +70,25 @@ export default function Championnat() {
       setSessions(orderedSessions)
       setSelectedSessions(orderedSessions.map(s => s.id))
 
-      // 2. Fetch all teams + laps for those sessions in parallel.
-      //    Via fetchAllRows : sans pagination, Supabase coupe la reponse a 1000
-      //    lignes (une seule course depasse deja ce seuil) et les tours
-      //    manquants faussent silencieusement tous les cumuls.
+      // 2. Equipes + classement agrege, en parallele.
+      //    Le classement est calcule par la base (fonction race_standings) :
+      //    la page telechargeait les 5 225 tours de la saison (877 Ko) pour
+      //    les additionner ici, elle recoit maintenant ~110 lignes (~18 Ko).
+      //    C'etait le plus gros poste d'egress Supabase du site apres le live.
       const sessionIds = orderedSessions.map(s => s.id)
 
-      const [teamsData, lapsData] = await Promise.all([
+      const [teamsData, standingsRes] = await Promise.all([
         fetchAllRows(() =>
           supabase.from('race_teams').select('*')
             .in('session_id', sessionIds).order('id', { ascending: true })
         ),
-        // Colonnes limitees au strict necessaire du calcul : sur 5000+ tours,
-        // charger toute la ligne double le poids du telechargement pour rien.
-        fetchAllRows(() =>
-          supabase.from('race_laps').select('id, session_id, team_id, lap_time_ms')
-            .in('session_id', sessionIds).order('id', { ascending: true })
-        ),
+        supabase.rpc('race_standings', { p_sessions: sessionIds }),
       ])
 
+      if (standingsRes.error) throw standingsRes.error
+
       setRawTeams(teamsData || [])
-      setRawLaps(lapsData || [])
+      setRawStandings(standingsRes.data || [])
     } catch (err) {
       console.error("Error loading championship data:", err)
     } finally {
@@ -166,23 +164,22 @@ export default function Championnat() {
       // 5. For each selected session × category → compute ranking → award laps
       selectedSessData.forEach(sess => {
         const sessTeams = rawTeams.filter(t => t.session_id === sess.id)
-        const sessLaps  = rawLaps.filter(l => l.session_id === sess.id)
+        // Stats deja agregees par la base : passages, dernier passage, meilleur
+        // tour. La penalite reste appliquee ici, avec le reste des regles.
+        const sessStats = new Map(
+          rawStandings.filter(s => s.session_id === sess.id).map(s => [s.team_id, s])
+        )
         const sessCats  = sess.categories || []
 
         sessCats.forEach(cat => {
           const catTeams = sessTeams.filter(t => t.category === cat)
 
           const ranked = catTeams.map(team => {
-            const teamLaps = sessLaps
-              .filter(l => l.team_id === team.id)
-              .sort((a, b) => a.lap_time_ms - b.lap_time_ms)
-            const actualLapsCount = teamLaps.length
+            const stats = sessStats.get(team.id)
+            const actualLapsCount = stats ? stats.laps : 0
             const totalLaps = Math.max(0, actualLapsCount - (team.penalty_laps || 0))
-            const splits = teamLaps.map((lap, idx) =>
-              idx === 0 ? lap.lap_time_ms : lap.lap_time_ms - teamLaps[idx - 1].lap_time_ms
-            )
-            const bestLap = splits.length ? Math.min(...splits) : null
-            const lastPassageTime = actualLapsCount > 0 ? teamLaps[actualLapsCount - 1].lap_time_ms : Infinity
+            const bestLap = stats ? stats.best_lap_ms : null
+            const lastPassageTime = stats ? stats.last_passage_ms : Infinity
             return { team, totalLaps, bestLap, lastPassageTime }
           })
           .filter(r => r.totalLaps > 0)
@@ -243,7 +240,7 @@ export default function Championnat() {
     }, 0)
 
     return () => clearTimeout(timer)
-  }, [selectedSessions, rawTeams, rawLaps, sessions])
+  }, [selectedSessions, rawTeams, rawStandings, sessions])
 
   // Regroupement des manches par journee de course, dans l'ordre chronologique :
   // une journee peut compter plusieurs courses (matin / apres-midi).
