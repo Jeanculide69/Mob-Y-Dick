@@ -125,13 +125,35 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
     return () => supabase.removeChannel(ch)
   }, [raceSession.id])
 
-  // ── Chargement initial + resync sur erreur channel ──
+  // Miroir de `laps` : permet au polling de comparer avec l'état courant sans
+  // repasser par le setter fonctionnel (et donc sans dépendre de `laps`).
+  const lapsRef = useRef([])
+  useEffect(() => { lapsRef.current = laps }, [laps])
+
   // Merge DB + queue locale (les items pending pas encore confirmés en DB
   // sont affichés en optimiste avec id 'local-{client_id}').
+  const mergeWithQueue = useCallback((dbRows) => {
+    const dbClientIds = new Set(dbRows.map(r => r.client_id).filter(Boolean))
+    const localOnly = queueRef.current
+      .filter(q => !dbClientIds.has(q.client_id))
+      .map(q => ({ ...q, id: `local-${q.client_id}` }))
+    return [...localOnly, ...dbRows]
+  }, [])
+
+  // Un rafraîchissement n'est utile que si le nombre de lignes ou l'ensemble
+  // des id change : c'est le seul critère qu'utilisait déjà le polling.
+  const differsFromDisplayed = useCallback((nextLaps) => {
+    const current = lapsRef.current
+    if (current.length !== nextLaps.length) return true
+    const currentIds = new Set(current.map(l => l.id))
+    return nextLaps.some(l => !currentIds.has(l.id))
+  }, [])
+
+  // ── Chargement initial + resync sur erreur channel ──
   // ⚠️ fetchAllRows obligatoire : Supabase coupe toute réponse à 1000 lignes et
   // une course dépasse déjà ce seuil (>1000 passages). Tronquée, la liste fait
   // mentir les compteurs et l'annulation, et des client_id déjà en DB
-  // repassent pour "local only" dans le merge ci-dessous.
+  // repassent pour "local only" dans le merge.
   const loadLaps = useCallback(async () => {
     let dbRows
     try {
@@ -145,13 +167,8 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
       console.error('Chargement des tours échoué:', err)
       return
     }
-
-    const dbClientIds = new Set(dbRows.map(r => r.client_id).filter(Boolean))
-    const localOnly = queueRef.current
-      .filter(q => !dbClientIds.has(q.client_id))
-      .map(q => ({ ...q, id: `local-${q.client_id}` }))
-    setLaps([...localOnly, ...dbRows])
-  }, [raceSession.id])
+    setLaps(mergeWithQueue(dbRows))
+  }, [raceSession.id, mergeWithQueue])
 
   // ── Sync engine (le cœur de la fiabilité) ──
   // Invariants :
@@ -320,31 +337,28 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
             })
           }
         })
-      // Refresh laps
-      fetchAllRows(() => supabase.from('race_laps').select('*').eq('session_id', sid)
+      // Refresh laps — sonde d'abord (id + client_id seulement), recharge les
+      // lignes entières uniquement si l'ensemble a bougé. La décision est
+      // strictement la même qu'avec la liste complète (elle ne portait déjà que
+      // sur le nombre et les id), mais en fin de course la sonde pèse ~4× moins
+      // qu'un rechargement complet toutes les 5 s, en 4G au bord de la piste.
+      fetchAllRows(() => supabase.from('race_laps').select('id, client_id').eq('session_id', sid)
         .order('recorded_at', { ascending: false }).order('id', { ascending: true }))
-        .then(data => {
-          if (!data) return
-          setLaps(prev => {
-            const dbRows = data || []
-            const dbClientIds = new Set(dbRows.map(r => r.client_id).filter(Boolean))
-            const localOnly = queueRef.current
-              .filter(q => !dbClientIds.has(q.client_id))
-              .map(q => ({ ...q, id: `local-${q.client_id}` }))
-            const nextLaps = [...localOnly, ...dbRows]
-            if (prev.length !== nextLaps.length) return nextLaps
-            const prevIds = new Set(prev.map(l => l.id))
-            for (const l of nextLaps) {
-              if (!prevIds.has(l.id)) return nextLaps
-            }
-            return prev
-          })
+        .then(probe => {
+          if (!probe || !differsFromDisplayed(mergeWithQueue(probe))) return
+          return fetchAllRows(() => supabase.from('race_laps').select('*').eq('session_id', sid)
+            .order('recorded_at', { ascending: false }).order('id', { ascending: true }))
+            .then(rows => {
+              if (!rows) return
+              const nextLaps = mergeWithQueue(rows)
+              if (differsFromDisplayed(nextLaps)) setLaps(nextLaps)
+            })
         })
         .catch(err => console.error('Polling des tours échoué:', err))
     }
     const interval = setInterval(tick, 5000)
     return () => clearInterval(interval)
-  }, [raceSession.id])
+  }, [raceSession.id, mergeWithQueue, differsFromDisplayed])
 
   // ── Chrono timer ──
   // 100ms suffit pour un affichage MM:SS/HH:MM:SS fluide. Le lap_time_ms

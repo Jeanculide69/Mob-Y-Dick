@@ -2486,7 +2486,11 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
       )}
 
       {/* ── Audio Unlock Overlay ── */}
-      {!audioUnlocked && (
+      {/* Uniquement pendant le direct : sur une course terminée (résultats /
+          replay) il n'y a ni flux audio ni alerte à débloquer, l'overlay
+          n'était qu'un clic de plus avant de voir le classement. Le déblocage
+          passif (listener click/touchstart) reste actif de toute façon. */}
+      {!audioUnlocked && isLive && (
         <div className="audio-unlock-overlay" onClick={unlockAudio}>
           <div className="audio-unlock-modal glass">
             <h2>🔔 Son désactivé</h2>
