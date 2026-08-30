@@ -81,8 +81,10 @@ export default function Championnat() {
           supabase.from('race_teams').select('*')
             .in('session_id', sessionIds).order('id', { ascending: true })
         ),
+        // Colonnes limitees au strict necessaire du calcul : sur 5000+ tours,
+        // charger toute la ligne double le poids du telechargement pour rien.
         fetchAllRows(() =>
-          supabase.from('race_laps').select('*')
+          supabase.from('race_laps').select('id, session_id, team_id, lap_time_ms')
             .in('session_id', sessionIds).order('id', { ascending: true })
         ),
       ])

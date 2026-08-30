@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '../supabaseClient'
+import { fetchAllRows } from '../utils/fetchAllRows'
 import './RaceChrono.css'
 
 const formatTime = (ms, showMillis = true) => {
@@ -127,14 +128,24 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
   // ── Chargement initial + resync sur erreur channel ──
   // Merge DB + queue locale (les items pending pas encore confirmés en DB
   // sont affichés en optimiste avec id 'local-{client_id}').
+  // ⚠️ fetchAllRows obligatoire : Supabase coupe toute réponse à 1000 lignes et
+  // une course dépasse déjà ce seuil (>1000 passages). Tronquée, la liste fait
+  // mentir les compteurs et l'annulation, et des client_id déjà en DB
+  // repassent pour "local only" dans le merge ci-dessous.
   const loadLaps = useCallback(async () => {
-    const { data } = await supabase
-      .from('race_laps')
-      .select('*')
-      .eq('session_id', raceSession.id)
-      .order('recorded_at', { ascending: false })
+    let dbRows
+    try {
+      dbRows = await fetchAllRows(() => supabase
+        .from('race_laps')
+        .select('*')
+        .eq('session_id', raceSession.id)
+        .order('recorded_at', { ascending: false })
+        .order('id', { ascending: true }))
+    } catch (err) {
+      console.error('Chargement des tours échoué:', err)
+      return
+    }
 
-    const dbRows = data || []
     const dbClientIds = new Set(dbRows.map(r => r.client_id).filter(Boolean))
     const localOnly = queueRef.current
       .filter(q => !dbClientIds.has(q.client_id))
@@ -310,8 +321,9 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
           }
         })
       // Refresh laps
-      supabase.from('race_laps').select('*').eq('session_id', sid).order('recorded_at', { ascending: false })
-        .then(({ data }) => {
+      fetchAllRows(() => supabase.from('race_laps').select('*').eq('session_id', sid)
+        .order('recorded_at', { ascending: false }).order('id', { ascending: true }))
+        .then(data => {
           if (!data) return
           setLaps(prev => {
             const dbRows = data || []
@@ -328,6 +340,7 @@ export default function RaceChrono({ raceSession, teams, session, onFinish, onCl
             return prev
           })
         })
+        .catch(err => console.error('Polling des tours échoué:', err))
     }
     const interval = setInterval(tick, 5000)
     return () => clearInterval(interval)

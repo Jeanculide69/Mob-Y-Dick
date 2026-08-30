@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../supabaseClient'
 import AgoraRTC from 'agora-rtc-sdk-ng'
 import { generateGeminiContent } from '../utils/geminiApi'
+import { fetchAllRows } from '../utils/fetchAllRows'
 import './RaceSetup.css'
 
 const DEFAULT_CATEGORIES = ['Cadre en V serie A 50cc', 'Cadre en V serie B 70cc', 'Scoopette', 'Cadre tubulaire', 'Proto']
@@ -96,12 +97,24 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
       setTeams(teamsData || [])
 
       if (s.status === 'finished' || s.status === 'published') {
-        const { data: lapsData } = await supabase
-          .from('race_laps')
-          .select('*')
-          .eq('session_id', s.id)
-          .order('recorded_at', { ascending: false })
-        setLaps(lapsData || [])
+        // ⚠️ fetchAllRows obligatoire : Supabase coupe toute réponse à 1000
+        // lignes et une course dépasse déjà ce seuil (>1000 passages). Avec une
+        // liste tronquée, la détection d'anomalies invente des tours manquants,
+        // le plan de correction IA travaille sur des données partielles, et
+        // surtout l'annulation du lissage supprime les passages absents de la
+        // sauvegarde — donc de vrais tours.
+        let lapsData = []
+        try {
+          lapsData = await fetchAllRows(() => supabase
+            .from('race_laps')
+            .select('*')
+            .eq('session_id', s.id)
+            .order('recorded_at', { ascending: false })
+            .order('id', { ascending: true }))
+        } catch (err) {
+          console.error('Chargement des tours échoué:', err)
+        }
+        setLaps(lapsData)
       }
     }
   }
