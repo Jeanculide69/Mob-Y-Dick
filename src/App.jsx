@@ -9,7 +9,6 @@ import PhotoComments from './components/PhotoComments'
 import ProfilePage from './components/ProfilePage'
 import RiderPage from './components/RiderPage'
 import VideoBackgroundDual from './components/VideoBackgroundDual'
-import LiveRace from './components/LiveRace'
 import MotoPage from './components/MotoPage'
 // StripeOrderCheckout lazy-loaded (Stripe SDK ~50 KB, seulement utilisé
 // dans le flow boutique → pas de raison de bundler en eager).
@@ -29,6 +28,9 @@ const RaceSetup      = lazy(() => import('./components/RaceSetup'))
 const RaceChrono     = lazy(() => import('./components/RaceChrono'))
 const Championnat    = lazy(() => import('./components/Championnat'))
 const Blog           = lazy(() => import('./components/Blog'))
+// LiveRace embarque le SDK Agora (1,5 Mo minifié) via son import statique :
+// en chargement direct, tout visiteur de l'accueil le téléchargeait pour rien.
+const LiveRace       = lazy(() => import('./components/LiveRace'))
 import './components/AuthNavbar.css'
 import { generateGeminiContent } from './utils/geminiApi'
 
@@ -778,6 +780,13 @@ function App() {
     if (viewingSessionId) safeLocalStorage.setItem('myd_viewingSessionId', viewingSessionId)
     else safeLocalStorage.removeItem('myd_viewingSessionId')
   }, [viewingSessionId])
+
+  // Course en direct : on précharge le chunk LiveRace (+ SDK Agora) en tâche
+  // de fond dès que le bouton LIVE apparaît, pour que le clic reste instantané
+  // malgré le chargement à la demande.
+  useEffect(() => {
+    if (liveSession?.status === 'live') import('./components/LiveRace')
+  }, [liveSession?.status])
 
   // Load active moto numbers from race_teams when bikes tab opens
   useEffect(() => {
@@ -2453,6 +2462,7 @@ function App() {
 
       {/* ─── LIVE RACE (public) ─── */}
       {activeTab === 'live' && (
+        <Suspense fallback={<LazyLoader />}>
         <LiveRace
           customSessionId={viewingSessionId}
           onClose={() => {
@@ -2479,6 +2489,7 @@ function App() {
             }
           }}
         />
+        </Suspense>
       )}
 
       {/* ─── CHAMPIONNAT ─── */}

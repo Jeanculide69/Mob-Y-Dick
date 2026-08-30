@@ -983,6 +983,11 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
   // donations live restent à jour si le WebSocket meurt.
   useEffect(() => {
     if (!session?.id) return
+    // Course terminée = page résultats : plus rien ne bouge, alors que le
+    // fallback retéléchargeait tous les tours toutes les 3 s (~330 Ko par tick
+    // sur une course de 900 passages) pour chaque spectateur. Le channel
+    // realtime reste branché, donc un passage en 'live' serait quand même vu.
+    if (session.status === 'finished' || session.status === 'published') return
     const sid = session.id
     console.warn('[LiveRace] Fallback polling actif (3s)')
 
@@ -1054,7 +1059,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
     tick()
     const interval = setInterval(tick, 3000)
     return () => clearInterval(interval)
-  }, [session?.id, channelHealthy])
+  }, [session?.id, session?.status, channelHealthy])
 
   // ── Track position changes when laps update ──
   // ── Classement memoizé pour TOUTES les catégories d'un coup ──
