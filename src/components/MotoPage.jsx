@@ -83,10 +83,6 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
   const [requesting, setRequesting]   = useState(false)
   const [submitStatus, setSubmitStatus] = useState(null) // 'sent' | 'error'
 
-  // ── Admin ──
-  const [allAffiliations, setAllAffiliations] = useState([])
-  const [reviewingId, setReviewingId] = useState(null)
-
   // ── Edit form (name + description) ──
   const [editForm, setEditForm]       = useState({ display_name: '', description: '' })
   const [saving, setSaving]           = useState(false)
@@ -109,7 +105,6 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
       loadStats(),
       loadApprovedUsers(),
       session ? loadAffiliation() : Promise.resolve(),
-      (isAdmin || isModerator) ? loadAdminAffiliations() : Promise.resolve(),
     ])
     setLoading(false)
   }
@@ -225,38 +220,8 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
     setApprovedUsers((profs || []).map(p => p.display_name).filter(Boolean))
   }
 
-  const loadAdminAffiliations = async () => {
-    // Try with the profiles join first
-    let { data, error } = await supabase
-      .from('moto_affiliations')
-      .select('*, profiles(display_name, email)')
-      .eq('moto_number', motoNumber)
-      .order('requested_at', { ascending: false })
-
-    // If the join fails (missing FK to profiles), fall back to a plain query
-    if (error || !data) {
-      const plain = await supabase
-        .from('moto_affiliations')
-        .select('*')
-        .eq('moto_number', motoNumber)
-        .order('requested_at', { ascending: false })
-      data = plain.data || []
-
-      // Enrich with profile info manually
-      if (data.length > 0) {
-        const userIds = [...new Set(data.map(a => a.user_id).filter(Boolean))]
-        const { data: profs } = await supabase
-          .from('profiles')
-          .select('id, display_name, email')
-          .in('id', userIds)
-        const profMap = {}
-        ;(profs || []).forEach(p => { profMap[p.id] = p })
-        data = data.map(a => ({ ...a, profiles: profMap[a.user_id] || null }))
-      }
-    }
-
-    setAllAffiliations(data || [])
-  }
+  // NB : la validation des demandes d'affiliation (approuver / refuser) vit
+  // dans l'admin (App.jsx). Une copie orpheline trainait ici, jamais affichee.
 
   // eslint-disable-next-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
   useEffect(() => { loadAll() }, [motoNumber, session?.user?.id])
@@ -299,19 +264,6 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const handleReviewAffiliation = async (id, newStatus) => {
-    setReviewingId(id)
-    const { data: { user } } = await supabase.auth.getUser()
-    await supabase.from('moto_affiliations').update({
-      status:      newStatus,
-      reviewed_at: new Date().toISOString(),
-      reviewed_by: user?.id,
-    }).eq('id', id)
-    await loadAdminAffiliations()
-    await loadApprovedUsers()
-    setReviewingId(null)
-  }
-
   // ─── Affiliation request ───────────────────
   const handleRequest = async () => {
     // Vérifier la limite de 3 affiliés max
@@ -335,7 +287,6 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
     setSubmitStatus(error ? 'error' : 'sent')
     if (!error) {
       await loadAffiliation()
-      if (isAdmin || isModerator) await loadAdminAffiliations()
     }
     setRequesting(false)
   }

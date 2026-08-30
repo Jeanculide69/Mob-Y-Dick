@@ -7,29 +7,6 @@ import './RaceSetup.css'
 
 const DEFAULT_CATEGORIES = ['Cadre en V serie A 50cc', 'Cadre en V serie B 70cc', 'Scoopette', 'Cadre tubulaire', 'Proto']
 
-const DEMO_TEAMS = [
-  { moto_number: 11, category: 'Prototype', pilot_1_name: 'Maxime Durand', pilot_1_sex: 'M', pilot_2_name: 'Lucas Martin', pilot_2_sex: 'M' },
-  { moto_number: 12, category: 'Prototype', pilot_1_name: 'Arthur Chevalier', pilot_1_sex: 'M', pilot_2_name: 'Chloé Dubois', pilot_2_sex: 'F' },
-  { moto_number: 13, category: 'Prototype', pilot_1_name: 'Florian Girard', pilot_1_sex: 'M', pilot_2_name: 'Jean-Marc Lartigue', pilot_2_sex: 'M' },
-  { moto_number: 14, category: 'Prototype', pilot_1_name: 'Jérôme Bricard', pilot_1_sex: 'M', pilot_2_name: 'Pierre Vaillant', pilot_2_sex: 'M' },
-  { moto_number: 21, category: 'Cadre en V', pilot_1_name: 'Nicolas Vasseur', pilot_1_sex: 'M', pilot_2_name: 'Clément Roussel', pilot_2_sex: 'M' },
-  { moto_number: 22, category: 'Cadre en V', pilot_1_name: 'Elodie Bertrand', pilot_1_sex: 'F', pilot_2_name: 'Mathieu Picard', pilot_2_sex: 'M' },
-  { moto_number: 23, category: 'Cadre en V', pilot_1_name: 'Thomas Colin', pilot_1_sex: 'M', pilot_2_name: 'Romain Bonnet', pilot_2_sex: 'M' },
-  { moto_number: 24, category: 'Cadre en V', pilot_1_name: 'Damien Leclerc', pilot_1_sex: 'M', pilot_2_name: 'Julien Mercier', pilot_2_sex: 'M' },
-  { moto_number: 31, category: 'Origine', pilot_1_name: 'Benoît Lemaire', pilot_1_sex: 'M', pilot_2_name: 'Jean Culide', pilot_2_sex: 'M' },
-  { moto_number: 32, category: 'Origine', pilot_1_name: 'Sarah Gauthier', pilot_1_sex: 'F', pilot_2_name: 'Alexandre Roy', pilot_2_sex: 'M' },
-  { moto_number: 33, category: 'Origine', pilot_1_name: 'Stéphane Vidal', pilot_1_sex: 'M', pilot_2_name: 'Philippe Henry', pilot_2_sex: 'M' },
-  { moto_number: 34, category: 'Origine', pilot_1_name: 'Valérie Caron', pilot_1_sex: 'F', pilot_2_name: 'Laurent Fontaine', pilot_2_sex: 'M' },
-  { moto_number: 51, category: '50cc', pilot_1_name: 'Hugo Marchand', pilot_1_sex: 'M', pilot_2_name: 'Antoine Aubry', pilot_2_sex: 'M' },
-  { moto_number: 52, category: '50cc', pilot_1_name: 'Manon Renard', pilot_1_sex: 'F', pilot_2_name: 'Audrey Dumont', pilot_2_sex: 'F' },
-  { moto_number: 53, category: '50cc', pilot_1_name: 'Guillaume Perrin', pilot_1_sex: 'M', pilot_2_name: 'Fabien Mathieu', pilot_2_sex: 'M' },
-  { moto_number: 54, category: '50cc', pilot_1_name: 'Vincent Barbier', pilot_1_sex: 'M', pilot_2_name: 'Olivier Brunet', pilot_2_sex: 'M' },
-  { moto_number: 71, category: '70cc', pilot_1_name: 'Sébastien Brun', pilot_1_sex: 'M', pilot_2_name: 'Pascal Dumas', pilot_2_sex: 'M' },
-  { moto_number: 72, category: '70cc', pilot_1_name: 'Coralie Lamy', pilot_1_sex: 'F', pilot_2_name: 'David Lefebvre', pilot_2_sex: 'M' },
-  { moto_number: 73, category: '70cc', pilot_1_name: 'Mickaël Gautier', pilot_1_sex: 'M', pilot_2_name: 'Yannick Morin', pilot_2_sex: 'M' },
-  { moto_number: 74, category: '70cc', pilot_1_name: 'Cédric Roger', pilot_1_sex: 'M', pilot_2_name: 'Arnaud Leroy', pilot_2_sex: 'M' }
-]
-
 export default function RaceSetup({ event, session, isAdmin, profile, onStartRace, onClose }) {
   const isRaceManager = isAdmin || profile?.role === 'organisateur'
   const [raceSession, setRaceSession] = useState(null)
@@ -285,26 +262,6 @@ export default function RaceSetup({ event, session, isAdmin, profile, onStartRac
 
     await supabase.from('race_teams').insert(toImport)
     setShowImportModal(false)
-    loadSession()
-  }
-
-  const handleImportDemoTeams = async () => {
-    if (!raceSession) return
-    const toInsert = DEMO_TEAMS.map(t => ({
-      session_id: raceSession.id,
-      moto_number: t.moto_number,
-      category: t.category,
-      pilot_1_name: t.pilot_1_name,
-      pilot_1_sex: t.pilot_1_sex,
-      pilot_2_name: t.pilot_2_name,
-      pilot_2_sex: t.pilot_2_sex,
-    }))
-
-    const { error } = await supabase.from('race_teams').insert(toInsert)
-    if (error) {
-      alert("Erreur lors de l'importation de la liste démo : " + error.message)
-      return
-    }
     loadSession()
   }
 

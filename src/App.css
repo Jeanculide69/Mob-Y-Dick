@@ -112,7 +112,16 @@
 .nav-link:hover { color: var(--text-primary); background: rgba(255,255,255,0.04); }
 .nav-link.active { color: var(--accent); background: rgba(255, 85, 0, 0.08); }
 
-@media (max-width: 1200px) and (min-width: 769px) {
+/* ─── Barre de nav sur écran intermédiaire (portables) ───
+   Le conteneur est plafonné à 1200 px alors que la barre, une fois connecté
+   (onglet Admin + bouton profil avec le pseudo), réclame ~1430 px : elle
+   débordait et faisait scroller TOUTE la page horizontalement. On récupère la
+   place sans retirer d'onglet : barre sur toute la largeur, liens compactés,
+   bouton profil réduit à l'avatar (le pseudo reste dans la page profil). */
+@media (max-width: 1700px) and (min-width: 769px) {
+  .nav-inner {
+    max-width: none;
+  }
   .nav-links {
     gap: 3px;
   }
@@ -120,6 +129,15 @@
     padding: 8px 10px;
     font-size: 0.8rem;
     letter-spacing: 0.5px;
+  }
+  .profile-btn {
+    padding: 6px 10px;
+  }
+  .profile-btn > span {
+    display: none;
+  }
+  .nav-divider {
+    margin: 0 4px;
   }
 }
 
