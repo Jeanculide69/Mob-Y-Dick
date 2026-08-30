@@ -13,6 +13,7 @@ import { playPremiumSound, playDonationSound, playRaceSignalSound, playAnnouncem
 import { playPremiumEffects, playDonationSparks, SLUG_ANIM_CLASS, MEDIA_OVERRIDES } from '../utils/premiumEmoteEffects'
 import { speakDonation, warmUpTTS, isDonationTTSEnabled, setDonationTTSEnabled, speakAnnouncement, speakTeamAnnouncement } from '../utils/donationTTS'
 import { formatCategoryShort } from '../utils/formatCategory'
+import { fetchAllRows } from '../utils/fetchAllRows'
 import { useToast } from './Toast'
 import './LiveRace.css'
 
@@ -574,14 +575,21 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
   // ── Realtime laps & session ──
   // Helper : refetch complet des laps. Sert pour les DELETE (undo chrono)
   // et les UPDATE — qu'on ne peut pas patcher proprement en mémoire.
+  // ⚠️ fetchAllRows obligatoire : Supabase coupe toute réponse à 1000 lignes et
+  // une course dépasse déjà ce seuil (>1000 passages) → tours perdus.
   const refetchLaps = useCallback(async (sid) => {
     if (!sid) return
-    const { data } = await supabase
-      .from('race_laps')
-      .select('*')
-      .eq('session_id', sid)
-      .order('recorded_at', { ascending: false })
-    if (data) setLaps(data)
+    try {
+      const data = await fetchAllRows(() => supabase
+        .from('race_laps')
+        .select('*')
+        .eq('session_id', sid)
+        .order('recorded_at', { ascending: false })
+        .order('id', { ascending: true }))
+      if (data) setLaps(data)
+    } catch (err) {
+      console.error('refetchLaps failed:', err)
+    }
   }, [])
 
   useEffect(() => {
@@ -873,8 +881,14 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
       setEventInfo(ev)
       const { data: teamsData } = await supabase.from('race_teams').select('*').eq('session_id', s.id).order('moto_number')
       setTeams(teamsData || [])
-      const { data: lapsData } = await supabase.from('race_laps').select('*').eq('session_id', s.id).order('recorded_at', { ascending: false })
-      setLaps(lapsData || [])
+      let lapsData = []
+      try {
+        lapsData = await fetchAllRows(() => supabase.from('race_laps').select('*').eq('session_id', s.id)
+          .order('recorded_at', { ascending: false }).order('id', { ascending: true }))
+      } catch (err) {
+        console.error('Chargement des tours échoué:', err)
+      }
+      setLaps(lapsData)
       const { data: annData } = await supabase.from('race_announcements').select('*').eq('session_id', s.id).order('created_at', { ascending: false })
       setAnnouncementsHistory(annData || [])
     }
@@ -1003,9 +1017,9 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
 
       // 3. Laps : remplace si une ligne a changé (INSERT/UPDATE/DELETE), avant
       //    on ratait les UPDATE car comparaison par set d'IDs uniquement.
-      supabase.from('race_laps').select('*').eq('session_id', sid)
-        .order('recorded_at', { ascending: false })
-        .then(({ data }) => {
+      fetchAllRows(() => supabase.from('race_laps').select('*').eq('session_id', sid)
+        .order('recorded_at', { ascending: false }).order('id', { ascending: true }))
+        .then(data => {
           if (!data) return
           setLaps(prev => {
             if (prev.length !== data.length) return data
@@ -1018,6 +1032,7 @@ export default function LiveRace({ customSessionId, onClose, onAutoExit, isAdmin
             return prev
           })
         })
+        .catch(err => console.error('Polling des tours échoué:', err))
 
       // 4. live_messages : déclenche l'alerte live pour tout NOUVEL ID non vu.
       //    Le triggerDonationAlert dédup déjà via seenDonationIdsRef, donc

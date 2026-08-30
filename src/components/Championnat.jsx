@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../supabaseClient'
 import { formatCategoryShort } from '../utils/formatCategory'
+import { fetchAllRows } from '../utils/fetchAllRows'
 import './Championnat.css'
 
 const formatTime = (ms) => {
@@ -13,6 +14,26 @@ const formatTime = (ms) => {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${millis.toString().padStart(3, '0')}`
   }
   return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${millis.toString().padStart(3, '0')}`
+}
+
+// Date de reference d'une manche : l'heure de depart reelle. `created_at` ne
+// suffit pas — une session peut etre creee la veille, ou apres une autre deja
+// courue, ce qui casserait l'ordre chronologique et le regroupement par jour.
+const sessionDate = (s) => new Date(s.started_at || s.created_at)
+const sessionTime = (s) => sessionDate(s).getTime()
+const dayKey = (s) => {
+  const d = sessionDate(s)
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+}
+const formatDay = (d) =>
+  d.toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+const formatHour = (iso) =>
+  iso ? new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : null
+const formatSessionHours = (s) => {
+  const start = formatHour(s.started_at)
+  const end = formatHour(s.finished_at)
+  if (start && end) return `${start} → ${end}`
+  return start || ''
 }
 
 export default function Championnat() {
@@ -41,15 +62,29 @@ export default function Championnat() {
         return
       }
 
-      setSessions(sessionData)
-      setSelectedSessions(sessionData.map(s => s.id))
+      // Ordre chronologique reel (heure de depart) : "Manche 1, 2, 3..." et les
+      // colonnes du tableau suivent le deroule de la saison, y compris quand
+      // plusieurs courses ont lieu la meme journee (matin / apres-midi).
+      const orderedSessions = [...sessionData].sort((a, b) => sessionTime(a) - sessionTime(b))
 
-      // 2. Fetch all teams + laps for those sessions in parallel
-      const sessionIds = sessionData.map(s => s.id)
+      setSessions(orderedSessions)
+      setSelectedSessions(orderedSessions.map(s => s.id))
 
-      const [{ data: teamsData }, { data: lapsData }] = await Promise.all([
-        supabase.from('race_teams').select('*').in('session_id', sessionIds),
-        supabase.from('race_laps').select('*').in('session_id', sessionIds),
+      // 2. Fetch all teams + laps for those sessions in parallel.
+      //    Via fetchAllRows : sans pagination, Supabase coupe la reponse a 1000
+      //    lignes (une seule course depasse deja ce seuil) et les tours
+      //    manquants faussent silencieusement tous les cumuls.
+      const sessionIds = orderedSessions.map(s => s.id)
+
+      const [teamsData, lapsData] = await Promise.all([
+        fetchAllRows(() =>
+          supabase.from('race_teams').select('*')
+            .in('session_id', sessionIds).order('id', { ascending: true })
+        ),
+        fetchAllRows(() =>
+          supabase.from('race_laps').select('*')
+            .in('session_id', sessionIds).order('id', { ascending: true })
+        ),
       ])
 
       setRawTeams(teamsData || [])
@@ -80,7 +115,7 @@ export default function Championnat() {
 
       // 3. Filter sessions by selection
       const selectedSessData = sessions.filter(s => selectedSessions.includes(s.id))
-      
+
       // Collect all categories across selected sessions
       const cats = new Set()
       selectedSessData.forEach(s => (s.categories || []).forEach(c => cats.add(c)))
@@ -90,16 +125,16 @@ export default function Championnat() {
       // 4. Build laps accumulator: { pilotKey → { name, category, laps, wins, podiums, sessionResults, bestLap, totalTime } }
       const accumulator = {}
 
-      const addLaps = (name, cat, lapsCount, sessionName, position, bestLapMs, totalTimeMs, team) => {
+      const addLaps = (name, cat, lapsCount, session, position, bestLapMs, totalTimeMs, team) => {
         const key = `${cat}__${name}`
         if (!accumulator[key]) {
-          accumulator[key] = { 
-            name, 
-            category: cat, 
-            laps: 0, 
-            wins: 0, 
-            podiums: 0, 
-            sessionResults: [], 
+          accumulator[key] = {
+            name,
+            category: cat,
+            laps: 0,
+            wins: 0,
+            podiums: 0,
+            sessionResults: [],
             bestLap: null,
             totalTime: 0,
             team: team
@@ -108,7 +143,16 @@ export default function Championnat() {
         accumulator[key].laps += lapsCount
         if (position === 1) accumulator[key].wins++
         if (position <= 3) accumulator[key].podiums++
-        accumulator[key].sessionResults.push({ sessionName, position, laps: lapsCount, bestLapMs })
+        // Resultat indexe par id de session : deux manches d'une meme journee
+        // portent souvent le meme nom, une recherche par nom melangerait leurs
+        // colonnes dans le tableau.
+        accumulator[key].sessionResults.push({
+          sessionId: session.id,
+          sessionName: session.name,
+          position,
+          laps: lapsCount,
+          bestLapMs,
+        })
         if (totalTimeMs && totalTimeMs !== Infinity) {
           accumulator[key].totalTime += totalTimeMs
         }
@@ -148,7 +192,7 @@ export default function Championnat() {
 
           ranked.forEach((r, i) => {
             const identifier = `Moto ${r.team.moto_number}`
-            addLaps(identifier, cat, r.totalLaps, sess.name, i + 1, r.bestLap, r.lastPassageTime, r.team)
+            addLaps(identifier, cat, r.totalLaps, sess, i + 1, r.bestLap, r.lastPassageTime, r.team)
           })
         })
       })
@@ -170,10 +214,10 @@ export default function Championnat() {
 
       // Calculate championship overall winners
       const allEntries = Object.values(accumulator)
-      const femaleEntries = allEntries.filter(e => 
+      const femaleEntries = allEntries.filter(e =>
         e.team && (
-          e.team.pilot_1_sex === 'F' || 
-          e.team.pilot_2_sex === 'F' || 
+          e.team.pilot_1_sex === 'F' ||
+          e.team.pilot_2_sex === 'F' ||
           e.team.pilot_3_sex === 'F'
         )
       ).sort((a, b) => {
@@ -181,10 +225,10 @@ export default function Championnat() {
         return a.totalTime - b.totalTime
       })
 
-      const juniorEntries = allEntries.filter(e => 
+      const juniorEntries = allEntries.filter(e =>
         e.team && (
-          e.team.pilot_1_sex === 'J' || 
-          e.team.pilot_2_sex === 'J' || 
+          e.team.pilot_1_sex === 'J' ||
+          e.team.pilot_2_sex === 'J' ||
           e.team.pilot_3_sex === 'J'
         )
       ).sort((a, b) => {
@@ -199,12 +243,47 @@ export default function Championnat() {
     return () => clearTimeout(timer)
   }, [selectedSessions, rawTeams, rawLaps, sessions])
 
+  // Regroupement des manches par journee de course, dans l'ordre chronologique :
+  // une journee peut compter plusieurs courses (matin / apres-midi).
+  const sessionDays = useMemo(() => {
+    const groups = []
+    sessions.forEach(s => {
+      const key = dayKey(s)
+      let group = groups.find(g => g.key === key)
+      if (!group) {
+        group = { key, date: sessionDate(s), sessions: [] }
+        groups.push(group)
+      }
+      group.sessions.push(s)
+    })
+    return groups
+  }, [sessions])
+
   const handleToggleSession = (id) => {
     setSelectedSessions(prev =>
       prev.includes(id)
         ? prev.filter(sessId => sessId !== id)
         : [...prev, id]
     )
+  }
+
+  const handleToggleDay = (group) => {
+    const dayIds = group.sessions.map(s => s.id)
+    const allSelected = dayIds.every(id => selectedSessions.includes(id))
+    setSelectedSessions(prev =>
+      allSelected
+        ? prev.filter(id => !dayIds.includes(id))
+        : [...new Set([...prev, ...dayIds])]
+    )
+  }
+
+  const handleSelectAll  = () => setSelectedSessions(sessions.map(s => s.id))
+  const handleSelectNone = () => setSelectedSessions([])
+  // Toutes les courses de la derniere journee, et elles seules : le cas courant
+  // apres une journee a deux manches.
+  const handleSelectLastDay = () => {
+    const lastDay = sessionDays[sessionDays.length - 1]
+    setSelectedSessions(lastDay ? lastDay.sessions.map(s => s.id) : [])
   }
 
   if (loading) return (
@@ -220,6 +299,7 @@ export default function Championnat() {
 
   const hasData = Object.keys(leaderboard).length > 0 && selectedSessions.length > 0
   const displayedCats = selectedCat === 'all' ? allCategories : [selectedCat]
+  const orderedSelectedSessions = sessions.filter(s => selectedSessions.includes(s.id))
 
   const champFemaleNames = []
   if (champFemaleWinner && champFemaleWinner.team) {
@@ -251,50 +331,61 @@ export default function Championnat() {
           </div>
         </div>
 
-        {/* ── Sessions selection checkboxes ── */}
+        {/* ── Sessions selection, grouped by race day ── */}
         {sessions.length > 0 && (
-          <div className="champ-sessions-section glass" style={{ padding: '20px', marginBottom: '24px' }}>
-            <h4 style={{ fontSize: '0.9rem', marginBottom: '12px', color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              📅 Choisir les manches à inclure :
-            </h4>
-            <div className="champ-sessions-checkboxes" style={{ display: 'flex', flexWrap: 'wrap', gap: '10px' }}>
-              {sessions.map((s, i) => {
-                const isSelected = selectedSessions.includes(s.id)
-                return (
-                  <label 
-                    key={s.id} 
-                    className={`champ-session-label ${isSelected ? 'active' : ''}`}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      padding: '8px 14px',
-                      borderRadius: '20px',
-                      background: isSelected ? 'rgba(255, 85, 0, 0.12)' : 'rgba(255,255,255,0.03)',
-                      border: isSelected ? '1px solid var(--accent)' : '1px solid var(--border-subtle)',
-                      cursor: 'pointer',
-                      fontSize: '0.85rem',
-                      color: isSelected ? 'var(--accent)' : 'var(--text-secondary)',
-                      transition: 'all 0.2s',
-                      fontWeight: 600
-                    }}
-                  >
-                    <input 
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => handleToggleSession(s.id)}
-                      style={{
-                        accentColor: 'var(--accent)',
-                        cursor: 'pointer'
-                      }}
-                    />
-                    <span>Manche {i + 1} — {s.name}</span>
-                  </label>
-                )
-              })}
+          <div className="champ-sessions-section glass">
+            <div className="champ-sessions-head">
+              <h4 className="champ-sessions-title">📅 Choisir les manches à inclure :</h4>
+              <div className="champ-sessions-actions">
+                <button type="button" className="champ-quick-btn" onClick={handleSelectAll}>Toutes</button>
+                <button type="button" className="champ-quick-btn" onClick={handleSelectLastDay}>Dernière journée</button>
+                <button type="button" className="champ-quick-btn" onClick={handleSelectNone}>Aucune</button>
+              </div>
             </div>
+
+            {sessionDays.map(day => {
+              const dayIds = day.sessions.map(s => s.id)
+              const allSelected = dayIds.every(id => selectedSessions.includes(id))
+              return (
+                <div key={day.key} className="champ-day-block">
+                  <div className="champ-day-head">
+                    <span className="champ-day-label">{formatDay(day.date)}</span>
+                    <span className="champ-day-count">
+                      {day.sessions.length} course{day.sessions.length > 1 ? 's' : ''}
+                    </span>
+                    <button type="button" className="champ-day-toggle" onClick={() => handleToggleDay(day)}>
+                      {allSelected ? 'Tout décocher' : 'Tout cocher'}
+                    </button>
+                  </div>
+
+                  <div className="champ-sessions-checkboxes">
+                    {day.sessions.map(s => {
+                      const isSelected = selectedSessions.includes(s.id)
+                      const hours = formatSessionHours(s)
+                      return (
+                        <label
+                          key={s.id}
+                          className={`champ-session-label ${isSelected ? 'active' : ''}`}
+                          title={`${s.name} — ${formatDay(sessionDate(s))}${hours ? ` (${hours})` : ''}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => handleToggleSession(s.id)}
+                          />
+                          <span className="champ-session-num">M{sessions.indexOf(s) + 1}</span>
+                          <span className="champ-session-name">{s.name}</span>
+                          {hours && <span className="champ-session-hour">{hours}</span>}
+                        </label>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
+
             {selectedSessions.length === 0 && (
-              <p style={{ color: '#ff4444', fontSize: '0.85rem', marginTop: '12px', fontWeight: 600 }}>
+              <p className="champ-sessions-warning">
                 ⚠️ Sélectionnez au moins une manche ci-dessus pour afficher le classement.
               </p>
             )}
@@ -329,7 +420,7 @@ export default function Championnat() {
             <span className="champ-empty-icon">🏁</span>
             <h2>Aucun résultat disponible</h2>
             <p>
-              {selectedSessions.length === 0 
+              {selectedSessions.length === 0
                 ? "Veuillez cocher au moins une manche ci-dessus pour afficher les totaux."
                 : "Le championnat affiche les résultats des manches officiellement publiées. Revenez après la prochaine course !"}
             </p>
@@ -433,8 +524,14 @@ export default function Championnat() {
                       <th className="champ-th-num">VICTOIRES</th>
                       <th className="champ-th-num">PODIUMS</th>
                       <th className="champ-th-num">MEILLEUR</th>
-                      {sessions.filter(s => selectedSessions.includes(s.id)).map(s => (
-                        <th key={s.id} className="champ-th-session">M{sessions.indexOf(s) + 1}</th>
+                      {orderedSelectedSessions.map(s => (
+                        <th
+                          key={s.id}
+                          className="champ-th-session"
+                          title={`${s.name} — ${formatDay(sessionDate(s))}${formatSessionHours(s) ? ` (${formatSessionHours(s)})` : ''}`}
+                        >
+                          M{sessions.indexOf(s) + 1}
+                        </th>
                       ))}
                     </tr>
                   </thead>
@@ -470,8 +567,8 @@ export default function Championnat() {
                           <td className="champ-num-cell champ-best-lap">
                             {entry.bestLap ? formatTime(entry.bestLap) : '—'}
                           </td>
-                          {sessions.filter(s => selectedSessions.includes(s.id)).map(s => {
-                            const res = entry.sessionResults.find(r => r.sessionName === s.name)
+                          {orderedSelectedSessions.map(s => {
+                            const res = entry.sessionResults.find(r => r.sessionId === s.id)
                             return (
                               <td key={s.id} className="champ-session-result">
                                 {res ? (

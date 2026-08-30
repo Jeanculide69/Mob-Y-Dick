@@ -664,3 +664,170 @@
   color: #00b0ff;
   text-shadow: 0 0 10px rgba(0, 176, 255, 0.3);
 }
+
+/* =========================================================================
+   Sessions picker — manches groupees par journee de course
+   ========================================================================= */
+
+.champ-sessions-section {
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.champ-sessions-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+.champ-sessions-title {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.champ-sessions-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.champ-quick-btn {
+  padding: 5px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  color: var(--text-secondary);
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.champ-quick-btn:hover {
+  background: rgba(255, 85, 0, 0.1);
+  border-color: rgba(255, 85, 0, 0.3);
+  color: var(--accent);
+}
+
+.champ-day-block {
+  margin-top: 16px;
+}
+
+.champ-day-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.champ-day-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+
+.champ-day-count {
+  padding: 1px 8px;
+  background: rgba(255, 85, 0, 0.12);
+  border: 1px solid rgba(255, 85, 0, 0.28);
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.champ-day-toggle {
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.champ-day-toggle:hover {
+  color: var(--accent);
+}
+
+.champ-sessions-checkboxes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.champ-session-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border-subtle);
+  border-radius: 20px;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s, color 0.2s;
+}
+
+.champ-session-label:hover {
+  border-color: rgba(255, 85, 0, 0.35);
+}
+
+.champ-session-label.active {
+  background: rgba(255, 85, 0, 0.12);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.champ-session-label input[type="checkbox"] {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.champ-session-label .champ-session-name {
+  color: inherit;
+}
+
+/* Heure de depart : seul repere pour distinguer deux manches d'une meme
+   journee, qui portent souvent le meme nom. */
+.champ-session-hour {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.champ-session-label.active .champ-session-hour {
+  color: var(--accent);
+  opacity: 0.85;
+}
+
+.champ-sessions-warning {
+  color: #ff4444;
+  font-size: 0.85rem;
+  margin: 12px 0 0;
+  font-weight: 600;
+}
+
+@media (max-width: 480px) {
+  .champ-sessions-checkboxes {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .champ-session-label {
+    justify-content: flex-start;
+  }
+}

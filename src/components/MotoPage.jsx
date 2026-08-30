@@ -48,6 +48,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { supabase } from '../supabaseClient'
+import { fetchAllRows } from '../utils/fetchAllRows'
 import MotoCropper from './MotoCropper'
 import MotoCharts from './MotoCharts'
 import './MotoPage.css'
@@ -134,12 +135,18 @@ export default function MotoPage({ motoNumber, session, isAdmin, isModerator, on
     if (error || !teamsData?.length) { setStats({ sessions: 0, totalLaps: 0 }); return }
 
     const teamIds = teamsData.map(t => t.id)
-    const { data: lapsData } = await supabase
-      .from('race_laps')
-      .select('*')
-      .in('team_id', teamIds)
-
-    const laps = lapsData || []
+    // fetchAllRows : cumul sur toute la saison, largement au-dessus du plafond
+    // de 1000 lignes par réponse imposé par Supabase.
+    let laps = []
+    try {
+      laps = await fetchAllRows(() => supabase
+        .from('race_laps')
+        .select('*')
+        .in('team_id', teamIds)
+        .order('id', { ascending: true }))
+    } catch (err) {
+      console.error('Chargement des tours de la moto échoué:', err)
+    }
 
     // Per-session history
     const history = teamsData
